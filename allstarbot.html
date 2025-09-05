@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allstar Bot</title>
+<style>
+  :root{
+    --bg:#0b0f15; --panel:#11161d; --border:#232a33; --text:#e7ecf3; --sub:#a8b3c2;
+    --accent:#d24a43; --accent2:#c7d2fe;
+  }
+  html,body{background:var(--bg);color:var(--text);margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  .abx-widget{box-sizing:border-box;width:100%;max-width:680px;margin:0 auto;}
+  .abx-card{border:1px solid var(--border);border-radius:16px;background:linear-gradient(180deg,#121821,#0b0f15);box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .abx-head{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border)}
+  .abx-logo{width:120px;height:28px;background:url('data:image/png;base64,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') left center/contain no-repeat;filter:drop-shadow(0 2px 6px rgba(0,0,0,.35));}
+  .abx-title{margin-left:auto;font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--sub)}
+  .abx-gear{margin-left:6px;cursor:pointer;opacity:.85}
+  .abx-log{height:340px;overflow:auto;padding:12px;background:#0d1218;border-bottom:1px solid var(--border);}
+  .abx-msg{margin:8px 0;line-height:1.5}
+  .abx-msg.user{text-align:right;opacity:.95}
+  .abx-row{margin:6px 0;padding:10px;border:1px solid var(--border);border-radius:12px;background:#0f141b}
+  .abx-src a{font-size:12px;color:#9cc8ff;text-decoration:none}
+  .abx-controls{display:flex;gap:8px;padding:10px}
+  .abx-input{flex:1;background:#0b0f15;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;outline:none}
+  .abx-btn{background:var(--accent);color:#1a0f10;border:0;border-radius:10px;padding:10px 14px;font-weight:800;cursor:pointer}
+  .abx-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:rgba(210,74,67,.1);border:1px solid rgba(210,74,67,.3);color:#ffb3af;font-size:11px;font-weight:700}
+  .abx-pill{width:7px;height:7px;border-radius:999px;background:var(--accent);box-shadow:0 0 0 0 rgba(210,74,67,.6);animation:abx-pulse 2s infinite}
+  @keyframes abx-pulse{to{box-shadow:0 0 0 16px rgba(210,74,67,0)}}
+  .admin{display:none;border-top:1px solid var(--border);padding:10px;background:#0d1218}
+  .admin.open{display:block}
+  .admin h3{margin:0 0 8px 0;font-size:13px;color:var(--sub)}
+  .admin .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .admin button{background:#18202a;color:#cfe1ff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer}
+  .admin table{width:100%;border-collapse:collapse;font-size:12px}
+  .admin th,.admin td{border:1px solid var(--border);padding:6px;text-align:left}
+  .admin th{color:#c7d2fe;background:#0f141b}
+</style>
+</head>
+<body>
+<div class="abx-widget" id="abx">
+  <div class="abx-card">
+    <div class="abx-head">
+      <div class="abx-logo" aria-label="Allstar Services"></div>
+      <div class="abx-badge"><span class="abx-pill"></span> Ready</div>
+      <div class="abx-title">FlowMaster Q&A</div>
+      <div class="abx-gear" id="gear" title="FAQ log">⚙️</div>
+    </div>
+    <div class="abx-log" id="abx-log"></div>
+    <div class="abx-controls">
+      <input id="abx-q" class="abx-input" placeholder="Type your question here…" />
+      <button id="abx-ask" class="abx-btn">Ask</button>
+    </div>
+    <div class="admin" id="admin">
+      <h3>FAQ Log</h3>
+      <div class="row">
+        <button id="btn-export">Export CSV</button>
+        <button id="btn-clear">Reset Log</button>
+        <span style="color:var(--sub);font-size:12px">Stored locally in your browser.</span>
+      </div>
+      <div id="admin-table-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const FACTS = [{"company": "Rapid Roofing by Allstar (MI/OH)", "category": "Founded (Short)", "fact": "Rapid Roofing was founded in 1999 by brothers Bill & Mike Beaty in Southeast Michigan.", "source_url": "https://rapidroofing.com/about-us/"}, {"company": "Rapid Roofing by Allstar (MI/OH)", "category": "Founded (Short, Alt)", "fact": "Rapid Roofing lists 2000 as a founding year on its service-area overview.", "source_url": "https://rapidroofing.com/service-area/"}, {"company": "Rapid Roofing by Allstar (MI/OH)", "category": "Founders", "fact": "Family-owned; founded by Bill and Mike Beaty.", "source_url": "https://rapidroofing.com/about-us/our-story/"}, {"company": "Rapid Roofing by Allstar (MI/OH)", "category": "Certifications", "fact": "Holds GAF Master Elite® and highlights President’s Club recognition.", "source_url": "https://rapidroofing.com/blog/benefits-of-hiring-a-gaf-master-elite-roofer/"}, {"company": "Rapid Roofing by Allstar (MI/OH)", "category": "Address (Detroit/Madison Heights)", "fact": "27301 Dequindre Rd, Suite 2100, Madison Heights, MI 48071.", "source_url": "https://rapidroofing.com/service-area/detroit/contact-us-all-star/"}, {"company": "Rapid Roofing by Allstar (MI/OH)", "category": "Phone (Detroit/Madison Heights)", "fact": "(248) 621‑7163", "source_url": "https://rapidroofing.com/service-area/detroit/contact-us-all-star/"}, {"company": "Rapid Roofing by Allstar (MI/OH)", "category": "Locations", "fact": "Canton • Ann Arbor • Bloomfield Hills • Ypsilanti (see contact page).", "source_url": "https://rapidroofing.com/contact-us/"}, {"company": "Allstar Roofing (WI)", "category": "Founded (Short)", "fact": "Allstar Roofing has been family‑operated since 1969.", "source_url": "https://www.allstarroofingnow.com/about-us/"}, {"company": "Allstar Roofing (WI)", "category": "Address", "fact": "933 N Mayfair Rd, Suite 205, Wauwatosa, WI 53226.", "source_url": "https://www.allstarroofingnow.com/roofing-services/residential-roofing/roof-inspection/"}, {"company": "Allstar Roofing (WI)", "category": "Phone", "fact": "414‑892‑9252", "source_url": "https://www.allstarroofingnow.com/roofing-services/residential-roofing/roof-inspection/"}, {"company": "Allstar Roofing (WI)", "category": "Services", "fact": "Residential inspections, installation, repair, replacement, shingle replacement; gutters and gutter guards.", "source_url": "https://www.allstarroofingnow.com/roofing-services/residential-roofing/roof-inspection/"}, {"company": "Craftsmen Roofing & Exteriors (OH)", "category": "Address", "fact": "4411 Montgomery Rd, Suite 301, Cincinnati, OH 45212.", "source_url": "https://www.craftsmencontractors.com/location-expansion/"}, {"company": "Craftsmen Roofing & Exteriors (OH)", "category": "Phone", "fact": "513‑457‑8332", "source_url": "https://www.craftsmencontractors.com/location/cincinnati-oh/roofing/"}, {"company": "Craftsmen Roofing & Exteriors (OH)", "category": "Services", "fact": "Inspection, installation, repair, replacement, maintenance; commercial roofing; storm damage; metal roofing; gutters.", "source_url": "https://www.craftsmencontractors.com/location/cincinnati-oh/roofing/"}];
+const LOG_KEY = "allstar_bot_logs";
+function loadLog(){ try{ return JSON.parse(localStorage.getItem(LOG_KEY) || "[]"); }catch{ return []; } }
+function saveLog(arr){ localStorage.setItem(LOG_KEY, JSON.stringify(arr)); }
+function addLog(entry){ const arr = loadLog(); arr.push(entry); saveLog(arr); }
+
+const METAL_TERMS = new Set(["metal","metal roof","metal roofing","standing seam","corrugated","steel","aluminum","tin","ribbed panel","r-panel","r panel","stone-coated","stone coated","stone-coated steel","galvalume","galvanized","copper","zinc","snap lock","mechanically seamed","standing-seam"]);
+const COMPANY_ALIASES = {
+  "allstar roofing": ["allstar","allstar roofing","allstarroofingnow","allstar milwaukee","allstar wi","wauwatosa","wisconsin"],
+  "rapid roofing": ["rapid","rapid roofing","rapid by allstar","rapid canton","rapid detroit","rapid ann arbor","rapid troy","michigan","ohio","ypsilanti","madison heights","canton"],
+  "craftsmen roofing": ["craftsmen","craftsmen roofing","craftsmen contractors","craftsmen cincinnati","northern kentucky","cincy","nky"]
+};
+
+function tok(s){ return (s||"").toLowerCase().match(/[a-z0-9]+/g) || []; }
+function say(html, who="bot"){ const log=document.getElementById("abx-log"); const d=document.createElement("div"); d.className="abx-msg "+who; d.innerHTML=html; log.appendChild(d); log.scrollTop=log.scrollHeight; }
+function companyOf(q){
+  const s=q.toLowerCase();
+  for(const [canon,als] of Object.entries(COMPANY_ALIASES)) if (als.some(a => s.includes(a))) return canon;
+  if(/\brapid\b/.test(s)) return "rapid roofing";
+  if(/\ballstar\b/.test(s)) return "allstar roofing";
+  if(/\bcraftsmen\b/.test(s)) return "craftsmen roofing";
+  return null;
+}
+
+function buildIDF(data){
+  const df=new Map(); const N=data.length;
+  for(const f of data){
+    const text=(f.fact+" "+f.company+" "+f.category).toLowerCase();
+    const set=new Set(text.match(/[a-z0-9]+/g) || []);
+    for(const t of set) df.set(t,(df.get(t)||0)+1);
+  }
+  const idf=new Map(); for(const [t,n] of df) idf.set(t, Math.log((N+1)/(n+1))+1);
+  return idf;
+}
+function vec(tokens,idf){
+  const tf=new Map(); for(const t of tokens) tf.set(t,(tf.get(t)||0)+1);
+  const denom=Math.sqrt(Array.from(tf.values()).reduce((a,b)=>a+b*b,0))||1;
+  const v=new Map(); for(const [t,c] of tf) v.set(t,(c/denom)*(idf.get(t)||1)); return v;
+}
+function dot(a,b){ let s=0; for(const [t,w] of a) if(b.has(t)) s+=w*b.get(t); return s; }
+
+const IDF = buildIDF(FACTS);
+const VECS = FACTS.map(f => vec((f.fact+" "+f.company+" "+f.category).toLowerCase().match(/[a-z0-9]+/g)||[], IDF));
+
+const RULES = [
+  { test:(q)=>(/(when|year).*(rapid).*(found|start)|\brapid\b.*(found|start)|\bfounded\b.*\brapid\b/i).test(q),
+    ans:()=>({t:"Rapid Roofing was founded in 1999 by brothers Bill & Mike Beaty in Southeast Michigan. (Some pages list 2000.)", s:"https://rapidroofing.com/about-us/"})},
+
+  { test:(q)=>(/(who).*(found).*\brapid\b|\brapid\b.*(founder|founders)/i).test(q),
+    ans:()=>({t:"Rapid Roofing was founded by brothers Bill & Mike Beaty.", s:"https://rapidroofing.com/about-us/our-story/"})},
+
+  { test:(q)=>(/(when|year).*(allstar).*(found|start)|\ballstar\b.*(found|history)|\bfounded\b.*\ballstar\b/i).test(q),
+    ans:()=>({t:"Allstar Roofing has been family‑operated since 1969.", s:"https://www.allstarroofingnow.com/about-us/"})},
+
+  { test:(q)=>(/(when|year).*(craftsmen).*(found|start)|\bcraftsmen\b.*(found|history)|\bfounded\b.*\bcraftsmen\b/i).test(q),
+    ans:()=>({t:"Craftsmen Roofing & Exteriors by Allstar does not publish a founding year on the Cincinnati site.", s:"https://www.craftsmencontractors.com/location/cincinnati-oh/about-us/"})},
+
+  { test:(q)=>/\ballstar\b.*(address|where|located|hq|headquarters)/i.test(q),
+    ans:()=>({t:"Allstar Roofing (WI): 933 N Mayfair Rd, Suite 205, Wauwatosa, WI 53226. Phone: 414‑892‑9252.", s:"https://www.allstarroofingnow.com/roofing-services/residential-roofing/roof-inspection/"})},
+
+  { test:(q)=>/\bcraftsmen\b.*(address|where|located|hq|headquarters)/i.test(q),
+    ans:()=>({t:"Craftsmen Roofing & Exteriors: 4411 Montgomery Rd, Suite 301, Cincinnati, OH 45212. Phone: 513‑457‑8332.", s:"https://www.craftsmencontractors.com/location-expansion/"})},
+
+  { test:(q)=>/\brapid\b.*(address|where|located|hq|headquarters)/i.test(q),
+    ans:()=>({t:"Rapid Roofing has multiple offices (Canton, Ann Arbor, Bloomfield Hills, Ypsilanti). Detroit office is in Madison Heights.", s:"https://rapidroofing.com/contact-us/"})},
+
+  { test:(q)=>(/(gaf|master elite)/i).test(q) && (/(rapid|allstar|craftsmen)/i).test(q),
+    ans:()=>({t:"All three brands reference GAF Master Elite® credentials; Rapid Roofing also highlights President’s Club.", s:"https://rapidroofing.com/blog/benefits-of-hiring-a-gaf-master-elite-roofer/"})}
+];
+
+function isMetalIntent(q){
+  const s = q.toLowerCase();
+  for(const m of METAL_TERMS) if (s.includes(m)) return true;
+  return false;
+}
+
+function retrieval(q, k=3){
+  const qv = vec(q.toLowerCase().match(/[a-z0-9]+/g)||[], IDF);
+  const scored = VECS.map((v,i)=>({i, s: dot(qv, v)})).sort((a,b)=>b.s-a.s).slice(0,k);
+  return scored.map(x=>FACTS[x.i]);
+}
+
+function suggestionsFor(brand){
+  const map = {
+    "rapid roofing": ["rapid founded","who founded rapid","rapid address","rapid phone","rapid gaf","rapid services"],
+    "allstar roofing": ["allstar founded","allstar address","allstar phone","allstar services","allstar gaf"],
+    "craftsmen roofing": ["craftsmen services","craftsmen address","craftsmen phone","craftsmen founded"]
+  };
+  return map[brand] || ["rapid founded","who founded rapid","allstar phone","craftsmen services","rapid gaf"];
+}
+
+function buildAnswer(q){
+  const s = q.toLowerCase();
+  if (isMetalIntent(s)) return [{company:"(policy)", category:"metal", fact:"For any metal roof replacements transfer directly to the brand.", source_url:""}];
+  for (const r of RULES) { if (r.test(s)) { const a=r.ans(); return [{company:"(canonical)", category:"rule", fact:a.t, source_url:a.s}]; } }
+  const brand = companyOf(s);
+  const res = retrieval(s, 3);
+  if (res.length) return res;
+  const sug = suggestionsFor(brand || "rapid roofing").map(x=>`<span class="abx-badge">${x}</span>`).join(" ");
+  return [{company:"(helper)", category:"suggestions", fact:`Try: ${sug}`, source_url:""}];
+}
+
+function ask(){
+  const input = document.getElementById("abx-q");
+  const q = input.value.trim();
+  if(!q) return;
+  const brand = companyOf(q);
+  const metal = isMetalIntent(q);
+  say(q, "abx-msg user");
+  const out = buildAnswer(q);
+  let html = "";
+  out.forEach((r, idx)=>{
+    html += `<div class="abx-row"><b>${idx===0?"Best":"Also"}</b> — <b>${r.company}</b> <i>(${r.category})</i><br>${r.fact}` +
+      (r.source_url ? ` <div class="abx-src"><a href="${r.source_url}" target="_blank">source</a></div>` : ``) +
+      `</div>`;
+  });
+  say(html);
+
+  let matchType = "retrieval";
+  if (metal) matchType = "policy";
+  else if (out[0] && out[0].company === "(canonical)") matchType = "canonical";
+  else if (out[0] && out[0].company === "(helper)") matchType = "suggestions";
+
+  addLog({
+    ts: new Date().toISOString(),
+    query: q,
+    brand: brand,
+    metal_intent: metal,
+    match_type: matchType,
+    top_company: out[0]?.company || "",
+    top_category: out[0]?.category || ""
+  });
+}
+
+document.getElementById("abx-ask").addEventListener("click", ask);
+document.getElementById("abx-q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+
+const admin = document.getElementById("admin");
+document.getElementById("gear").addEventListener("click", () => {
+  admin.classList.toggle("open");
+  renderTable();
+});
+
+function renderTable(){
+  const rows = loadLog();
+  const wrap = document.getElementById("admin-table-wrap");
+  if (!rows.length) { wrap.innerHTML = '<div style="color:var(--sub);font-size:12px">No entries yet.</div>'; return; }
+  let html = '<table><thead><tr><th>Time</th><th>Query</th><th>Brand</th><th>Metal?</th><th>Match</th><th>Top Company</th><th>Top Category</th></tr></thead><tbody>';
+  rows.slice().reverse().forEach(r => {
+    html += `<tr><td>${r.ts}</td><td>${r.query}</td><td>${r.brand||""}</td><td>${r.metal_intent?"yes":"no"}</td><td>${r.match_type}</td><td>${r.top_company}</td><td>${r.top_category}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+document.getElementById("btn-export").addEventListener("click", () => {
+  const rows = loadLog();
+  const headers = ["ts","query","brand","metal_intent","match_type","top_company","top_category"];
+  const csv = [headers.join(",")].concat(rows.map(r => headers.map(h => (`"${String(r[h]??"").replace(/"/g,'""')}"`)).join(","))).join("\n");
+  const blob = new Blob([csv], {type: "text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "allstar_bot_faq_log.csv"; a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById("btn-clear").addEventListener("click", () => {
+  if (!confirm("Reset the FAQ log?")) return;
+  saveLog([]);
+  renderTable();
+});
+
+say("Hi! Ask me a question");
+</script>
+</body>
+</html>
