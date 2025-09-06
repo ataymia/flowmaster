@@ -1,1 +1,15 @@
-
+{
+  "name": "flowmaster",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler pages dev public --functions=functions",
+    "deploy": "wrangler pages deploy public --functions=functions"
+  },
+  "devDependencies": {
+    "wrangler": "^3.76.0"
+  },
+  "dependencies": {
+    "jose": "^5.2.4"
+  }
+}
