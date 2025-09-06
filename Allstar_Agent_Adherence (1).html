@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Allstar Agent Adherence</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <style>
+    :root { --brand:#e11d48; --muted:#f8fafc; }
+    body { background:#fff; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:1rem; padding:1rem; }
+    .gridbar { height:20px; border-radius:8px; overflow:hidden; position:relative; background:#f3f4f6; }
+    .seg { height:100%; display:inline-block; }
+    .seg.diff::after { content:""; position:absolute; inset:0; background:rgba(239,68,68,0.35); }
+    .rowlabel { font-size:.8rem; color:#6b7280; width:7rem; }
+    .timeline-wrap { position:relative; }
+    .nowline { position:absolute; top:-4px; bottom:-4px; width:2px; background:#111827; }
+    .status-dot { width:10px; height:10px; border-radius:9999px; display:inline-block; margin-right:6px; }
+    .scroll-area { max-height:260px; overflow:auto; }
+    /* Status colors */
+    .st-available { background:#10b981; }
+    .st-bathroom  { background:#f59e0b; }
+    .st-break     { background:#fbbf24; }
+    .st-lunch     { background:#fb923c; }
+    .st-training  { background:#a78bfa; }
+    .st-meeting   { background:#60a5fa; }
+    .st-offline   { background:#9ca3af; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div id="app"></div>
+
+<script>
+const API_BASE = "https://allstar-auth.ataymia.workers.dev";
+const LOGO_DATA = "data:image/png;base64,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";
+
+const e = React.createElement;
+const { useState, useMemo, useEffect } = React;
+
+const STATUSES = [
+  { key:'available', label:'Available', color:'st-available' },
+  { key:'bathroom',  label:'Bathroom',  color:'st-bathroom'  },
+  { key:'break',     label:'Break',     color:'st-break'     },
+  { key:'lunch',     label:'Lunch',     color:'st-lunch'     },
+  { key:'training',  label:'Training',  color:'st-training'  },
+  { key:'meeting',   label:'Meeting',   color:'st-meeting'   },
+  { key:'offline',   label:'Offline',   color:'st-offline'   },
+];
+
+function classNames(...a){ return a.filter(Boolean).join(' '); }
+function pad(n){ return String(n).padStart(2,'0'); }
+function isoDate(d){ const dt=(d instanceof Date)?d:new Date(d); return dt.toISOString().slice(0,10); }
+function toHM(m){ const h=Math.floor(m/60), mm=m%60; return pad(h)+':'+pad(mm); }
+function fmtDur(mins){ if(mins<60) return mins+'m'; const h=Math.floor(mins/60), m=mins%60; return h+'h '+(m?m+'m':''); }
+function fmtTS(ms){ const d=new Date(ms); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+function statusByKey(k){ return STATUSES.find(s=>s.key===k) || { label:k, color:'st-offline' }; }
+
+async function api(path, opts={}){
+  const res = await fetch(API_BASE+path, { credentials:'include', ...opts });
+  if (res.status===204) return null;
+  const ct = res.headers.get('content-type')||'';
+  if (ct.includes('application/json')) return await res.json();
+  return await res.text();
+}
+async function login(username,password){ return api('/auth/login',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password}) }); }
+async function logout(){ await api('/auth/logout',{ method:'POST' }); }
+async function getMe(){ try{return await api('/me');}catch{return null;} }
+async function listUsers(){ return await api('/users'); }
+async function createUser(username,password,role){ return await api('/users',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password,role}) }); }
+async function patchUser(id,patch){ return await api('/users/'+id,{ method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) }); }
+async function deleteUserApi(id){ return await api('/users/'+id,{ method:'DELETE' }); }
+async function getSchedule(user,date){ const q=new URLSearchParams({user,date}).toString(); return await api('/schedules?'+q); }
+async function saveSchedule(user,date,blocks){ return await api('/schedules',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username:user, date, blocks }) }); }
+async function postEvent(status,ts){ return await api('/events',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ts?{status,ts}:{status}) }); }
+async function listEvents(user,from,to){ const q=new URLSearchParams({user,from,to}).toString(); return await api('/events?'+q); }
+
+function Header({ user, onLogout }){
+  return e('div',{ className:'w-full border-b bg-white/80 backdrop-blur sticky top-0 z-50' },
+    e('div',{ className:'max-w-6xl mx-auto flex items-center gap-3 p-3' },
+      LOGO_DATA ? e('img',{ src:LOGO_DATA, alt:'Allstar', className:'h-10 w-auto rounded' }) : null,
+      e('div',{ className:'text-xl font-bold tracking-tight' },'Allstar Agent Adherence'),
+      e('div',{ className:'ml-auto flex items-center gap-3 text-sm text-gray-700' },
+        e('span',null, user ? (user.username+' · '+user.role) : 'Not signed in'),
+        user && e('button',{ onClick:onLogout, className:'px-3 py-1 rounded border hover:bg-gray-50' },'Logout')
+      )
+    )
+  );
+}
+
+function TimelineBars({ date, scheduleBlocks, events, tick }){
+  const mins = scheduleBlocks.length ? [Math.min(...scheduleBlocks.map(b=>b.start)), Math.max(...scheduleBlocks.map(b=>b.end))] : [8*60,17*60];
+  const [startMin,endMin] = mins;
+  const total = endMin - startMin || 1;
+  const dayStart = Date.parse(date+'T00:00:00');
+
+  function blocksToSegments(blocks){ return blocks.map(b=>({ status:b.status, start:b.start, width:(b.end-b.start) })); }
+  function eventsToSegments(events){
+    const segs=[]; let curStatus = events.length ? events[0].status : null;
+    const points = events.map(ev => Math.max(startMin, Math.min(endMin, Math.floor((ev.ts - dayStart)/60000))));
+    let cursor = startMin;
+    for(let i=0;i<points.length;i++){ const p=points[i]; if(p>cursor) segs.push({status:curStatus,start:cursor,width:p-cursor}); cursor=p; curStatus=events[i].status; }
+    if(cursor<endMin) segs.push({status:curStatus,start:cursor,width:endMin-cursor});
+    return segs;
+  }
+
+  const projSegs = blocksToSegments(scheduleBlocks);
+  const actSegs = eventsToSegments(events||[]);
+
+  function SegRow({ segs, compare }){
+    return e('div',{ className:'gridbar relative' },
+      segs.map((s,i)=>{
+        let diff=false;
+        if(compare){
+          const probe = s.start + Math.max(1, Math.floor(s.width/2));
+          const expected = scheduleBlocks.find(b => probe>=b.start && probe<b.end)?.status;
+          diff = (expected && s.status && expected!==s.status);
+        }
+        const w = (s.width/total*100).toFixed(4)+'%';
+        return e('div',{ key:i, className: classNames('seg relative', s.status?statusByKey(s.status).color:'' , compare && diff && 'diff'), style:{ width:w } });
+      })
+    );
+  }
+
+  const now = Date.now(); // 'tick' triggers re-render each second
+  const nowMin = Math.floor((now - dayStart)/60000);
+  const nowPct = Math.max(0, Math.min(100, ((nowMin-startMin)/total)*100));
+
+  return e('div',{ className:'timeline-wrap' },
+    e('div',{ className:'flex items-center gap-3 mb-1' },
+      e('div',{ className:'rowlabel' },'Projected'),
+      e('div',{ className:'flex-1' }, e(SegRow,{ segs:projSegs }))
+    ),
+    e('div',{ className:'flex items-center gap-3' },
+      e('div',{ className:'rowlabel' },'Actual'),
+      e('div',{ className:'flex-1' }, e(SegRow,{ segs:actSegs, compare:true }))
+    ),
+    e('div',{ className:'nowline', style:{ left: nowPct+'%' } })
+  );
+}
+
+function UserPanel({ user }){
+  const [tick, setTick] = useState(0);
+  const [date] = useState(isoDate(new Date()));
+  const [schedule, setSchedule] = useState([]);
+  const [events, setEvents] = useState([]);
+
+  async function refresh(){
+    const s = await getSchedule(user.username, date); setSchedule((s && s.blocks)||[]);
+    const ev = await listEvents(user.username, date, date); setEvents(Array.isArray(ev)?ev:[]);
+  }
+  useEffect(()=>{ refresh(); }, []);
+  useEffect(()=>{ const t=setInterval(()=>setTick(v=>v+1), 1000); return ()=>clearInterval(t); }, []);
+  useEffect(()=>{ const t=setInterval(refresh, 15000); return ()=>clearInterval(t); }, []);
+
+  const { adherencePct, inM, outM } = useMemo(()=>{
+    if(!schedule.length) return { adherencePct:100, inM:0, outM:0 };
+    const dayStart = Date.parse(date+'T00:00:00');
+    const startMin = Math.min(...schedule.map(b=>b.start));
+    const endMin = Math.max(...schedule.map(b=>b.end));
+    const nowMin = Math.min(Math.max(startMin, Math.floor((Date.now()-dayStart)/60000)), endMin);
+    let inMin=0, outMin=0; let idx=0, cur = events.length?events[0].status:null;
+    for(let m=startMin; m<nowMin; m++){
+      const ms = dayStart + m*60000;
+      while(idx+1<events.length && events[idx+1].ts <= ms){ idx++; cur = events[idx].status; }
+      const expected = schedule.find(b=> m>=b.start && m<b.end)?.status;
+      if(!expected) continue;
+      if(!cur) outMin++; else if(cur===expected) inMin++; else outMin++;
+    }
+    const total = inMin+outMin;
+    return { adherencePct: total? Math.round(inMin/total*100):100, inM:inMin, outM:outMin };
+  }, [schedule, events, tick]);
+
+  async function setStatus(status){
+    const ev = { status, ts: Date.now() };
+    setEvents(prev => [...prev, ev]);
+    try{ await postEvent(status); }catch(e){}
+  }
+
+  const lastList = [...events].slice(-10).reverse();
+
+  return e('div',{ className:'grid gap-4 md:grid-cols-2' },
+    e('div',{ className:'card' },
+      e('div',{ className:'flex items-center justify-between mb-3' },
+        e('h2',{ className:'text-lg font-semibold' },'Today'),
+        e('div',{ className:'text-sm text-gray-600' }, date)
+      ),
+      e('div',{ className:'mb-3' }, e(TimelineBars,{ date, scheduleBlocks:schedule, events, tick })),
+      e('div',{ className:'flex items-center gap-4' },
+        e('div',{ className:'text-4xl font-bold text-gray-900' }, adherencePct+'%'),
+        e('div',{ className:'text-sm text-gray-600' }, `in: ${fmtDur(inM)} · out: ${fmtDur(outM)}`)
+      )
+    ),
+    e('div',{ className:'card' },
+      e('h3',{ className:'font-semibold mb-2' },'Set status'),
+      e('div',{ className:'flex flex-wrap gap-2' },
+        STATUSES.map(s => e('button',{
+          key:s.key, onClick:()=>setStatus(s.key),
+          className: classNames('px-3 py-2 rounded text-white', s.color)
+        }, s.label))
+      ),
+      e('div',{ className:'mt-4' },
+        e('h4',{ className:'font-medium mb-1' },'Recent switches'),
+        e('div',{ className:'scroll-area text-sm' },
+          lastList.map((ev,i)=> e('div',{ key:i, className:'py-1 border-b border-gray-100 flex items-center justify-between' },
+            e('div',null, e('span',{ className:'status-dot '+statusByKey(ev.status).color }), ' ', statusByKey(ev.status).label),
+            e('div',{ className:'text-gray-600' }, fmtTS(ev.ts))
+          ))
+        )
+      )
+    )
+  );
+}
+
+function AdminPanel({ me }){
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState('');
+  const [day, setDay] = useState(isoDate(new Date()));
+  const [blocks, setBlocks] = useState([]);
+  const [events, setEvents] = useState([]);
+
+  useEffect(()=>{ (async()=>{ const u=await listUsers(); setUsers(u||[]); })() }, []);
+  useEffect(()=>{ (async()=>{
+    if(!selectedUser) return;
+    const s=await getSchedule(selectedUser, day); setBlocks((s && s.blocks)||[]);
+    const ev=await listEvents(selectedUser, day, day); setEvents(Array.isArray(ev)?ev:[]);
+  })() }, [selectedUser, day]);
+
+  function addBlock(){ setBlocks(prev=>[...prev,{ status:'available', start:8*60, end:9*60 }]); }
+  function setBlk(i, patch){ setBlocks(prev=> prev.map((b,idx)=> idx===i? {...b,...patch}:b)); }
+  function rmBlk(i){ setBlocks(prev=> prev.filter((_,idx)=> idx!==i)); }
+  async function saveServer(){ await saveSchedule(selectedUser, day, blocks); alert('Saved'); }
+  function download(url,name){
+    fetch(url,{ credentials:'include' }).then(r=>r.blob()).then(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); a.remove(); });
+  }
+
+  const detail = useMemo(()=>{
+    if(!blocks.length) return { inMin:0, outMin:0, lines:[], byStatus:{} };
+    const dayStart = Date.parse(day+'T00:00:00');
+    const startMin = Math.min(...blocks.map(b=>b.start));
+    const endMin = Math.max(...blocks.map(b=>b.end));
+    let idx=0, cur = events.length?events[0].status:null, curStartMin = startMin;
+    const lines=[]; const byStatus={};
+    function pushLine(status, startM, endM){
+      const startTS = dayStart + startM*60000;
+      const durMin = Math.max(0, endM - startM);
+      if(status){ lines.push(`${fmtTS(startTS)} ${statusByKey(status).label} ${fmtDur(durMin)}`); byStatus[status]=(byStatus[status]||0)+durMin; }
+    }
+    for(let m=startMin; m<=endMin; m++){
+      const ms = dayStart + m*60000;
+      if(idx+1<events.length && events[idx+1].ts <= ms){ pushLine(cur, curStartMin, m); idx++; cur=events[idx].status; curStartMin=m; }
+    }
+    pushLine(cur, curStartMin, endMin);
+
+    let inMin=0,outMin=0; idx=0; cur = events.length?events[0].status:null;
+    for(let m=startMin; m<endMin; m++){
+      const ms = dayStart + m*60000;
+      while(idx+1<events.length && events[idx+1].ts <= ms){ idx++; cur=events[idx].status; }
+      const expected = blocks.find(b=> m>=b.start && m<b.end)?.status;
+      if(!expected) continue;
+      if(!cur) outMin++; else if(cur===expected) inMin++; else outMin++;
+    }
+    return { inMin, outMin, lines, byStatus };
+  }, [blocks, events, day]);
+
+  const total = detail.inMin + detail.outMin;
+  const pct = total ? Math.round(detail.inMin/total*100) : 100;
+
+  const now = new Date(day+'T00:00:00'); const y = now.getUTCFullYear(); const m = String(now.getUTCMonth()+1).padStart(2,'0');
+  const monthStart = `${y}-${m}-01`; const monthEnd = new Date(Date.UTC(y, parseInt(m), 0)).toISOString().slice(0,10);
+
+  return e('div',{ className:'card' },
+    e('div',{ className:'flex flex-wrap gap-3 items-end mb-4' },
+      e('div',null,
+        e('label',{ className:'text-sm text-gray-600' },'Agent'),
+        e('select',{ className:'block border rounded px-3 py-2 min-w-[12rem]', value:selectedUser, onChange:e=>setSelectedUser(e.target.value) },
+          e('option',{ value:'' },'Pick a user'),
+          users.map(u=> e('option',{ key:u.id, value:u.username }, u.username+' · '+u.role ))
+        )
+      ),
+      e('div',null,
+        e('label',{ className:'text-sm text-gray-600' },'Date'),
+        e('input',{ type:'date', className:'block border rounded px-3 py-2', value:day, onChange:e=>setDay(e.target.value) })
+      ),
+      e('div',{ className:'ml-auto flex gap-2' },
+        e('button',{ onClick:addBlock, className:'px-3 py-2 rounded bg-[var(--brand)] text-white hover:brightness-95' },'+ Block'),
+        e('button',{ onClick:saveServer, disabled:!selectedUser, className:'px-3 py-2 rounded border border-[var(--brand)] text-[var(--brand)] hover:bg-rose-50 disabled:opacity-50' },'Save to Server')
+      )
+    ),
+    e('div',{ className:'grid md:grid-cols-2 gap-4' },
+      e('div',{ className:'card' },
+        e('h3',{ className:'font-semibold mb-2' },'Schedule Blocks'),
+        blocks.map((b,i)=> e('div',{ key:i, className:'flex items-center gap-2 mb-2' },
+          e('select',{ className:'border rounded px-2 py-1', value:b.status, onChange:e=>setBlk(i,{status:e.target.value}) },
+            STATUSES.map(s=> e('option',{ key:s.key, value:s.key }, s.label ))
+          ),
+          e('input',{ type:'time', className:'border rounded px-2 py-1', value:toHM(b.start), onChange:e=>setBlk(i,{start:(parseInt(e.target.value.slice(0,2))*60 + parseInt(e.target.value.slice(3,5)))}) }),
+          e('span',null,'to'),
+          e('input',{ type:'time', className:'border rounded px-2 py-1', value:toHM(b.end), onChange:e=>setBlk(i,{end:(parseInt(e.target.value.slice(0,2))*60 + parseInt(e.target.value.slice(3,5)))}) }),
+          e('button',{ onClick:()=>rmBlk(i), className:'ml-auto text-sm px-2 py-1 rounded border hover:bg-gray-50' },'Remove')
+        ))
+      ),
+      e('div',{ className:'card' },
+        e('h3',{ className:'font-semibold mb-2' },'Daily Overview'),
+        e(TimelineBars,{ date:day, scheduleBlocks:blocks, events }),
+        e('div',{ className:'mt-3 text-sm text-gray-700' }, `Adherence: ${pct}%  · in ${fmtDur(detail.inMin)} / out ${fmtDur(detail.outMin)}`),
+        e('div',{ className:'mt-3' },
+          e('h4',{ className:'font-medium' },'AUX breakdown (durations)'),
+          e('ul',{ className:'list-disc pl-6 text-sm text-gray-700' },
+            Object.keys(detail.byStatus).map(k=> e('li',{ key:k }, statusByKey(k).label+': '+fmtDur(detail.byStatus[k])) )
+          )
+        ),
+        e('div',{ className:'mt-3' },
+          e('h4',{ className:'font-medium' },'Timeline (IMED style)'),
+          e('div',{ className:'scroll-area text-sm text-gray-800 border rounded p-2 bg-white' },
+            (detail.lines.length? detail.lines : ['No events for this day']).map((t,i)=> e('div',{ key:i, className:'border-b last:border-0 py-1' }, t))
+          )
+        )
+      )
+    ),
+
+    // Users management
+    e('div',{ className:'card mt-4' },
+      e('h3',{ className:'font-semibold mb-2' },'Users'),
+      e(UsersCard,{ onChange: async()=>{ const u=await listUsers(); setUsers(u||[]); } })
+    ),
+
+    // downloads
+    e('div',{ className:'mt-4 flex flex-wrap gap-2' },
+      e('button',{ className:'px-3 py-1.5 rounded border hover:bg-gray-50', onClick:()=>download(`${API_BASE}/export/events?from=${monthStart}&to=${monthEnd}`, `events_${y}${m}.csv`) },'Download Events (month)'),
+      e('button',{ className:'px-3 py-1.5 rounded border hover:bg-gray-50', onClick:()=>download(`${API_BASE}/export/schedules?from=${monthStart}&to=${monthEnd}`, `schedules_${y}${m}.csv`) },'Download Schedules (month)'),
+      e('button',{ className:'px-3 py-1.5 rounded border hover:bg-gray-50', onClick:()=>download(`${API_BASE}/export/adherence?from=${monthStart}&to=${monthEnd}`, `adherence_${y}${m}.csv`) },'Download Adherence (month)')
+    )
+  );
+}
+
+function UsersCard({ onChange }){
+  const [users, setUsers] = useState([]);
+  const [uname, setUname] = useState('');
+  const [pwd, setPwd] = useState('Welcome123');
+  const [role, setRole] = useState('AGENT');
+  useEffect(()=>{ (async()=>{ const u=await listUsers(); setUsers(u||[]); })() }, []);
+
+  async function create(){
+    if(!uname || !pwd){ alert('Enter username and password'); return; }
+    const res = await createUser(uname, pwd, role);
+    if(res && res.username){ setUname(''); setPwd('Welcome123'); setRole('AGENT'); const u=await listUsers(); setUsers(u||[]); onChange && onChange(); }
+    else alert('Create failed (maybe username exists)');
+  }
+  async function del(id){
+    if(!confirm('Delete this user?')) return;
+    const r = await deleteUserApi(id);
+    if(r===null){ const u=await listUsers(); setUsers(u||[]); onChange && onChange(); } else alert('Delete failed');
+  }
+  async function toggleForce(id, cur){
+    const res = await patchUser(id, { mustChangePassword: !cur });
+    if(res && res.id){ const u=await listUsers(); setUsers(u||[]); } else alert('Update failed');
+  }
+
+  return e('div',null,
+    e('div',{ className:'flex flex-wrap gap-2 items-end mb-3' },
+      e('input',{ className:'border rounded px-3 py-2', placeholder:'Username', value:uname, onChange:e=>setUname(e.target.value) }),
+      e('input',{ type:'password', className:'border rounded px-3 py-2', placeholder:'Temp password', value:pwd, onChange:e=>setPwd(e.target.value) }),
+      e('select',{ className:'border rounded px-3 py-2', value:role, onChange:e=>setRole(e.target.value) },
+        e('option',{ value:'AGENT' },'AGENT'),
+        e('option',{ value:'ADMIN' },'ADMIN')
+      ),
+      e('button',{ onClick:create, className:'px-3 py-2 rounded bg-[var(--brand)] text-white hover:brightness-95' },'Create')
+    ),
+    e('div',{ className:'overflow-auto' },
+      e('table',{ className:'min-w-full text-sm' },
+        e('thead',null,
+          e('tr',{ className:'text-left text-gray-600' },
+            e('th',{ className:'py-2 pr-4' },'Username'),
+            e('th',{ className:'py-2 pr-4' },'Role'),
+            e('th',{ className:'py-2 pr-4' },'Force Reset'),
+            e('th',{ className:'py-2 pr-4' })
+          )
+        ),
+        e('tbody',null,
+          users.map(u=> e('tr',{ key:u.id, className:'border-t' },
+            e('td',{ className:'py-2 pr-4' }, u.username),
+            e('td',{ className:'py-2 pr-4' }, u.role),
+            e('td',{ className:'py-2 pr-4' },
+              e('label',{ className:'inline-flex items-center gap-2' },
+                e('input',{ type:'checkbox', checked:!!u.must_change_password, onChange:()=>toggleForce(u.id, !!u.must_change_password) }),
+                e('span',null,'must change on next login')
+              )
+            ),
+            e('td',{ className:'py-2 pr-4 text-right' },
+              e('button',{ onClick:()=>del(u.id), className:'px-2 py-1 rounded border hover:bg-gray-50' },'Delete')
+            )
+          ))
+        )
+      )
+    )
+  );
+}
+
+function AuthGate(){
+  const [me, setMe] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [u, setU] = useState('Ataymia');
+  const [p, setP] = useState('Ataymia10');
+
+  useEffect(()=>{ (async()=>{ const m=await getMe(); if(m && m.username) setMe(m); setLoading(false); })() }, []);
+
+  async function doLogin(evn){
+    evn.preventDefault(); setErr('');
+    try{ const res=await login(u,p); if(!res || !res.username){ setErr('Login failed'); return; } const m=await getMe(); setMe(m); }
+    catch(e){ setErr('Login failed'); }
+  }
+  async function doLogout(){ await logout(); setMe(null); }
+
+  if(!me){
+    return e('div',{ className:'max-w-md mx-auto mt-20 card' },
+      e('div',{ className:'flex items-center gap-3 mb-4' },
+        LOGO_DATA ? e('img',{ src:LOGO_DATA, className:'h-10 w-auto rounded' }) : null,
+        e('div',{ className:'text-xl font-semibold' },'Sign in to Allstar Agent Adherence')
+      ),
+      err && e('div',{ className:'text-sm text-red-600 mb-2' }, err),
+      e('form',{ onSubmit:doLogin, className:'grid gap-3' },
+        e('input',{ className:'border rounded px-3 py-2', placeholder:'Username', value:u, onChange:e=>setU(e.target.value) }),
+        e('input',{ type:'password', className:'border rounded px-3 py-2', placeholder:'Password', value:p, onChange:e=>setP(e.target.value) }),
+        e('button',{ className:'px-3 py-2 rounded bg-[var(--brand)] text-white hover:brightness-95' },'Login')
+      )
+    );
+  }
+
+  return e('div',null,
+    e(Header,{ user:me, onLogout:doLogout }),
+    e('main',{ className:'max-w-6xl mx-auto p-4 grid gap-4' },
+      me.role==='AGENT' ? e(UserPanel,{ user:me }) :
+      e('div',{ className:'grid gap-4' },
+        e(UserPanel,{ user:me }),
+        e(AdminPanel,{ me })
+      )
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(e(AuthGate));
+</script>
+</body>
+</html>
