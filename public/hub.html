@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Allstar Agent Hub</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system; margin:0; background:#0b0f14; color:#e5e7eb }
+    header { padding:16px 20px; background:#111827; position:sticky; top:0; }
+    main { padding:20px; max-width:800px; margin:0 auto; }
+    .card { background:#111827; border:1px solid #1f2937; border-radius:14px; padding:16px; margin-bottom:14px }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #374151; font-size:12px; opacity:.8 }
+  </style>
+</head>
+<body>
+  <header><h2 style="margin:0">Allstar Agent Hub</h2></header>
+  <main>
+    <h3>Team News & Memos</h3>
+    <div id="news"></div>
+  </main>
+  <script>
+    async function loadNews() {
+      const r = await fetch('/api/news');
+      const items = await r.json();
+      const container = document.getElementById('news');
+      container.innerHTML = '';
+      items
+        .sort((a,b) => Number(b.pinned) - Number(a.pinned))
+        .forEach(item => {
+          const el = document.createElement('div');
+          el.className = 'card';
+          el.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h4 style="margin:0 0 8px 0">${item.title}</h4>
+              ${item.pinned ? '<span class="pill">Pinned</span>' : ''}
+            </div>
+            <div style="opacity:.9; white-space:pre-wrap;">${item.body}</div>
+            <div style="opacity:.6; font-size:12px; margin-top:8px;">Audience: ${item.audience} • ${item.publishAt ?? ''}</div>
+          `;
+          container.appendChild(el);
+        });
+    }
+    loadNews();
+  </script>
+</body>
+</html>
