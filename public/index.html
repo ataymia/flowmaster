@@ -14,16 +14,17 @@
     input { width:100%; padding:12px; border-radius:10px; border:1px solid #374151; background:#0b0f14; color:#e5e7eb }
     button { width:100%; padding:12px; border:0; border-radius:10px; background:#2563eb; color:white; font-weight:600; cursor:pointer; margin-top:12px }
     .err { color:#fca5a5; margin-top:10px; min-height:1.2em }
-    .muted { opacity:.7; font-size:12px; margin-top:8px }
+    .muted { opacity:.7; font-size:12px; margin-top:8px; min-height:1.2em }
   </style>
   <!-- If someone opens the GitHub Pages URL by accident, bounce them to Cloudflare -->
   <script>
   (function () {
-    var CF = location.origin.includes(".pages.dev") ? location.origin : null;
-    if (!CF) return; // already on CF
-    if (location.hostname.endsWith("github.io")) {
-      location.href = CF + location.pathname + location.search + location.hash;
+    var onCF = location.hostname.endsWith('.pages.dev');
+    if (!onCF && location.hostname.endsWith('github.io')) {
+      // CHANGE this to your real Cloudflare Pages domain if you have a custom one
+      location.href = 'https://' + (location.hostname.split('.')[0]) + '.pages.dev' + location.pathname + location.search + location.hash;
     }
+    console.log('[index] page booted on', location.origin);
   })();
   </script>
 </head>
@@ -32,70 +33,12 @@
     <h1>Allstar Agent Hub</h1>
     <p>Sign in with your scheduling credentials.</p>
 
-    <form id="loginForm" novalidate>
+    <!-- Native fallback: even if JS fails, this posts to /api/login -->
+    <form id="loginForm" action="/api/login" method="post" novalidate>
       <label for="email">Email</label>
       <input id="email" name="email" type="email" placeholder="you@allstarservicesnow.com" autocomplete="username" required />
 
       <label for="password">Password</label>
       <input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" required />
 
-      <button id="signInBtn" type="submit">Sign in</button>
-      <div id="err" class="err"></div>
-      <div id="dbg" class="muted"></div>
-    </form>
-  </div>
-
-  <script>
-  (function () {
-    const form = document.getElementById('loginForm');
-    const btn = document.getElementById('signInBtn');
-    const err = document.getElementById('err');
-    const dbg = document.getElementById('dbg');
-
-    function show(msg) { err.textContent = msg || ''; }
-    function log(o)   { dbg.textContent = typeof o === 'string' ? o : JSON.stringify(o); console.log('[login]', o); }
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      show('');
-      btn.disabled = true; btn.textContent = 'Signing in…';
-
-      const email = (document.getElementById('email').value || '').trim();
-      const password = document.getElementById('password').value || '';
-
-      try {
-        const r = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-
-        // Log for visibility
-        const text = await r.text();
-        let data = {};
-        try { data = JSON.parse(text || '{}'); } catch {}
-        log({ status: r.status, data });
-
-        if (r.ok) {
-          // Pages function mirrored cookie allstar_at; go to /hub (middleware will verify)
-          location.assign('/hub');
-          return;
-        }
-
-        // Friendly messages
-        const code = (data && data.error) || '';
-        if (code === 'EMAIL_NOT_MAPPED')      show('Email is not registered for login.');
-        else if (code === 'INVALID_LOGIN')    show('Incorrect email or password.');
-        else if (code === 'MISSING_CREDENTIALS') show('Enter both email and password.');
-        else show('Sign in failed. Please try again.');
-      } catch (ex) {
-        log(ex);
-        show('Network error. Try again.');
-      } finally {
-        btn.disabled = false; btn.textContent = 'Sign in';
-      }
-    });
-  })();
-  </script>
-</body>
-</html>
+      <button id="signI
