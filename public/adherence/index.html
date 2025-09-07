@@ -3,105 +3,432 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Schedule | Allstar Agent Hub</title>
+  <title>Allstar Agent Adherence</title>
   <style>
-    :root { color-scheme: dark }
-    body { font-family: ui-sans-serif, system-ui, -apple-system; margin:0; background:#0b0f14; color:#e5e7eb }
-    header { position:sticky; top:0; background:#0f172a; padding:12px 16px; border-bottom:1px solid #1f2937 }
-    a { color:#93c5fd; text-decoration:none }
-    main { max-width:900px; margin:16px auto; padding:0 16px }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px }
-    input, select, button { padding:8px 10px; border-radius:8px; border:1px solid #374151; background:#0b0f14; color:#e5e7eb }
-    button.action { background:#2563eb; border:0; cursor:pointer }
-    table { width:100%; border-collapse:collapse; margin-top:8px }
-    th, td { padding:8px 10px; border-bottom:1px solid #1f2937; text-align:left; font-size:14px }
-    .pill { display:inline-block; padding:2px 8px; border:1px solid #374151; border-radius:999px; font-size:12px; margin-left:6px }
-    .muted { opacity:.75 }
+    :root { --brand:#e11d48; --muted:#f8fafc; --text:#0f172a; --sub:#475569; --line:#e5e7eb; --bg:#ffffff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:var(--bg); color:var(--text); }
+    a { color:var(--brand); text-decoration:none; }
+    h1,h2,h3 { margin:0 0 .5rem 0; }
+    .container { max-width:1040px; margin:0 auto; padding:16px; }
+    .header { position:sticky; top:0; z-index:50; backdrop-filter: blur(6px); background:rgba(255,255,255,.85); border-bottom:1px solid var(--line); }
+    .header-inner { display:flex; align-items:center; gap:10px; padding:10px 16px; }
+    .title { font-weight:800; font-size:18px; letter-spacing:.3px; }
+    .muted { color:var(--sub); }
+    .btn { display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+    .btn:hover { background:#fafafa; }
+    .btn-brand { border-color:transparent; background:var(--brand); color:#fff; }
+    .btn-brand:hover { filter:brightness(.95); }
+    .btn-danger { border-color:#fecaca; background:#fee2e2; color:#991b1b; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px; }
+    .grid { display:grid; gap:16px; }
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .row-between { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .field { display:block; width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:10px; }
+    .label { display:block; font-size:12px; color:var(--sub); margin-bottom:4px; }
+    .table { width:100%; border-collapse:collapse; font-size:13px; }
+    .table th, .table td { text-align:left; padding:8px 10px; border-top:1px solid var(--line); }
+    .scroll { max-height:260px; overflow:auto; }
+    .pill { display:inline-flex; align-items:center; padding:4px 8px; border-radius:999px; background:#f1f5f9; font-size:12px; }
+    .spacer { height:8px; }
+    .mt-2 { margin-top:8px; } .mt-3 { margin-top:12px; } .mt-4 { margin-top:16px; } .mt-6 { margin-top:24px; }
+    .mb-2 { margin-bottom:8px; } .mb-3 { margin-bottom:12px; } .mb-4 { margin-bottom:16px; }
+    .status-dot { width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; }
+    .gridbar { height:20px; border-radius:8px; overflow:hidden; position:relative; background:#f3f4f6; }
+    .seg { height:100%; display:inline-block; position:relative; }
+    .seg.diff::after { content:""; position:absolute; inset:0; background:rgba(239,68,68,0.35); }
+    .rowlabel { font-size:12px; color:#6b7280; width:7rem; }
+    .timeline-wrap { position:relative; }
+    .nowline { position:absolute; top:-4px; bottom:-4px; width:2px; background:#111827; }
+    .st-available { background:#10b981; }
+    .st-bathroom  { background:#f59e0b; }
+    .st-break     { background:#fbbf24; }
+    .st-lunch     { background:#fb923c; }
+    .st-training  { background:#a78bfa; }
+    .st-meeting   { background:#60a5fa; }
+    .st-offline   { background:#9ca3af; }
+    .error-banner { position:fixed; inset:auto 0 0 0; background:#fee2e2; color:#991b1b; padding:10px 14px; border-top:1px solid #fecaca; z-index:9999; display:none; }
+    .logo { height:40px; width:auto; border-radius:8px; }
+    @media (max-width: 880px) { .grid-2 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-  <header>
-    <a href="/hub">← Back to Hub</a>
-  </header>
-  <main>
-    <h2>Schedule</h2>
-    <div class="row">
-      <div id="me" class="muted">Loading user…</div>
-      <label>Date <input id="date" type="date" /></label>
-      <button id="load" class="action">Load</button>
+  <div id="error" class="error-banner"></div>
+  <div class="header">
+    <div class="header-inner container">
+      <a href="/hub" class="title" style="color:var(--brand); text-decoration:none;">ALLSTAR</a>
+      <div class="title">Allstar Agent Adherence</div>
+      <div id="hdr-meta" class="muted" style="margin-left:auto">Loading…</div>
+      <button id="btn-logout" class="btn" style="display:none">Logout</button>
     </div>
+  </div>
 
-    <div id="schedWrap">
-      <table id="sched">
-        <thead><tr><th>Status</th><th>Start</th><th>End</th></tr></thead>
-        <tbody></tbody>
-      </table>
-      <div id="noSched" class="muted" style="display:none;">No schedule for this date.</div>
-    </div>
+  <div id="app" class="container" style="padding-top:16px;"></div>
 
-    <h3>Update my status</h3>
-    <div class="row">
-      <button class="action st" data-s="AVAILABLE">Available</button>
-      <button class="action st" data-s="BREAK">Break</button>
-      <button class="action st" data-s="LUNCH">Lunch</button>
-      <button class="action st" data-s="MEETING">Meeting</button>
-      <button class="action st" data-s="OFFLINE">Offline</button>
-      <span id="msg" class="muted"></span>
-    </div>
-  </main>
+<script>
+// === CONFIG ===
+const STATUSES = [
+  { key:'available', label:'Available', color:'st-available' },
+  { key:'bathroom',  label:'Bathroom',  color:'st-bathroom'  },
+  { key:'break',     label:'Break',     color:'st-break'     },
+  { key:'lunch',     label:'Lunch',     color:'st-lunch'     },
+  { key:'training',  label:'Training',  color:'st-training'  },
+  { key:'meeting',   label:'Meeting',   color:'st-meeting'   },
+  { key:'offline',   label:'Offline',   color:'st-offline'   },
+];
 
-  <script>
-    const $ = (s) => document.querySelector(s);
-    const fmt = (m) => {
-      const h = Math.floor(m/60).toString().padStart(2,'0');
-      const mm = (m%60).toString().padStart(2,'0');
-      return `${h}:${mm}`;
-    };
-    function todayISO() { const d = new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+// ---------- utils ----------
+const $ = (sel, el)=> (el||document).querySelector(sel);
+const pad = (n)=> String(n).padStart(2,'0');
+const isoDate = (d)=> (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10);
+const toHM = (m)=> `${pad(Math.floor(m/60))}:${pad(m%60)}`;
+const fmtDur = (mins)=> mins<60 ? mins+'m' : `${Math.floor(mins/60)}h ${mins%60? (mins%60)+'m' : ''}`;
+const fmtTS  = (ms)=> { const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+const statusByKey = (k)=> STATUSES.find(s=>s.key===k) || { label:k, color:'st-offline' };
+function showError(msg){ const b=$('#error'); if(!b) return; b.style.display='block'; b.textContent='⚠️ '+msg; console.error('[Allstar]', msg); }
 
-    async function who() {
-      const r = await fetch('/api/whoami'); const j = await r.json();
-      if (!j.authed) { location.href = '/'; return; }
-      $('#me').textContent = `${j.me.username} (${j.me.role})`;
-      return j.me;
-    }
+// ---------- Pages API (proxies) ----------
+async function jfetch(url, opts={}) {
+  const r = await fetch(url, { ...opts, headers:{ 'content-type':'application/json', ...(opts.headers||{}) } });
+  if (r.status===204) return null;
+  const ct = r.headers.get('content-type')||'';
+  const body = ct.includes('application/json') ? await r.json() : await r.text();
+  if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
+  return body;
+}
 
-    async function loadSched() {
-      const date = $('#date').value || todayISO();
-      const r = await fetch(`/api/schedule?date=${encodeURIComponent(date)}`);
-      if (!r.ok) { $('#noSched').style.display=''; $('#sched tbody').innerHTML=''; return; }
-      const j = await r.json();
-      const rows = j.blocks || [];
-      const tb = $('#sched tbody'); tb.innerHTML='';
-      if (!rows.length) { $('#noSched').style.display=''; return; }
-      $('#noSched').style.display='none';
-      for (const b of rows) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td><span class="pill">${b.status}</span></td><td>${fmt(b.start)}</td><td>${fmt(b.end)}</td>`;
-        tb.appendChild(tr);
-      }
-    }
+// session + identity
+async function whoami(){ return jfetch('/api/whoami'); }
+async function logout(){ await jfetch('/api/logout', { method:'POST' }); }
 
-    async function setStatus(s) {
-      $('#msg').textContent = 'Updating…';
-      const r = await fetch('/api/events', {
-        method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ status: s })
-      });
-      const ok = r.ok;
-      $('#msg').textContent = ok ? `Set to ${s} at ${(new Date()).toLocaleTimeString()}` : 'Failed to update.';
-    }
+// users (admin only)
+async function listUsers(){ return jfetch('/api/users'); }
+async function createUser(username,password,role){ return jfetch('/api/users', { method:'POST', body: JSON.stringify({ username,password,role }) }); }
+async function patchUser(id,patch){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'PATCH', body: JSON.stringify(patch) }); }
+async function deleteUserApi(id){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'DELETE' }); }
 
-    document.addEventListener('click', (e) => {
-      const b = e.target.closest('.st'); if (!b) return;
-      setStatus(b.dataset.s);
+// schedules + events
+async function getSchedule(user,date){ const q=new URLSearchParams({user,date}).toString(); return jfetch('/api/schedule?'+q); }
+async function saveSchedule(user,date,blocks){ return jfetch('/api/schedule', { method:'POST', body: JSON.stringify({ username:user, date, blocks }) }); }
+async function postEvent(status,ts){ return jfetch('/api/events', { method:'POST', body: JSON.stringify(ts?{status,ts}:{status}) }); }
+async function listEvents(user,from,to){ const q=new URLSearchParams({user,from,to}).toString(); return jfetch('/api/events?'+q); }
+
+// ---------- state ----------
+let STATE = { me:null, timers:[] };
+function clearTimers(){ STATE.timers.forEach(clearInterval); STATE.timers=[]; }
+
+// ---------- header ----------
+function renderHeader(){
+  const meta=$('#hdr-meta'); const btn=$('#btn-logout');
+  if(STATE.me){
+    meta.textContent = `${STATE.me.username} · ${STATE.me.role}`;
+    btn.style.display='inline-flex';
+    btn.onclick = async ()=>{ try{ await logout(); }finally{ location.href='/' } };
+  } else {
+    meta.textContent='Not signed in'; btn.style.display='none';
+  }
+}
+
+// ---------- main render ----------
+function render(){
+  renderHeader();
+  const app=$('#app'); if (!STATE.me) { app.innerHTML=''; return; }
+  if (STATE.me.role==='AGENT') return renderAgentView(STATE.me);
+  return renderAdminView(STATE.me);
+}
+
+// ---------- USER VIEW ----------
+function renderAgentView(user){
+  const app=$('#app'); clearTimers(); app.innerHTML='';
+  const date=isoDate(new Date());
+  const wrap=el('div',{class:'grid grid-2'});
+
+  const todayCard=el('div',{class:'card'});
+  const titleRow=el('div',{class:'row-between mb-3'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
+  const timelines=el('div');
+  const statsRow=el('div',{class:'row mt-3'}, el('div',{style:{fontWeight:'800', fontSize:'32px'}}, '100%'), el('div',{class:'muted'}, 'in: 0m · out: 0m'));
+  todayCard.append(titleRow,timelines,statsRow);
+
+  const statusCard=el('div',{class:'card'});
+  statusCard.append(el('h3',{},'Set status'));
+  const btns=el('div',{class:'row', style:{flexWrap:'wrap'}});
+  STATUSES.forEach(s=> btns.appendChild(el('button',{class:'btn', style:{color:'#fff', background:getComputedStyleColor(s.color)}, onclick:()=> setStatus(s.key)}, s.label)));
+  statusCard.append(btns, el('div',{class:'mt-4'}, el('h4',{},'Recent switches'), el('div',{id:'recent', class:'scroll'})));
+
+  wrap.append(todayCard,statusCard);
+  app.appendChild(wrap);
+
+  const SCHEDULE={ blocks:[] }, EVENTS={ list:[] };
+
+  (async()=>{
+    try{
+      const s=await getSchedule(user.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
+      const ev=await listEvents(user.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
+      update();
+    }catch(e){}
+  })();
+
+  STATE.timers.push(setInterval(update, 1000));
+  STATE.timers.push(setInterval(async()=>{
+    try{
+      const s=await getSchedule(user.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
+      const ev=await listEvents(user.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
+    }catch(e){}
+  }, 15000));
+
+  function setStatus(status){
+    const ev={ status, ts: Date.now() };
+    EVENTS.list.push(ev); update();
+    postEvent(status).catch(()=>{});
+  }
+
+  function update(){
+    timelines.innerHTML=''; timelines.appendChild(buildDualBars(date, SCHEDULE.blocks, EVENTS.list));
+    const x=calcAdherence(date, SCHEDULE.blocks, EVENTS.list);
+    statsRow.firstChild.textContent = Math.round(x.pct)+'%';
+    statsRow.lastChild.textContent  = 'in: '+fmtDur(x.inMin)+' · out: '+fmtDur(x.outMin);
+    const r=$('#recent', statusCard); r.innerHTML='';
+    const last=EVENTS.list.slice(-10).reverse();
+    last.forEach(ev=> r.appendChild(el('div',{class:'row-between', style:{borderTop:'1px solid var(--line)', padding:'6px 0'}},
+      el('div',{}, el('span',{class:'status-dot '+statusByKey(ev.status).color}),' ', statusByKey(ev.status).label),
+      el('div',{class:'muted'}, fmtTS(ev.ts))
+    )));
+  }
+}
+
+// ---------- ADMIN VIEW ----------
+function renderAdminView(me){
+  const app=$('#app'); clearTimers(); app.innerHTML='';
+  const adminCard=el('div',{class:'card mt-4'});
+
+  const header=el('div',{class:'row', style:{flexWrap:'wrap', gap:'12px', alignItems:'flex-end'}},
+    el('div',{}, el('div',{class:'label'},'Agent'), el('select',{id:'selUser', class:'field', style:{minWidth:'200px'}}, el('option',{value:''},'Pick a user'))),
+    el('div',{}, el('div',{class:'label'},'Date'), el('input',{id:'day', class:'field', type:'date', value:isoDate(new Date())})),
+    el('div',{style:{marginLeft:'auto'}}, el('button',{id:'addBlock', class:'btn btn-brand'},'+ Block'), ' ', el('button',{id:'saveSched', class:'btn', disabled:true},'Save to Server'))
+  );
+  adminCard.appendChild(header);
+
+  const grid=el('div',{class:'grid grid-2 mt-4'});
+  const schedCard=el('div',{class:'card'}, el('h3',{},'Schedule Blocks'), el('div',{id:'blocks'}));
+  const dayCard=el('div',{class:'card'}, el('h3',{},'Daily Overview'), el('div',{id:'bars'}), el('div',{id:'pct', class:'mt-3 muted'}), el('div',{class:'mt-3'}, el('h4',{},'AUX breakdown (durations)'), el('ul',{id:'byStatus'})), el('div',{class:'mt-3'}, el('h4',{},'Timeline (IMED style)'), el('div',{id:'lines', class:'scroll card'})) );
+  grid.append(schedCard, dayCard);
+  adminCard.appendChild(grid);
+
+  const usersCard=el('div',{class:'card mt-4'},
+    el('h3',{},'Users'),
+    el('div',{class:'row', style:{flexWrap:'wrap', gap:'8px', alignItems:'flex-end', marginBottom:'12px'}},
+      el('input',{id:'newU', class:'field', placeholder:'Username', style:{maxWidth:'200px'}}),
+      el('input',{id:'newP', class:'field', type:'password', placeholder:'Temp password', value:'Welcome123', style:{maxWidth:'200px'}}),
+      el('select',{id:'newR', class:'field', style:{maxWidth:'140px'}}, el('option',{value:'AGENT'},'AGENT'), el('option',{value:'ADMIN'},'ADMIN')),
+      el('button',{id:'createU', class:'btn btn-brand'},'Create')
+    ),
+    el('div',{id:'usersTblWrap'})
+  );
+  adminCard.appendChild(usersCard);
+
+  const dl=el('div',{class:'mt-4'},
+    el('button',{id:'dle', class:'btn'},'Download Events (month)'), ' ',
+    el('button',{id:'dls', class:'btn'},'Download Schedules (month)'), ' ',
+    el('button',{id:'dla', class:'btn'},'Download Adherence (month)')
+  );
+  adminCard.appendChild(dl);
+
+  app.appendChild(adminCard);
+
+  // state
+  const DAY={ value: isoDate(new Date()) }; const SELECTED={ value:'' }; const BLOCKS={ list:[] }; const EVENTS={ list:[] }; const USERS={ list:[] };
+
+  function refreshUsersUI(){
+    const sel=$('#selUser'); sel.innerHTML='<option value="">Pick a user</option>';
+    (USERS.list||[]).forEach(u=> sel.appendChild(el('option',{value:u.username}, `${u.username} · ${u.role}`)));
+  }
+  function renderBlocksUI(){
+    const host=$('#blocks'); host.innerHTML='';
+    BLOCKS.list.forEach((b,i)=>{
+      const row=el('div',{class:'row', style:{marginBottom:'8px'}},
+        el('select',{class:'field', style:{maxWidth:'160px'}, onchange:e=>{ b.status=e.target.value; } }, ...STATUSES.map(s=> el('option',{ value:s.key, selected:s.key===b.status }, s.label))),
+        el('input',{type:'time', class:'field', style:{maxWidth:'140px'}, value:toHM(b.start), onchange:e=>{ const h=parseInt(e.target.value.slice(0,2)), m=parseInt(e.target.value.slice(3,5)); b.start=h*60+m; } }), 'to',
+        el('input',{type:'time', class:'field', style:{maxWidth:'140px'}, value:toHM(b.end), onchange:e=>{ const h=parseInt(e.target.value.slice(0,2)), m=parseInt(e.target.value.slice(3,5)); b.end=h*60+m; } }),
+        el('button',{class:'btn', onclick:()=>{ BLOCKS.list.splice(i,1); renderBlocksUI(); updateDayUI(); } },'Remove')
+      );
+      host.appendChild(row);
     });
-    $('#load').addEventListener('click', loadSched);
+  }
+  function updateDayUI(){
+    const bars=$('#bars'); bars.innerHTML=''; bars.appendChild(buildDualBars(DAY.value, BLOCKS.list, EVENTS.list));
+    const d=calcAdherence(DAY.value, BLOCKS.list, EVENTS.list);
+    $('#pct').textContent = `Adherence: ${Math.round(d.pct)}% · in ${fmtDur(d.inMin)} / out ${fmtDur(d.outMin)}`;
+    const by=$('#byStatus'); by.innerHTML='';
+    Object.keys(d.byStatus).forEach(k=> by.appendChild(el('li',{}, `${statusByKey(k).label}: ${fmtDur(d.byStatus[k])}`)));
+    const lines=$('#lines'); lines.innerHTML=''; (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--line)'}}, t)));
+  }
+  function updateMonthButtons(){
+    const dt=new Date(DAY.value+'T00:00:00');
+    const y=dt.getUTCFullYear(); const m=('0'+(dt.getUTCMonth()+1)).slice(-2);
+    const monthStart=`${y}-${m}-01`; const monthEnd=new Date(Date.UTC(y, parseInt(m), 0)).toISOString().slice(0,10);
+    function dl(path,name){
+      fetch(path).then(r=>r.blob()).then(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); });
+    }
+    $('#dle').onclick=()=>dl(`/api/export/events?from=${monthStart}&to=${monthEnd}`, `events_${y}${m}.csv`);
+    $('#dls').onclick=()=>dl(`/api/export/schedules?from=${monthStart}&to=${monthEnd}`, `schedules_${y}${m}.csv`);
+    $('#dla').onclick=()=>dl(`/api/export/adherence?from=${monthStart}&to=${monthEnd}`, `adherence_${y}${m}.csv`);
+  }
 
-    (function init(){
-      $('#date').value = todayISO();
-      who().then(loadSched);
-    })();
-  </script>
+  // load users
+  (async()=>{ try{ USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); }catch(e){} })();
+
+  // react to selections
+  $('#selUser').onchange = async (e)=>{
+    SELECTED.value=e.target.value; $('#saveSched').disabled=!SELECTED.value;
+    if(!SELECTED.value) return;
+    try{
+      const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
+      const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
+      renderBlocksUI(); updateDayUI(); updateMonthButtons();
+    }catch(e){}
+  };
+  $('#day').onchange = $('#addBlock').onclick = function(){
+    if (this.id==='addBlock') { BLOCKS.list.push({ status:'available', start:480, end:540 }); }
+    renderBlocksUI(); updateDayUI(); updateMonthButtons();
+  };
+  $('#saveSched').onclick = async ()=>{ try{ await saveSchedule(SELECTED.value, DAY.value, BLOCKS.list); alert('Saved'); }catch(e){ alert('Save failed: '+(e.message||e)); } };
+  $('#createU').onclick = async ()=>{
+    const u=$('#newU').value.trim(); const p=$('#newP').value; const r=$('#newR').value;
+    if(!u||!p) return alert('Enter username and password');
+    try{
+      const res = await createUser(u,p,r);
+      if(res && res.username){ USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); $('#newU').value=''; $('#newP').value='Welcome123'; $('#newR').value='AGENT'; }
+      else alert('Create failed');
+    }catch(e){ alert('Create failed: '+(e.message||e)); }
+  };
+
+  function renderUsersTable(){
+    const wrap=$('#usersTblWrap'); wrap.innerHTML='';
+    const t=el('table',{class:'table'});
+    t.appendChild(el('thead',{}, el('tr',{}, el('th',{},'Username'), el('th',{},'Role'), el('th',{},'Force Reset'), el('th',{}))));
+    const tb=el('tbody');
+    (USERS.list||[]).forEach(u=>{
+      const tr=el('tr',{},
+        el('td',{}, u.username),
+        el('td',{}, u.role),
+        el('td',{}, (function(){
+          const lab=el('label',{class:'row'},
+            (function(){ const c=el('input',{type:'checkbox'}); c.checked=!!u.must_change_password; c.onchange=async()=>{ try{ await patchUser(u.id, { mustChangePassword: !u.must_change_password }); USERS.list=await listUsers()||[]; renderUsersTable(); }catch(e){ alert('Update failed'); } }; return c; })(),
+            el('span',{class:'muted'},'must change on next login')
+          ); return lab;
+        })()),
+        el('td',{}, (function(){ const b=el('button',{class:'btn'},'Delete'); b.onclick=async()=>{ if(!confirm('Delete '+u.username+'?')) return; try{ await deleteUserApi(u.id); USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); }catch(e){ alert('Delete failed'); } }; return b; })())
+      );
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    wrap.appendChild(t);
+  }
+
+  // mount my summary card
+  (function mountMyAgentCard(){
+    const tmpDiv=el('div'); $('#app').insertBefore(tmpDiv, adminCard);
+    const date=isoDate(new Date());
+    const SCHEDULE={blocks:[]}, EVENTS={list:[]};
+    const card=el('div',{class:'card'});
+    const title=el('div',{class:'row-between mb-3'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
+    const bars=el('div');
+    const stats=el('div',{class:'row mt-3'}, el('div',{style:{fontWeight:'800', fontSize:'28px'}}, '100%'), el('div',{class:'muted'}, 'in: 0m · out: 0m'));
+    card.append(title,bars,stats); tmpDiv.appendChild(card);
+
+    async function refresh(){
+      try{
+        const s=await getSchedule(me.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
+        const ev=await listEvents(me.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
+        redraw();
+      }catch(e){}
+    }
+    function redraw(){
+      bars.innerHTML=''; bars.appendChild(buildDualBars(date,SCHEDULE.blocks,EVENTS.list));
+      const d=calcAdherence(date,SCHEDULE.blocks,EVENTS.list);
+      stats.firstChild.textContent=Math.round(d.pct)+'%';
+      stats.lastChild.textContent='in: '+fmtDur(d.inMin)+' · out: '+fmtDur(d.outMin);
+    }
+    refresh(); STATE.timers.push(setInterval(redraw,1000)); STATE.timers.push(setInterval(refresh,15000));
+  })();
+}
+
+// ---------- visuals ----------
+function el(tag, attrs, ...children){
+  const n=document.createElement(tag);
+  if(attrs) Object.keys(attrs).forEach(k=>{
+    if(k==='class') n.className=attrs[k];
+    else if(k==='style') Object.assign(n.style, attrs[k]);
+    else if(k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]);
+    else n.setAttribute(k, attrs[k]);
+  });
+  children.flat().forEach(c=>{ if(c==null) return; if(c.nodeType) n.appendChild(c); else n.appendChild(document.createTextNode(String(c))); });
+  return n;
+}
+function buildDualBars(date, scheduleBlocks, events){
+  const wrap=el('div',{class:'timeline-wrap'});
+  const mins = (scheduleBlocks && scheduleBlocks.length) ? [Math.min(...scheduleBlocks.map(b=>b.start)), Math.max(...scheduleBlocks.map(b=>b.end))] : [480,1020];
+  const startMin=mins[0], endMin=mins[1]; const total=endMin-startMin||1;
+  const dayStart=Date.parse(date+'T00:00:00');
+  function blocksToSegs(blocks){ return (blocks||[]).map(b=>({ status:b.status, start:b.start, width:(b.end-b.start) })); }
+  function eventsToSegs(events){ const segs=[]; let cur=(events||[]).length?events[0].status:null; const pts=(events||[]).map(ev=> Math.max(startMin, Math.min(endMin, Math.floor((Number(ev.ts)-dayStart)/60000)))); let cursor=startMin; for(let i=0;i<pts.length;i++){ const p=pts[i]; if(p>cursor) segs.push({status:cur,start:cursor,width:p-cursor}); cursor=p; cur=events[i].status; } if(cursor<endMin) segs.push({status:cur,start:cursor,width:endMin-cursor}); return segs; }
+  const proj=blocksToSegs(scheduleBlocks||[]); const act=eventsToSegs(events||[]);
+  function row(segs, compare){
+    const bar=el('div',{class:'gridbar'});
+    segs.forEach(s=>{
+      const w=(s.width/total*100).toFixed(4)+'%';
+      let diff=false;
+      if(compare){
+        const probe=s.start+Math.max(1,Math.floor(s.width/2));
+        const exp=(scheduleBlocks||[]).find(b=> probe>=b.start && probe<b.end);
+        diff = !!(exp && s.status && exp.status!==s.status);
+      }
+      const seg=el('div',{class:'seg '+(s.status?statusByKey(s.status).color:'' ) + (compare && diff ? ' diff':''), style:{width:w}});
+      bar.appendChild(seg);
+    });
+    return bar;
+  }
+  wrap.appendChild(el('div',{class:'row', style:{marginBottom:'6px'}}, el('div',{class:'rowlabel'},'Projected'), el('div',{style:{flex:'1'}}, row(proj,false))));
+  wrap.appendChild(el('div',{class:'row'}, el('div',{class:'rowlabel'},'Actual'), el('div',{style:{flex:'1'}}, row(act,true))));
+  const now=Date.now(); const nowMin=Math.floor((now-dayStart)/60000);
+  const nowPct=Math.max(0, Math.min(100, ((nowMin-startMin)/total)*100));
+  const nl=el('div',{class:'nowline', style:{left:nowPct+'%'}});
+  wrap.appendChild(nl); return wrap;
+}
+function getComputedStyleColor(cls){ const map={ 'st-available':'#10b981','st-bathroom':'#f59e0b','st-break':'#fbbf24','st-lunch':'#fb923c','st-training':'#a78bfa','st-meeting':'#60a5fa','st-offline':'#9ca3af' }; return map[cls]||'#9ca3af'; }
+
+function calcAdherence(date, blocks, events){
+  if(!blocks||!blocks.length) return { pct:100, inMin:0, outMin:0, lines:[], byStatus:{} };
+  const dayStart=Date.parse(date+'T00:00:00');
+  const startMin=Math.min(...blocks.map(b=>b.start));
+  const endMin=Math.max(...blocks.map(b=>b.end));
+  let idx=0, cur=(events||[]).length?events[0].status:null, curStart=startMin;
+  const lines=[]; const byStatus={};
+  function pushLine(st, sM, eM){ const startTS=dayStart + sM*60000; const dur=Math.max(0,eM-sM); if(st){ lines.push(`${fmtTS(startTS)} ${statusByKey(st).label} ${fmtDur(dur)}`); byStatus[st]=(byStatus[st]||0)+dur; } }
+  for(let m=startMin;m<=endMin;m++){ const ms=dayStart + m*60000; if(idx+1<(events||[]).length && Number(events[idx+1].ts) <= ms){ pushLine(cur, curStart, m); idx++; cur=events[idx].status; curStart=m; } }
+  pushLine(cur, curStart, endMin);
+  let inMin=0, outMin=0; idx=0; cur=(events||[]).length?events[0].status:null;
+  const nowMin=Math.min(Math.max(startMin, Math.floor((Date.now()-dayStart)/60000)), endMin);
+  for(let m=startMin;m<nowMin;m++){
+    const ms=dayStart + m*60000;
+    while(idx+1<(events||[]).length && Number(events[idx+1].ts) <= ms){ idx++; cur=events[idx].status; }
+    const expected=(blocks||[]).find(b=> m>=b.start && m<b.end);
+    if(!expected) continue; if(!cur) outMin++; else if(cur===expected.status) inMin++; else outMin++;
+  }
+  const total=inMin+outMin; const pct = total? (inMin/total*100):100;
+  return { pct, inMin, outMin, lines, byStatus };
+}
+
+// ---------- boot ----------
+(async function init(){
+  try{
+    const w = await whoami();
+    if (!w.authed) { location.href='/'; return; }
+    STATE.me = w.me;
+  }catch(e){ location.href='/'; return; }
+  render();
+})();
+</script>
 </body>
 </html>
