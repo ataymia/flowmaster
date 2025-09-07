@@ -1,45 +1,92 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Allstar Agent Hub</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system; margin:0; background:#0b0f14; color:#e5e7eb }
-    header { padding:16px 20px; background:#111827; position:sticky; top:0; }
-    main { padding:20px; max-width:800px; margin:0 auto; }
-    .card { background:#111827; border:1px solid #1f2937; border-radius:14px; padding:16px; margin-bottom:14px }
-    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #374151; font-size:12px; opacity:.8 }
+    :root { color-scheme: dark; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system; margin:0; background:#0b0f14; color:#e5e7eb; }
+    header { position:sticky; top:0; background:#0f172a; padding:16px 20px; border-bottom:1px solid #1f2937; display:flex; gap:12px; align-items:center; justify-content:space-between; }
+    .brand { font-weight:700; font-size:18px }
+    nav a { color:#9ca3af; text-decoration:none; margin-right:14px }
+    nav a:hover { color:#fff; }
+    main { max-width:900px; margin:18px auto; padding:0 20px }
+    .pill { display:inline-block; padding:3px 8px; border-radius:999px; border:1px solid #374151; font-size:12px; opacity:.8; margin-left:6px }
+    .card { background:#0f172a; border:1px solid #1f2937; border-radius:14px; padding:16px; margin-bottom:14px }
+    .title { font-size:16px; font-weight:600; margin:0 0 6px 0 }
+    .meta { font-size:12px; opacity:.7; margin-bottom:8px }
+    .body { white-space:pre-wrap; }
+    .muted { opacity:.7 }
   </style>
 </head>
 <body>
-  <header><h2 style="margin:0">Allstar Agent Hub</h2></header>
+  <header>
+    <div class="brand">Allstar Agent Hub <span id="role" class="pill"></span></div>
+    <nav>
+      <a href="/hub.html">Home</a>
+      <a href="/flowmaster/">Flowmaster</a>
+      <a href="/adherence/">Schedule</a>
+      <a id="adminTools" href="/adherence/admin/" style="display:none;">Admin tools</a>
+    </nav>
+  </header>
+
   <main>
-    <h3>Team News & Memos</h3>
+    <h2>Team News &amp; Memos</h2>
     <div id="news"></div>
+    <p id="empty" class="muted" style="display:none;">No news yet.</p>
   </main>
+
   <script>
-    async function loadNews() {
-      const r = await fetch('/api/news');
-      const items = await r.json();
-      const container = document.getElementById('news');
-      container.innerHTML = '';
-      items
-        .sort((a,b) => Number(b.pinned) - Number(a.pinned))
-        .forEach(item => {
-          const el = document.createElement('div');
-          el.className = 'card';
-          el.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <h4 style="margin:0 0 8px 0">${item.title}</h4>
-              ${item.pinned ? '<span class="pill">Pinned</span>' : ''}
-            </div>
-            <div style="opacity:.9; white-space:pre-wrap;">${item.body}</div>
-            <div style="opacity:.6; font-size:12px; margin-top:8px;">Audience: ${item.audience} • ${item.publishAt ?? ''}</div>
-          `;
-          container.appendChild(el);
-        });
+    const $ = (sel) => document.querySelector(sel);
+
+    async function loadMe() {
+      try {
+        const r = await fetch('/api/whoami');
+        const j = await r.json();
+        if (j.authed) {
+          const role = j.me.role;
+          $('#role').textContent = role;
+          if (role === 'ADMIN' || role === 'SUPERADMIN') {
+            $('#adminTools').style.display = '';
+          }
+        } else {
+          $('#role').textContent = 'AGENT';
+        }
+      } catch {}
     }
+
+    async function loadNews() {
+      const container = $('#news');
+      container.innerHTML = '';
+      const r = await fetch('/api/news');
+      const { items, audience } = await r.json();
+
+      if (!items || !items.length) {
+        $('#empty').style.display = '';
+        return;
+      }
+      $('#empty').style.display = 'none';
+
+      for (const it of items) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        const when = it.publishedAt ? new Date(it.publishedAt).toLocaleString() : '';
+        card.innerHTML = `
+          <div class="title">${escapeHtml(it.title || '')}
+            ${it.pinned ? '<span class="pill">Pinned</span>' : ''}
+            ${it.audience && it.audience !== 'all' ? '<span class="pill">'+escapeHtml(it.audience)+'</span>' : ''}
+          </div>
+          <div class="meta">${when}</div>
+          <div class="body">${escapeHtml(it.body || '')}</div>
+        `;
+        container.appendChild(card);
+      }
+    }
+
+    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    loadMe();
     loadNews();
   </script>
 </body>
