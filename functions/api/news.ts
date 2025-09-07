@@ -123,4 +123,13 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
       status: 200,
       headers: {
         'content-type': 'application/json',
-        'cache-control': 'public, s-maxage=
+        'cache-control': 'public, s-maxage=60',
+      },
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: 'Server error', detail: String(e?.message || e) }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+}
