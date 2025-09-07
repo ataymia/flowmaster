@@ -40,27 +40,21 @@ export const onRequestPost: PagesFunction = async ({ request, env }) => {
     return new Response(txt, { status: r.status, headers });
   }
 
-  // pull tokens from Set-Cookie and/or JSON
-  const sc = r.headers.get("set-cookie") || "";
-  const mA = sc.match(/access_token=([^;]+)/);
-  const mR = sc.match(/refresh_token=([^;]+)/);
-  const data = await r.json(); // { username, role, mustChangePassword, access, refresh }
+  const data = await r.json(); // { ok, username, role, mustChangePassword, access, refresh }
 
-  const access = (mA && mA[1]) || data.access || "";
-  const refresh = (mR && mR[1]) || data.refresh || "";
+  const access  = data.access  || "";
+  const refresh = data.refresh || "";
 
   if (access)  headers.append("Set-Cookie", `allstar_at=${access}; Path=/; HttpOnly; Secure; SameSite=Lax`);
   if (refresh) headers.append("Set-Cookie", `allstar_rt=${refresh}; Path=/; HttpOnly; Secure; SameSite=Lax`);
 
   if (wantsHTML(request)) {
-    // handoff in case browser drops Set-Cookie during 303
     const to = new URL("/hub", request.url);
-    if (access) to.searchParams.set("at", access);
+    if (access) to.searchParams.set("at", access); // handoff in case cookie is dropped
     headers.set("Location", to.toString());
     return new Response(null, { status: 303, headers });
   }
 
-  // AJAX path returns token too (useful for manual test)
   return new Response(JSON.stringify({
     ok: true,
     username: data.username,
