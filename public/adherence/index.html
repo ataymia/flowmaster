@@ -1,601 +1,336 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Allstar Agent Adherence</title>
-  <link rel="stylesheet" href="/theme.css">
-  <style>
-    .kpi { font-weight:800; font-size:32px; }
-    .kpi-sub { color: var(--muted); }
-    .tabs .btn { border-bottom-left-radius:0; border-bottom-right-radius:0; }
-    .tabpanes > .card { border-top-left-radius:0; }
-  </style>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Adherence — Allstar Agent Hub</title>
+<link rel="stylesheet" href="/theme.css"/>
 </head>
 <body>
-  <div id="error" class="error-banner"></div>
-  <div id="toast" class="toast"></div>
+<div class="header"><div class="wrap brand">
+  <a class="tab" href="/hub">Hub</a>
+  <a class="tab" href="/flowmaster/">Flowmaster</a>
+  <a class="tab active" href="/adherence/">Schedule</a>
+  <span id="meta" class="pill" style="margin-left:auto">Checking…</span>
+  <button id="impersonate" class="btn" style="display:none;margin-left:8px">View as Agent</button>
+</div></div>
 
-  <header class="appbar">
-    <a href="/hub" class="brand" style="color:var(--brand); text-decoration:none;">ALLSTAR</a>
-    <div class="brand">Allstar Agent Adherence</div>
-    <div id="hdr-meta" class="muted" style="margin-left:16px">Loading…</div>
-    <div class="row" style="margin-left:auto; gap:8px;">
-      <button id="btn-agent" class="btn" style="display:none;">View as Agent</button>
-      <button id="btn-admin" class="btn btn-brand" style="display:none;">Admin Tools</button>
-      <button id="btn-logout" class="btn">Logout</button>
-    </div>
-  </header>
-
-  <main id="app" class="container" style="padding-top:16px;"></main>
+<div class="wrap" id="root"></div>
 
 <script>
-/* =========================
-   Status palette
-========================= */
-const STATUSES = [
-  { key:'available', label:'Available', color:'st-available' },
-  { key:'bathroom',  label:'Bathroom',  color:'st-bathroom'  },
-  { key:'break',     label:'Break',     color:'st-break'     },
-  { key:'lunch',     label:'Lunch',     color:'st-lunch'     },
-  { key:'training',  label:'Training',  color:'st-training'  },
-  { key:'meeting',   label:'Meeting',   color:'st-meeting'   },
-  { key:'offline',   label:'Offline',   color:'st-offline'   },
-];
+/* --------------- small helpers --------------- */
+const el=(t,a,...c)=>{const n=document.createElement(t);if(a)Object.entries(a).forEach(([k,v])=>k==='class'?n.className=v:k==='style'?Object.assign(n.style,v):k.startsWith('on')?n.addEventListener(k.slice(2),v):n.setAttribute(k,v));c.flat().forEach(x=>n.append(x?.nodeType?x:document.createTextNode(x??'')));return n;}
+const qs=s=>document.querySelector(s), qsa=s=>Array.from(document.querySelectorAll(s));
+const pad=n=>String(n).padStart(2,'0');
+const isoDate=d=> (d instanceof Date?d:new Date(d)).toISOString().slice(0,10);
+const toHM=m=>`${pad(Math.floor(m/60))}:${pad(m%60)}`;
+const fromHM=s=>{const[h,m]=s.split(':').map(Number);return h*60+m;};
+const COLORS = {available:'st-available', bathroom:'st-bathroom', break:'st-break', lunch:'st-lunch', training:'st-training', meeting:'st-meeting', offline:'st-offline'};
+const LABELS = {available:'Available', bathroom:'Bathroom', break:'Break', lunch:'Lunch', training:'Training', meeting:'Meeting', offline:'Offline'};
+const STATUSES = Object.keys(COLORS);
 
-/* =========================
-   Utilities
-========================= */
-const $ = (s, el)=> (el||document).querySelector(s);
-const pad = (n)=> String(n).padStart(2,'0');
-const isoDate = (d)=> (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10);
-const toHM = (m)=> `${pad(Math.floor(m/60))}:${pad(m%60)}`;
-const fmtDur = (mins)=> mins<60 ? mins+'m' : `${Math.floor(mins/60)}h ${mins%60? (mins%60)+'m' : ''}`;
-const fmtTS  = (ms)=> { const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
-const statusByKey = (k)=> STATUSES.find(s=>s.key===k) || { label:k, color:'st-offline' };
-function toast(msg, ms=2200){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
-function showError(msg){ const b=$('#error'); if(!b) return; b.style.display='block'; b.textContent='⚠️ '+msg; console.error('[Allstar]', msg); }
-function getColor(cls){ const map={ 'st-available':'#10b981','st-bathroom':'#d946ef','st-break':'#facc15','st-lunch':'#fb923c','st-training':'#8b5cf6','st-meeting':'#3b82f6','st-offline':'#9ca3af' }; return map[cls]||'#9ca3af'; }
-function el(tag, attrs, ...children){
-  const n=document.createElement(tag);
-  if(attrs) Object.keys(attrs).forEach(k=>{
-    if(k==='class') n.className=attrs[k];
-    else if(k==='style') Object.assign(n.style, attrs[k]);
-    else if(k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]);
-    else n.setAttribute(k, attrs[k]);
-  });
-  children.flat().forEach(c=>{ if(c==null) return; if(c.nodeType) n.appendChild(c); else n.appendChild(document.createTextNode(String(c))); });
-  return n;
+/* --------------- api via Pages Functions --------------- */
+async function api(path,opts={}){
+  const r = await fetch(path,Object.assign({credentials:'include'},opts));
+  const ct=r.headers.get('content-type')||'';
+  const t=ct.includes('json')?await r.json():await r.text();
+  if(!r.ok) throw Object.assign(new Error(typeof t==='string'?t:(t.error||('HTTP '+r.status))),{status:r.status,body:t});
+  return t;
 }
+const whoami = ()=> api('/api/whoami');
+const postEvent = (status)=> api('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+const listEvents=(user,from,to)=> api('/api/events?'+new URLSearchParams({user,from,to}));
+const getSchedule=(user,date)=> api('/api/schedules?'+new URLSearchParams({user,date}));
+const saveSchedule=(user,date,blocks)=> api('/api/schedules',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,date,blocks})});
 
-/* =========================
-   API Proxies (Pages)
-========================= */
-async function jfetch(url, opts={}) {
-  const r = await fetch(url, { ...opts, headers:{ 'content-type':'application/json', ...(opts.headers||{}) } });
-  if (r.status===204) return null;
-  const ct = r.headers.get('content-type')||'';
-  const body = ct.includes('application/json') ? await r.json() : await r.text();
-  if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
-  return body;
-}
-const whoami = ()=> jfetch('/api/whoami');
-const logout  = ()=> jfetch('/api/logout', { method:'POST' });
-
-async function listUsers(){ return jfetch('/api/users'); }
-async function createUser(username,password,role){ return jfetch('/api/users', { method:'POST', body: JSON.stringify({ username,password,role }) }); }
-async function patchUser(id,patch){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'PATCH', body: JSON.stringify(patch) }); }
-async function deleteUserApi(id){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'DELETE' }); }
-
-async function getSchedule(user,date){ const q=new URLSearchParams({user,date}).toString(); return jfetch('/api/schedule?'+q); }
-async function saveSchedule(user,date,blocks){ return jfetch('/api/schedule', { method:'POST', body: JSON.stringify({ username:user, date, blocks }) }); }
-async function postEvent(status,ts){ return jfetch('/api/events', { method:'POST', body: JSON.stringify(ts?{status,ts}:{status}) }); }
-async function listEvents(user,from,to){ const q=new URLSearchParams({user,from,to}).toString(); return jfetch('/api/events?'+q); }
-
-/* =========================
-   App State
-========================= */
-let ME=null;
-let IS_ADMIN=false;
-let MODE='admin'; // 'admin' | 'agent'
-let timers=[];    // per-mode intervals
-function clearTimers(){ timers.forEach(clearInterval); timers=[]; }
-function renderHeader(){
-  const meta=$('#hdr-meta');
-  meta.textContent = ME ? `${ME.username} · ${ME.role}` : 'Not signed in';
-  if (IS_ADMIN) {
-    $('#btn-agent').style.display = (MODE==='admin') ? '' : 'none';
-    $('#btn-admin').style.display = (MODE==='agent') ? '' : 'none';
-  } else {
-    $('#btn-agent').style.display = 'none';
-    $('#btn-admin').style.display = 'none';
+/* --------------- shared visuals --------------- */
+function buildBars(date, scheduleBlocks, events){
+  const wrap=el('div',{style:{position:'relative'}});
+  if(!scheduleBlocks?.length){
+    wrap.append(el('div',{class:'help'},'No schedule blocks for this day.'));
+    return wrap;
   }
-}
+  const startMin=Math.min(...scheduleBlocks.map(b=>b.start));
+  const endMin=Math.max(...scheduleBlocks.map(b=>b.end));
+  const total=endMin-startMin||1;
+  const dayStart=Date.parse(date+'T00:00:00');
 
-/* =========================
-   Dual Bars (Projected vs Actual)
-========================= */
-function buildDualBars(date, scheduleBlocks, events){
-  const wrap=document.createElement('div'); wrap.className='timeline-wrap';
-  const has=Array.isArray(scheduleBlocks)&&scheduleBlocks.length;
-  const startMin = has ? Math.min(...scheduleBlocks.map(b=>b.start)) : 480;
-  const endMin   = has ? Math.max(...scheduleBlocks.map(b=>b.end))   : 1020;
-  const total = Math.max(1, endMin - startMin);
-  const dayStart = Date.parse(date+'T00:00:00');
+  const proj = scheduleBlocks.map(b=>({status:b.status,start:b.start,width:(b.end-b.start)}));
 
-  const proj = (scheduleBlocks||[]).map(b=>({ status:b.status, start:b.start, width:b.end-b.start }));
-
-  function eventsToSegs(evts){
-    const segs=[]; let cur=null; // start as null so first segment is blank until first switch
-    const pts=evts.map(ev=> Math.max(startMin, Math.min(endMin, Math.floor((Number(ev.ts)-dayStart)/60000))));
-    let cursor=startMin;
-    for(let i=0;i<pts.length;i++){
-      const p=pts[i];
-      if(p>cursor) segs.push({status:cur,start:cursor,width:p-cursor});
-      cursor=p;
-      cur=evts[i].status;
-    }
+  function eventsToSegs(){
+    const rows=[...events||[]].sort((a,b)=>a.ts-b.ts);
+    let segs=[], cur=rows[0]?.status||null, cursor=startMin;
+    const pts=rows.map(ev=>Math.max(startMin,Math.min(endMin,Math.floor((Number(ev.ts)-dayStart)/60000))));
+    for(let i=0;i<pts.length;i++){const p=pts[i]; if(p>cursor) segs.push({status:cur,start:cursor,width:p-cursor}); cursor=p; cur=rows[i].status;}
     if(cursor<endMin) segs.push({status:cur,start:cursor,width:endMin-cursor});
     return segs;
   }
-  const act = eventsToSegs(events||[]);
 
-  function row(label, segs, compare){
-    const row = document.createElement('div'); row.className='row'; row.style.marginBottom = label==='Projected' ? '6px':'0';
-    const lab = document.createElement('div'); lab.className='rowlabel'; lab.textContent = label;
-    const bar = document.createElement('div'); bar.className = 'gridbar'; bar.style.flex='1';
+  function row(segs, compare){
+    const bar=el('div',{class:'gridbar'});
     segs.forEach(s=>{
-      const seg = document.createElement('div');
-      seg.className = 'seg ' + (s.status ? statusByKey(s.status).color : '');
-      seg.style.width = (s.width/total*100).toFixed(4)+'%';
-      if (compare) {
-        const probe = s.start + Math.max(1, Math.floor(s.width/2));
-        const exp = (scheduleBlocks||[]).find(b => probe>=b.start && probe<b.end);
-        if (exp && s.status && exp.status !== s.status) seg.classList.add('diff');
+      const w=(s.width/total*100)+'%';
+      let diff=false;
+      if(compare){
+        const mid=s.start+Math.max(1,Math.floor(s.width/2));
+        const exp=scheduleBlocks.find(b=> mid>=b.start && mid<b.end);
+        diff = !!(exp && s.status && exp.status!==s.status);
       }
-      bar.appendChild(seg);
+      bar.append(el('div',{class:`seg ${s.status?COLORS[s.status]:''} ${compare&&diff?'diff':''}`,style:{width:w}}));
     });
-    row.append(lab, bar);
-    return row;
+    return bar;
   }
 
-  wrap.append(row('Projected', proj, false));
-  wrap.append(row('Actual',    act,  true));
+  const projRow=row(proj,false);
+  const actRow=row(eventsToSegs(),true);
+  wrap.append(el('div',{style:{display:'grid',gap:'6px'}},
+           el('div',{}, el('div',{class:'help'},'Projected'), projRow),
+           el('div',{}, el('div',{class:'help'},'Actual'), actRow)));
 
-  const now=Date.now(); const nowMin=Math.floor((now-dayStart)/60000);
-  const nowPct=Math.max(0, Math.min(100, ((nowMin-startMin)/total)*100));
-  const nl=document.createElement('div'); nl.className='nowline'; nl.style.left = nowPct+'%';
-  wrap.appendChild(nl);
+  // realtime now-line
+  const now=Date.now(), nowMin=Math.floor((now-dayStart)/60000);
+  const nowPct=Math.max(0,Math.min(100,((nowMin-startMin)/total)*100));
+  wrap.append(el('div',{class:'nowline',style:{left:nowPct+'%'}}));
 
+  // live update: only rebuild actual row (efficient enough)
+  const tick=()=> {
+    const newAct=row(eventsToSegs(),true);
+    actRow.replaceWith(newAct);
+    const ms=Date.now(), nMin=Math.floor((ms-dayStart)/60000);
+    const p=Math.max(0,Math.min(100,((nMin-startMin)/total)*100));
+    wrap.querySelector('.nowline').style.left=p+'%';
+  };
+  const id=setInterval(tick,1000);
+  wrap._cleanup = ()=>clearInterval(id);
   return wrap;
 }
 
-/* =========================
-   Adherence Calculations
-========================= */
-function calcAdherence(date, blocks, events){
-  if(!blocks || !blocks.length) return { pct: 100, inMin:0, outMin:0, lines:[], byStatus:{} };
+function computeAdherence(date, blocks, events){
+  if(!blocks?.length) return {pct:100,inMin:0,outMin:0,by:{}};
   const dayStart=Date.parse(date+'T00:00:00');
   const startMin=Math.min(...blocks.map(b=>b.start));
   const endMin=Math.max(...blocks.map(b=>b.end));
-  let idx=0, cur=events.length?events[0].status:null, curStart=startMin;
-  let inMin=0, outMin=0;
-  const lines=[]; const byStatus={};
-
-  function pushLine(st, sM, eM){
-    const startTS=dayStart + sM*60000; const dur=Math.max(0,eM-sM);
-    if(st){ lines.push(`${fmtTS(startTS)} ${statusByKey(st).label} ${fmtDur(dur)}`); byStatus[st]=(byStatus[st]||0)+dur; }
-  }
-
-  for(let m=startMin;m<=endMin;m++){
-    const ms=dayStart + m*60000;
-    if(idx+1<events.length && Number(events[idx+1].ts) <= ms){
-      pushLine(cur, curStart, m); idx++; cur=events[idx].status; curStart=m;
-    }
-  }
-  pushLine(cur, curStart, endMin);
-
-  idx=0; cur=events.length?events[0].status:null;
-  const nowMin=Math.min(Math.max(startMin, Math.floor((Date.now()-dayStart)/60000)), endMin);
+  let idx=0, cur=events?.[0]?.status||null;
+  const nowMin=Math.min(Math.max(startMin,Math.floor((Date.now()-dayStart)/60000)), endMin);
+  let inMin=0,outMin=0, by={};
   for(let m=startMin;m<nowMin;m++){
-    const ms=dayStart + m*60000;
-    while(idx+1<events.length && Number(events[idx+1].ts) <= ms){ idx++; cur=events[idx].status; }
-    const expected=(blocks||[]).find(b=> m>=b.start && m<b.end);
-    if(!expected) continue;
-    if(!cur) outMin++; else if(cur===expected.status) inMin++; else outMin++;
+    const ms=dayStart+m*60000;
+    while(idx+1<(events?.length||0) && Number(events[idx+1].ts)<=ms){ idx++; cur=events[idx].status; }
+    const exp=blocks.find(b=> m>=b.start && m<b.end);
+    if(!exp) continue;
+    if(cur===exp.status){ inMin++; by[cur]=(by[cur]||0)+1; } else outMin++;
   }
-  const total=inMin+outMin; const pct = total ? (inMin/total*100) : 100;
-  return { pct, inMin, outMin, lines, byStatus };
+  const total=inMin+outMin; const pct = total? Math.round(inMin/total*100):100;
+  return {pct,inMin,outMin,by};
 }
 
-/* =========================
-   Agent View (self or selected)
-========================= */
-function renderAgentView(ctx){
-  clearTimers();
-  const app=$('#app'); app.innerHTML='';
+/* --------------- Agent View --------------- */
+function mountAgent(me){
+  const root=qs('#root'); root.innerHTML='';
+  qs('#meta').textContent = `${me.username} · ${me.role}`;
 
-  const whoUser = ctx.username;
-  const date = isoDate(new Date());
+  const today=isoDate(new Date());
+  const statusBtns=el('div',{class:'grid',style:{gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:'8px',marginTop:'8px'}},
+    ...STATUSES.map(k=> el('button',{class:'btn',style:{background:'var(--'+COLORS[k].slice(3)+')',color:'#0a0f1a'},onclick:()=>switchTo(k)},LABELS[k])));
 
-  const grid = document.createElement('div'); grid.className='grid grid-2';
+  const card=el('div',{class:'card'},
+    el('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:'8px'}},
+      el('h2',{},'Today'), el('div',{class:'help'},today)),
+    el('div',{id:'bars',style:{marginTop:'10px'}}),
+    el('div',{id:'stats',style:{marginTop:'10px'}},''),
+    el('div',{style:{marginTop:'14px'}}, el('h3',{},'Set status'), statusBtns),
+    el('div',{style:{marginTop:'14px'}}, el('h4',{},'Recent switches'), el('div',{id:'recent',class:'card',style:{padding:'8px'}}))
+  );
+  root.append(card);
 
-  // LEFT: Bars + KPIs
-  const left = document.createElement('div'); left.className='card';
-  left.innerHTML = `<div class="row-between"><h2>Today — ${whoUser}</h2><div class="muted">${date}</div></div>
-                    <div id="bars" style="margin-top:12px;"></div>
-                    <div class="row" style="margin-top:12px;"><div class="kpi" id="pct">100%</div><div class="kpi-sub" id="inout">in: 0m · out: 0m</div></div>`;
+  const SCHEDULE={blocks:[]}, EVENTS={list:[]};
+  let cleaner=()=>{};
 
-  // RIGHT: Status buttons + recent
-  const right = document.createElement('div'); right.className='card';
-  right.innerHTML = `<h3>Set status</h3><div id="statusBtns" class="row" style="flex-wrap:wrap; margin-top:8px;"></div>
-                     <div class="muted" style="margin-top:14px;">Recent switches</div><div id="recent" class="scroll" style="margin-top:6px;"></div>`;
-
-  grid.append(left,right); app.appendChild(grid);
-
-  // state
-  const S={ blocks:[], events:[] };
-
-  // buttons
-  const host = $('#statusBtns'); host.innerHTML='';
-  STATUSES.forEach(s=>{
-    const b=document.createElement('button');
-    b.className='btn'; b.style.color='#fff'; b.style.background=getColor(s.color);
-    b.textContent=s.label;
-    b.onclick = async ()=>{
-      const ev={ status:s.key, ts: Date.now() };
-      S.events.push(ev); draw();
-      try{ await postEvent(s.key); }catch{}
-    };
-    host.appendChild(b);
-  });
-
-  function renderRecent(){
-    const r=$('#recent'); r.innerHTML='';
-    S.events.slice(-10).reverse().forEach(ev=>{
-      const row=document.createElement('div'); row.className='row-between'; row.style.cssText='border-top:1px solid var(--border); padding:6px 0';
-      const l=document.createElement('div'); const dot=document.createElement('span'); dot.className='status-dot '+statusByKey(ev.status).color; l.append(dot, document.createTextNode(' '+statusByKey(ev.status).label));
-      const when=document.createElement('div'); when.className='muted'; when.textContent=fmtTS(ev.ts);
-      row.append(l,when); r.appendChild(row);
-    });
+  function redraw(){
+    const barsHost=qs('#bars'); barsHost.innerHTML='';
+    const wrap=buildBars(today,SCHEDULE.blocks,EVENTS.list); barsHost.append(wrap);
+    cleaner=wrap._cleanup||(()=>{});
+    const d=computeAdherence(today,SCHEDULE.blocks,EVENTS.list);
+    qs('#stats').textContent=`Adherence: ${d.pct}% · in ${d.inMin}m · out ${d.outMin}m`;
+    const host=qs('#recent'); host.innerHTML='';
+    [...EVENTS.list].slice(-12).reverse().forEach(ev=> host.append(el('div',{style:{borderTop:'1px solid var(--line)',padding:'6px 0'}}, `${new Date(ev.ts).toLocaleTimeString()} — ${LABELS[ev.status]}`)));
   }
 
-  function draw(){
-    $('#bars').innerHTML=''; $('#bars').appendChild(buildDualBars(date, S.blocks, S.events));
-    const k=calcAdherence(date, S.blocks, S.events);
-    $('#pct').textContent=Math.round(k.pct)+'%';
-    $('#inout').textContent='in: '+fmtDur(k.inMin)+' · out: '+fmtDur(k.outMin);
-    renderRecent();
-  }
-
-  (async()=>{
+  async function refresh(){
     try{
-      const sched = await getSchedule(whoUser, date); S.blocks = (sched&&sched.blocks)||[];
-      const ev    = await listEvents(whoUser, date, date); S.events = Array.isArray(ev)?ev:[];
-    }catch{}
-    draw();
-  })();
+      const s=await getSchedule(me.username,today); SCHEDULE.blocks=s?.blocks||[];
+      const ev=await listEvents(me.username,today,today); EVENTS.list=Array.isArray(ev)?ev:[];
+      redraw();
+    }catch(e){ console.warn(e); }
+  }
+  function switchTo(status){
+    EVENTS.list.push({status,ts:Date.now()}); redraw();
+    postEvent(status).catch(()=>{}); // fire & forget
+  }
 
-  timers.push(setInterval(draw, 1000));
-  timers.push(setInterval(async()=>{ try{ const ev=await listEvents(whoUser, date, date); S.events=Array.isArray(ev)?ev:S.events; }catch{} }, 10000));
+  refresh(); const t1=setInterval(()=>{ try{cleaner();}catch{} redraw(); },1000);
+  const t2=setInterval(refresh,15000);
+  root._cleanup = ()=>{ clearInterval(t1); clearInterval(t2); try{cleaner();}catch{} };
 }
 
-/* =========================
-   Admin View (with Tabs)
-========================= */
-function renderAdminView(){
-  if(!IS_ADMIN){ MODE='agent'; renderHeader(); return renderAgentView({ username: ME.username }); }
+/* --------------- Admin View --------------- */
+function mountAdmin(me){
+  const root=qs('#root'); root.innerHTML='';
+  qs('#meta').textContent = `${me.username} · ${me.role}`;
+  qs('#impersonate').style.display='inline-flex';
+  qs('#impersonate').onclick=()=>mountAgent(me);
 
-  clearTimers();
-  const app=$('#app'); app.innerHTML='';
+  const tabs=el('div',{class:'tabs',style:{marginBottom:'10px'}},
+    el('a',{href:'#',class:'tab active',onClick:(e)=>switchTab(e,'schedule')},'Schedule'),
+    el('a',{href:'#',class:'tab',onClick:(e)=>switchTab(e,'live')},'Live Status'),
+    el('a',{href:'#',class:'tab',onClick:(e)=>switchTab(e,'hist')},'History')
+  );
+  const pane=el('div',{}, el('div',{id:'pane'}));
+  root.append(tabs,pane);
 
-  // Tabs shell
-  const tabs = document.createElement('div'); tabs.className='tabs row';
-  tabs.innerHTML = `
-    <button class="btn btn-brand" data-tab="schedule">Schedule</button>
-    <button class="btn" data-tab="live">Live Status</button>
-    <button class="btn" data-tab="history">History</button>
-  `;
-  const panes = document.createElement('div'); panes.className='tabpanes';
-  panes.innerHTML = `
-    <div id="tab-schedule" class="card"></div>
-    <div id="tab-live" class="card" style="display:none"></div>
-    <div id="tab-history" class="card" style="display:none"></div>
-  `;
-  app.append(tabs, panes);
+  function activate(name){
+    qsa('.tabs .tab').forEach(a=>a.classList.remove('active'));
+    qsa('.tabs .tab').find(a=>a.textContent.toLowerCase().includes(name)).classList.add('active');
+  }
+  function switchTab(ev,name){ ev.preventDefault(); ({schedule:showSchedule,live:showLive,hist:showHistory})[name](); activate(name); }
 
-  // State shared across schedule tab
-  const DAY={ value: isoDate(new Date()) }; const SELECTED={ value:'' }; const BLOCKS={ list:[] }; const EVENTS={ list:[] }; const USERS={ list:[] };
+  /* --- Schedule tab --- */
+  async function showSchedule(){
+    const host=qs('#pane'); host.innerHTML='';
+    const hdr=el('div',{class:'grid grid-2'},
+      el('div',{class:'card'}, el('div',{class:'label'},'Agent'),
+        el('select',{id:'selUser',class:'field'}, el('option',{value:''},'Pick a user'))),
+      el('div',{class:'card'}, el('div',{class:'label'},'Date'),
+        el('input',{id:'day',class:'field',type:'date',value:isoDate(new Date())})));
+    const body=el('div',{class:'grid grid-2',style:{marginTop:'10px'}},
+      el('div',{class:'card'}, el('h3',{},'Schedule Blocks'), el('div',{id:'blocks'}), el('div',{style:{marginTop:'10px'}},
+        el('button',{class:'btn',onclick:addBlock},'+ Block'),
+        ' ',
+        el('button',{id:'saveBtn',class:'btn-brand',disabled:true,onclick:save},'Save to Server'))),
+      el('div',{class:'card'}, el('h3',{},'Daily Overview'),
+        el('div',{id:'bars',style:{marginTop:'10px'}}),
+        el('div',{id:'pct',class:'help',style:{marginTop:'8px'}})));
+    host.append(hdr,body);
 
-  // Helpers for schedule tab
-  function sanitizeBlocks(list){
-    function parseHM(v){ if(!v) return 0; if(typeof v==='number') return v; const [h,m]=String(v).split(':').map(x=>parseInt(x,10)||0); return (h*60+m)|0; }
-    let arr = (list||[]).map(b=>{
-      let s = typeof b.start==='number'?b.start : parseHM(b.start);
-      let e = typeof b.end==='number'  ?b.end   : parseHM(b.end);
-      return { status:b.status, start: s|0, end: e|0 };
-    }).filter(b=> b && b.status && b.start>=0 && b.end>0 && b.end>b.start);
-    arr.sort((a,b)=> a.start-b.start || a.end-b.end);
-    const out=[];
-    for(const b of arr){
-      b.start=Math.max(0,Math.min(1440,b.start));
-      b.end=Math.max(0,Math.min(1440,b.end));
-      const last=out[out.length-1];
-      if(last && last.status===b.status && last.end===b.start){ last.end=b.end; }
-      else out.push({...b});
+    const SELECTED={user:'',date:isoDate(new Date())}, BLOCKS={list:[]}, EVENTS={list:[]};
+
+    async function loadUsers(){
+      // show only agents for admins, and everyone for superadmin; leverage your Worker filter
+      // (listUsers is behind auth in Worker; create a proxy later if you want. For now, type a username.)
+      // If you want the UI to list users from server, add a /api/users proxy similar to schedules/events.
+      const sel=qs('#selUser'); sel.innerHTML='<option value="">Pick a user</option>';
+      // Quick fallback: allow manual entry
+      sel.append(el('option',{value:me.username},me.username+' (me)'));
     }
-    return out;
-  }
-  function refreshUsersUI(){
-    const sel=$('#selUser'); if(!sel) return;
-    sel.innerHTML='<option value="">Pick a user</option>';
-    (USERS.list||[]).forEach(u=> sel.appendChild(new Option(`${u.username} · ${u.role}`, u.username)));
-  }
-  function renderBlocksUI(){
-    const host=$('#blocks'); if(!host) return;
-    host.innerHTML='';
-    BLOCKS.list.forEach((b,i)=>{
-      const row=document.createElement('div'); row.className='row'; row.style.marginBottom = '8px';
-      const sel=document.createElement('select'); sel.className='field'; sel.style.maxWidth='160px';
-      STATUSES.forEach(s=> sel.appendChild(new Option(s.label, s.key, false, s.key===b.status)));
-      sel.onchange = e=>{ b.status=e.target.value; };
-      const t1=document.createElement('input'); t1.type='time'; t1.className='field'; t1.style.maxWidth='140px'; t1.value=toHM(b.start);
-      const t2=document.createElement('input'); t2.type='time'; t2.className='field'; t2.style.maxWidth='140px'; t2.value=toHM(b.end);
-      t1.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.start=(parseInt(hh)*60+parseInt(mm))|0; };
-      t2.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.end  =(parseInt(hh)*60+parseInt(mm))|0; };
-      const rm=document.createElement('button'); rm.className='btn'; rm.textContent='Remove';
-      rm.onclick=()=>{ BLOCKS.list.splice(i,1); renderBlocksUI(); updateDayUI(); enableSave(); };
-      row.append(sel, t1, document.createTextNode('to'), t2, rm); host.appendChild(row);
-    });
-  }
-  function updateDayUI(){
-    const bars=$('#bars'); if(!bars) return;
-    bars.innerHTML=''; bars.appendChild(buildDualBars(DAY.value, BLOCKS.list, EVENTS.list));
-    const d=calcAdherence(DAY.value, BLOCKS.list, EVENTS.list);
-    const pctEl=$('#pct'); if(pctEl) pctEl.textContent = `Adherence: ${Math.round(d.pct)}% · in ${fmtDur(d.inMin)} / out ${fmtDur(d.outMin)}`;
-    const by=$('#byStatus'); if(by){ by.innerHTML=''; Object.keys(d.byStatus||{}).forEach(k=> by.appendChild(el('li',{}, `${statusByKey(k).label}: ${fmtDur(d.byStatus[k])}`))); }
-    const lines=$('#lines'); if(lines){ lines.innerHTML=''; (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--border)'}}, t))); }
-  }
-  function enableSave(){ const btn=$('#saveSched'); if(btn) btn.disabled = !SELECTED.value || !BLOCKS.list.length; }
+    function addBlock(){
+      BLOCKS.list.push({status:'available',start:480,end:540});
+      renderBlocks(); renderDay();
+    }
+    function renderBlocks(){
+      const host=qs('#blocks'); host.innerHTML='';
+      BLOCKS.list.forEach((b,i)=> host.append(
+        el('div',{style:{display:'flex',gap:'8px',marginBottom:'8px'}},
+          el('select',{class:'field',style:{maxWidth:'160px'},onchange:e=>b.status=e.target.value},
+            ...STATUSES.map(k=> el('option',{value:k,selected:k===b.status},LABELS[k]))),
+          el('input',{class:'field',style:{maxWidth:'120px'},type:'time',value:toHM(b.start),onchange:e=>b.start=fromHM(e.target.value)}),
+          el('span',{},'to'),
+          el('input',{class:'field',style:{maxWidth:'120px'},type:'time',value:toHM(b.end),onchange:e=>b.end=fromHM(e.target.value)}),
+          el('button',{class:'btn',onclick:()=>{BLOCKS.list.splice(i,1);renderBlocks();renderDay();}},'Remove')
+      )); 
+    }
+    function renderDay(){
+      const barsHost=qs('#bars'); barsHost.innerHTML='';
+      barsHost.append(buildBars(SELECTED.date,BLOCKS.list,EVENTS.list));
+      const d=computeAdherence(SELECTED.date,BLOCKS.list,EVENTS.list);
+      qs('#pct').textContent=`Adherence now: ${d.pct}% · in ${d.inMin}m · out ${d.outMin}m`;
+      qs('#saveBtn').disabled=!SELECTED.user;
+    }
 
-  // ----- Tab Renderers -----
-  function renderScheduleTab(){
-    const root = $('#tab-schedule');
-    root.innerHTML = `
-      <div class="row" style="flex-wrap:wrap; gap:12px; align-items:flex-end;">
-        <div>
-          <div class="label">Agent</div>
-          <select id="selUser" class="field" style="min-width:200px"><option value="">Pick a user</option></select>
-        </div>
-        <div>
-          <div class="label">Date</div>
-          <input id="day" class="field" type="date" value="${DAY.value}">
-        </div>
-        <div style="margin-left:auto">
-          <button id="addBlock" class="btn btn-brand">+ Block</button>
-          <button id="saveSched" class="btn" disabled>Save to Server</button>
-        </div>
-      </div>
-
-      <div class="grid grid-2" style="margin-top:16px;">
-        <div class="card">
-          <h3>Schedule Blocks</h3>
-          <div id="blocks"></div>
-        </div>
-
-        <div class="card">
-          <h3>Daily Overview</h3>
-          <div id="bars"></div>
-          <div id="pct" class="muted" style="margin-top:10px;"></div>
-          <div style="margin-top:12px;">
-            <h4>AUX breakdown (durations)</h4>
-            <ul id="byStatus"></ul>
-          </div>
-          <div style="margin-top:12px;">
-            <h4>Timeline (IMED style)</h4>
-            <div id="lines" class="scroll card"></div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    // load users
-    (async()=>{ try{ USERS.list=await listUsers()||[]; refreshUsersUI(); }catch(e){ showError('Could not load users'); } })();
-
-    // wire handlers
-    $('#selUser').onchange = async (e)=>{
-      SELECTED.value=e.target.value; enableSave();
-      if(!SELECTED.value) return;
+    qs('#selUser').onchange=async e=>{
+      SELECTED.user = e.target.value;
+      if(!SELECTED.user){ BLOCKS.list=[]; EVENTS.list=[]; renderBlocks(); renderDay(); return; }
       try{
-        const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
-        const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
-      }catch{ BLOCKS.list=[]; EVENTS.list=[]; }
-      renderBlocksUI(); updateDayUI();
+        const s=await getSchedule(SELECTED.user,SELECTED.date); BLOCKS.list=s?.blocks||[];
+        const ev=await listEvents(SELECTED.user,SELECTED.date,SELECTED.date); EVENTS.list=Array.isArray(ev)?ev:[];
+      }catch{}
+      renderBlocks(); renderDay();
     };
-    $('#day').onchange = async (e)=>{
-      DAY.value=e.target.value; if(!SELECTED.value) return;
+    qs('#day').onchange=async e=>{
+      SELECTED.date = e.target.value||isoDate(new Date());
+      if(!SELECTED.user) return renderDay();
       try{
-        const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
-        const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
-      }catch{ BLOCKS.list=[]; EVENTS.list=[]; }
-      renderBlocksUI(); updateDayUI();
+        const s=await getSchedule(SELECTED.user,SELECTED.date); BLOCKS.list=s?.blocks||[];
+        const ev=await listEvents(SELECTED.user,SELECTED.date,SELECTED.date); EVENTS.list=Array.isArray(ev)?ev:[];
+      }catch{}
+      renderBlocks(); renderDay();
     };
-    $('#addBlock').onclick = ()=>{ BLOCKS.list.push({ status:'available', start:480, end:540 }); renderBlocksUI(); updateDayUI(); enableSave(); };
-    $('#saveSched').onclick = async ()=>{
-      if(!SELECTED.value){ toast('Pick an agent first'); return; }
-      const cleaned = sanitizeBlocks(BLOCKS.list);
-      if(!cleaned.length){ toast('Add at least one block'); return; }
+
+    async function save(){
       try{
-        await saveSchedule(SELECTED.value, DAY.value, cleaned);
-        toast('Saved ✓');
-        const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
-        renderBlocksUI(); updateDayUI();
+        await saveSchedule(SELECTED.user,SELECTED.date,BLOCKS.list);
+        alert('Saved');
       }catch(e){
-        showError('Save failed: '+String(e.message||e));
+        alert('Save failed: '+(e.body?.error||e.message));
       }
-    };
-
-    // live tick + event refresh
-    timers.push(setInterval(()=>{ if(BLOCKS.list.length) updateDayUI(); }, 1000));
-    timers.push(setInterval(async()=>{ try{ if(!SELECTED.value) return; const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:EVENTS.list; updateDayUI(); }catch{} }, 10000));
-  }
-
-  function mountLive(){
-    const root = $('#tab-live');
-    root.innerHTML = `
-      <div class="row-between">
-        <h3>Live Agent Status — Today</h3>
-        <div class="muted" id="live-date"></div>
-      </div>
-      <div id="live-grid" class="grid" style="grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); margin-top:12px;"></div>
-    `;
-    $('#live-date').textContent = isoDate(new Date());
-    const grid = $('#live-grid');
-
-    async function refresh(){
-      grid.innerHTML='';
-      let users=[];
-      try { users = await listUsers() || []; } catch { users=[]; }
-      users = users.filter(u => u.role === 'AGENT');
-      await Promise.all(users.map(async (u)=>{
-        let last = null;
-        try{
-          const ev = await listEvents(u.username, isoDate(new Date()), isoDate(new Date()));
-          if (Array.isArray(ev) && ev.length) last = ev[ev.length-1];
-        }catch{}
-        const card=document.createElement('div'); card.className='card';
-        const label = last ? statusByKey(last.status) : statusByKey('offline');
-        const since = last ? (Math.max(0, Math.floor((Date.now()-Number(last.ts))/60000))) : null;
-        card.innerHTML = `
-          <div class="row-between"><div class="brand">${u.username}</div><span class="pill">${u.role}</span></div>
-          <div class="row" style="margin-top:10px;">
-            <span class="status-dot ${label.color}"></span>
-            <div>${label.label}${since!=null ? ` · ${since}m` : ''}</div>
-          </div>
-        `;
-        grid.appendChild(card);
-      }));
     }
-    refresh();
-    timers.push(setInterval(refresh, 10000));
+    await loadUsers(); // simple select for now
   }
 
-  function mountHistory(){
-    const root = $('#tab-history');
-    root.innerHTML = `
-      <div class="row" style="flex-wrap:wrap; gap:12px; align-items:flex-end;">
-        <div>
-          <div class="label">Agent</div>
-          <select id="histUser" class="field" style="min-width:200px"><option value="">Pick a user</option></select>
-        </div>
-        <div>
-          <div class="label">From</div>
-          <input id="histFrom" class="field" type="date" value="${isoDate(new Date())}">
-        </div>
-        <div>
-          <div class="label">To</div>
-          <input id="histTo" class="field" type="date" value="${isoDate(new Date())}">
-        </div>
-        <div style="margin-left:auto">
-          <button id="runHist" class="btn btn-brand">Run</button>
-        </div>
-      </div>
-      <div class="card" style="margin-top:12px;">
-        <table class="table" id="histTable">
-          <thead><tr><th>Date</th><th>Adherence %</th><th>In</th><th>Out</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="row" style="margin-top:12px;">
-        <button id="csvEvents" class="btn">Download Events CSV</button>
-        <button id="csvSchedules" class="btn">Download Schedules CSV</button>
-        <button id="csvAdh" class="btn">Download Adherence CSV</button>
-      </div>
-    `;
+  /* --- Live Status tab --- */
+  async function showLive(){
+    const host=qs('#pane'); host.innerHTML='';
+    host.append(el('div',{class:'card'},
+      el('div',{style:{display:'flex',justifyContent:'space-between'}},
+        el('h3',{},'Live Agent Status — Today'), el('div',{class:'help'},isoDate(new Date()))),
+      el('div',{id:'grid',style:{marginTop:'8px'}},'Coming online…')));
+    // This is a placeholder – to show everyone live, add a /api/users proxy and loop users here.
+    // For now we just show “me”.
+    try{
+      const me = await whoami(); 
+      const today=isoDate(new Date());
+      const container=qs('#grid'); container.innerHTML='';
+      const s=await getSchedule(me.username,today);
+      const ev=await listEvents(me.username,today,today);
+      const card=el('div',{class:'card'},
+        el('div',{style:{display:'flex',justifyContent:'space-between'}}, el('strong',{},me.username), el('span',{class:'help'},'today')),
+        buildBars(today,s?.blocks||[],Array.isArray(ev)?ev:[])
+      );
+      container.append(card);
+    }catch{ qs('#grid').textContent='Unable to load now.'; }
+  }
 
-    (async()=>{ try{
-      const users=await listUsers()||[];
-      const sel=$('#histUser'); users.filter(u=>u.role==='AGENT').forEach(u=> sel.appendChild(new Option(u.username, u.username)));
-    }catch{} })();
+  /* --- History tab --- */
+  function showHistory(){
+    const host=qs('#pane'); host.innerHTML='';
+    host.append(el('div',{class:'card'},
+      el('div',{class:'grid grid-2'},
+        el('div',{}, el('div',{class:'label'},'Agent'), el('input',{id:'hUser',class:'field',placeholder:'username'})),
+        el('div',{}, el('div',{class:'label'},'Date'), el('input',{id:'hDay',class:'field',type:'date',value:isoDate(new Date())}))),
+      el('div',{style:{marginTop:'10px'}},
+        el('button',{class:'btn',onclick:run},'Run')),
+      el('div',{id:'out',style:{marginTop:'10px'}})
+    ));
 
-    function daysInRange(a,b){
-      const start = new Date(a+'T00:00:00Z'), end = new Date(b+'T00:00:00Z');
-      const out=[]; for(let d=new Date(start); d<=end; d.setUTCDate(d.getUTCDate()+1)) out.push(d.toISOString().slice(0,10));
-      return out;
+    async function run(){
+      const u=qs('#hUser').value.trim(); const d=qs('#hDay').value||isoDate(new Date());
+      const out=qs('#out'); out.textContent='Loading…';
+      if(!u){ out.textContent='Enter a username.'; return; }
+      try{
+        const s=await getSchedule(u,d); const ev=await listEvents(u,d,d);
+        out.innerHTML='';
+        out.append(buildBars(d,s?.blocks||[],Array.isArray(ev)?ev:[]));
+      }catch(e){ out.textContent='Error loading history.'; }
     }
-
-    $('#runHist').onclick = async ()=>{
-      const user = $('#histUser').value.trim();
-      const from = $('#histFrom').value;
-      const to   = $('#histTo').value;
-      if(!user){ toast('Pick a user first'); return; }
-      const tbody = $('#histTable tbody'); tbody.innerHTML='';
-      const dates = daysInRange(from, to).slice(0, 60); // safety cap
-      for (const date of dates){
-        try{
-          const s=await getSchedule(user, date); const blocks=(s&&s.blocks)||[];
-          const ev=await listEvents(user, date, date); const events=Array.isArray(ev)?ev:[];
-          const d=calcAdherence(date, blocks, events);
-          const tr=document.createElement('tr');
-          const pct=Math.round(d.pct);
-          tr.innerHTML=`<td>${date}</td><td>${pct}%</td><td>${fmtDur(d.inMin)}</td><td>${fmtDur(d.outMin)}</td>`;
-          tbody.appendChild(tr);
-        }catch(e){
-          const tr=document.createElement('tr'); tr.innerHTML=`<td>${date}</td><td colspan="3" class="muted">error</td>`; tbody.appendChild(tr);
-        }
-      }
-      // CSV links (open in new tab)
-      $('#csvEvents').onclick    = ()=> window.open(`/api/export/events?from=${from}&to=${to}`, '_blank');
-      $('#csvSchedules').onclick = ()=> window.open(`/api/export/schedules?from=${from}&to=${to}`, '_blank');
-      $('#csvAdh').onclick       = ()=> window.open(`/api/export/adherence?from=${from}&to=${to}`, '_blank');
-    };
   }
 
-  // tab click handling
-  tabs.addEventListener('click', (e)=>{
-    const btn = e.target.closest('button[data-tab]');
-    if(!btn) return;
-    tabs.querySelectorAll('button').forEach(b=> b.classList.remove('btn-brand'));
-    btn.classList.add('btn-brand');
-    panes.querySelectorAll('.card').forEach(p=> p.style.display='none');
-    const id = '#tab-'+btn.dataset.tab;
-    $(id).style.display='block';
-    if (id==='#tab-live')    mountLive();
-    if (id==='#tab-history') mountHistory();
-    if (id==='#tab-schedule') renderScheduleTab();
-  });
-
-  // initial mount: Schedule
-  renderScheduleTab();
+  showSchedule(); // default
 }
 
-/* =========================
-   Boot
-========================= */
-(async function init(){
-  try{
-    const w = await whoami();
-    if (!w.authed) { location.href='/'; return; }
-    ME = w.me;
-    IS_ADMIN = ME.role==='ADMIN' || ME.role==='SUPERADMIN';
-  }catch(e){ location.href='/'; return; }
-
-  $('#btn-logout').onclick = async ()=>{ await logout().catch(()=>{}); location.href='/'; };
-
-  if (IS_ADMIN) {
-    $('#btn-agent').style.display='';
-    $('#btn-admin').style.display='none';
-    $('#btn-agent').onclick = ()=>{
-      MODE='agent'; renderHeader();
-      const sel = document.querySelector('#selUser');
-      const uname = sel && sel.value ? sel.value : ME.username;
-      renderAgentView({ username: uname });
-    };
-    $('#btn-admin').onclick = ()=>{ MODE='admin'; renderHeader(); renderAdminView(); };
-    MODE='admin'; renderHeader(); renderAdminView();
-  } else {
-    MODE='agent'; renderHeader(); renderAgentView({ username: ME.username });
-  }
+/* --------------- boot --------------- */
+(async ()=>{
+  const r = await fetch('/api/whoami',{credentials:'include'});
+  if(!r.ok){ location.href='/hub'; return; }
+  const me=await r.json();
+  if(me.role==='AGENT'){ mountAgent(me); } else { mountAdmin(me); }
 })();
 </script>
 </body>
