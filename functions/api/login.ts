@@ -1,5 +1,6 @@
 // Proxies login to the Auth Worker. Mirrors cookies and also includes a
 // one-time URL handoff to guarantee session on /hub even if Set-Cookie is missed.
+// For AJAX requests, it also echoes the token in JSON ("at") so you can test manually.
 
 function wantsHTML(req: Request): boolean {
   const accept = req.headers.get("accept") || "";
@@ -48,22 +49,23 @@ export const onRequestPost: PagesFunction = async ({ request, env }) => {
   const access = (mA && mA[1]) || data.access || "";
   const refresh = (mR && mR[1]) || data.refresh || "";
 
-  // mirror cookies (HttpOnly)
   if (access)  headers.append("Set-Cookie", `allstar_at=${access}; Path=/; HttpOnly; Secure; SameSite=Lax`);
   if (refresh) headers.append("Set-Cookie", `allstar_rt=${refresh}; Path=/; HttpOnly; Secure; SameSite=Lax`);
 
   if (wantsHTML(request)) {
-    // IMPORTANT: add a fallback handoff in case browser misses Set-Cookie on 303
+    // handoff in case browser drops Set-Cookie during 303
     const to = new URL("/hub", request.url);
     if (access) to.searchParams.set("at", access);
     headers.set("Location", to.toString());
     return new Response(null, { status: 303, headers });
   }
 
+  // AJAX path returns token too (useful for manual test)
   return new Response(JSON.stringify({
     ok: true,
     username: data.username,
     role: data.role,
-    mustChangePassword: data.mustChangePassword
+    mustChangePassword: data.mustChangePassword,
+    at: access
   }), { headers });
 };
