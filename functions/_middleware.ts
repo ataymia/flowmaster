@@ -1,7 +1,12 @@
-// Protects /hub. Also supports one-time "?at=<token>" handoff to set the cookie
-// if the browser didn't keep Set-Cookie from /api/login.
+// Guard Hub, Schedule (adherence), and Flowmaster pages.
+// Also supports one-time "?at=<token>" handoff to set the cookie if a browser
+// ever drops Set-Cookie during the login redirect.
 
-const PROTECTED = [/^\/hub(?:\/|$)/];
+const PROTECTED = [
+  /^\/hub(?:\/|$)/,
+  /^\/adherence(?:\/|$)/,
+  /^\/flowmaster(?:\/|$)/,
+];
 
 function readCookie(req: Request, name: string): string | null {
   const raw = req.headers.get("Cookie") || "";
@@ -17,8 +22,10 @@ export const onRequest: PagesFunction = async (ctx) => {
   const { request, env, next } = ctx;
   const url = new URL(request.url);
 
+  // only guard the app routes listed above
   if (!PROTECTED.some(rx => rx.test(url.pathname))) return next();
 
+  // optional one-time token handoff
   const handoff = url.searchParams.get("at");
   let token = readCookie(request, "allstar_at");
 
@@ -36,6 +43,8 @@ export const onRequest: PagesFunction = async (ctx) => {
     console.error("Missing AUTH_BASE on Pages");
     return Response.redirect(new URL("/?err=auth-misconfig", url), 302);
   }
+
+  // verify session with the Auth Worker
   const me = await fetch(`${env.AUTH_BASE}/me`, {
     headers: { Cookie: `access_token=${token}` }
   });
