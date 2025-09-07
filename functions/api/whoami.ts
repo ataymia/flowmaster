@@ -1,7 +1,5 @@
 function readCookie(req: Request, name: string): string | null {
-  const raw = req.headers.get("Cookie") || "";
-  const m = raw.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
-  return m ? m[1] : null;
+  const raw = req.headers.get("Cookie") || ""; const m = raw.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`)); return m ? m[1] : null;
 }
 export const onRequestGet: PagesFunction = async ({ env, request }) => {
   const token = readCookie(request, "allstar_at");
