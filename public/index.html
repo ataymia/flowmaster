@@ -7,68 +7,39 @@
 </head>
 <body>
   <h1>Allstar Agent Hub</h1>
+  <p>Sign in with your scheduling credentials.</p>
 
-  <!-- Native form works even if JS fails -->
-  <form id="loginForm" action="/api/login" method="post">
+  <!-- Native form: browser will POST to /api/login.
+       On success the server returns 303 -> /hub (no JS needed). -->
+  <form action="/api/login" method="post">
     <div>
-      <label>
-        Email
+      <label>Email<br/>
         <input name="email" type="email" required autofocus />
       </label>
     </div>
     <div>
-      <label>
-        Password
+      <label>Password<br/>
         <input name="password" type="password" required />
       </label>
     </div>
-    <div>
-      <button id="signInBtn" type="submit" style="font-size:18px;padding:10px 16px;">
-        Sign in
-      </button>
+    <div style="margin-top:10px;">
+      <button type="submit" style="font-size:18px;padding:10px 16px;">Sign in</button>
     </div>
-    <p id="err" style="color:#c00; min-height:1.2em;"></p>
   </form>
 
+  <p id="msg" style="color:#c00;"></p>
+
   <script>
-  // Enhance with fetch so we can show errors without leaving the page.
-  const form = document.getElementById('loginForm');
-  const err  = document.getElementById('err');
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    err.textContent = '';
-
-    const fd = new FormData(form);
-    const email = (fd.get('email') || '').toString().trim();
-    const password = (fd.get('password') || '').toString();
-
-    try {
-      const r = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-ajax': '1' },
-        body: JSON.stringify({ email, password })
-      });
-
-      const text = await r.text();
-      let data = {}; try { data = JSON.parse(text || '{}'); } catch {}
-
-      if (r.ok) {
-        location.assign('/hub'); // middleware will verify the cookie
-        return;
-      }
-
-      const code = data.error || '';
-      if (code === 'EMAIL_NOT_MAPPED')        err.textContent = 'Email is not registered for login.';
-      else if (code === 'INVALID_LOGIN')      err.textContent = 'Incorrect email or password.';
-      else if (code === 'MISSING_CREDENTIALS')err.textContent = 'Enter both email and password.';
-      else                                    err.textContent = 'Sign in failed. Please try again.';
-      console.log('login error', r.status, data);
-    } catch (ex) {
-      err.textContent = 'Network error. Try again.';
-      console.log('login exception', ex);
+    // Show an error message if the server bounced us back with ?err=...
+    const params = new URLSearchParams(location.search);
+    const err = params.get('err');
+    if (err) {
+      document.getElementById('msg').textContent =
+        err === 'EMAIL_NOT_MAPPED' ? 'Email is not registered.'
+      : err === 'INVALID_LOGIN'   ? 'Incorrect email or password.'
+      : err === 'MISSING_CREDENTIALS' ? 'Enter both email and password.'
+      : 'Sign in failed.';
     }
-  });
   </script>
 </body>
 </html>
