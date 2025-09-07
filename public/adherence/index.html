@@ -6,23 +6,33 @@
   <title>Allstar Agent Adherence</title>
   <link rel="stylesheet" href="/theme.css">
   <style>
-    .logo { height:40px; width:auto; border-radius:8px; }
+    .kpi { font-weight:800; font-size:32px; }
+    .kpi-sub { color: var(--muted); }
+    .toast { position: fixed; right: 16px; bottom: 16px; background: var(--surface); border:1px solid var(--border); padding:10px 12px; border-radius:10px; display:none; }
+    .mode-toggle { margin-left:auto; }
   </style>
 </head>
 <body>
   <div id="error" class="error-banner"></div>
+  <div id="toast" class="toast"></div>
 
   <header class="appbar">
     <a href="/hub" class="brand" style="color:var(--brand); text-decoration:none;">ALLSTAR</a>
     <div class="brand">Allstar Agent Adherence</div>
-    <div id="hdr-meta" class="muted" style="margin-left:auto">Loading…</div>
-    <button id="btn-logout" class="btn" style="display:none">Logout</button>
+    <div id="hdr-meta" class="muted" style="margin-left:16px">Loading…</div>
+    <div class="mode-toggle row" style="gap:8px;">
+      <button id="btn-agent" class="btn">View as Agent</button>
+      <button id="btn-admin" class="btn btn-brand" style="display:none;">Admin Tools</button>
+      <button id="btn-logout" class="btn" style="margin-left:8px;">Logout</button>
+    </div>
   </header>
 
   <main id="app" class="container" style="padding-top:16px;"></main>
 
 <script>
-/* ====== config ====== */
+/* =========================
+   Config & Status Palette
+========================= */
 const STATUSES = [
   { key:'available', label:'Available', color:'st-available' },
   { key:'bathroom',  label:'Bathroom',  color:'st-bathroom'  },
@@ -33,7 +43,9 @@ const STATUSES = [
   { key:'offline',   label:'Offline',   color:'st-offline'   },
 ];
 
-/* ====== utils ====== */
+/* =========================
+   Utilities
+========================= */
 const $ = (s, el)=> (el||document).querySelector(s);
 const pad = (n)=> String(n).padStart(2,'0');
 const isoDate = (d)=> (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10);
@@ -41,9 +53,12 @@ const toHM = (m)=> `${pad(Math.floor(m/60))}:${pad(m%60)}`;
 const fmtDur = (mins)=> mins<60 ? mins+'m' : `${Math.floor(mins/60)}h ${mins%60? (mins%60)+'m' : ''}`;
 const fmtTS  = (ms)=> { const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
 const statusByKey = (k)=> STATUSES.find(s=>s.key===k) || { label:k, color:'st-offline' };
+function toast(msg, ms=2200){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
 function showError(msg){ const b=$('#error'); if(!b) return; b.style.display='block'; b.textContent='⚠️ '+msg; console.error('[Allstar]', msg); }
 
-/* ====== Pages API (same calls) ====== */
+/* =========================
+   API Proxies (Pages)
+========================= */
 async function jfetch(url, opts={}) {
   const r = await fetch(url, { ...opts, headers:{ 'content-type':'application/json', ...(opts.headers||{}) } });
   if (r.status===204) return null;
@@ -52,204 +67,384 @@ async function jfetch(url, opts={}) {
   if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
   return body;
 }
-async function whoami(){ return jfetch('/api/whoami'); }
-async function logout(){ await jfetch('/api/logout', { method:'POST' }); }
+const whoami = ()=> jfetch('/api/whoami');
+const logout = ()=> jfetch('/api/logout', { method:'POST' });
+
 async function listUsers(){ return jfetch('/api/users'); }
 async function createUser(username,password,role){ return jfetch('/api/users', { method:'POST', body: JSON.stringify({ username,password,role }) }); }
 async function patchUser(id,patch){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'PATCH', body: JSON.stringify(patch) }); }
 async function deleteUserApi(id){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'DELETE' }); }
+
 async function getSchedule(user,date){ const q=new URLSearchParams({user,date}).toString(); return jfetch('/api/schedule?'+q); }
 async function saveSchedule(user,date,blocks){ return jfetch('/api/schedule', { method:'POST', body: JSON.stringify({ username:user, date, blocks }) }); }
 async function postEvent(status,ts){ return jfetch('/api/events', { method:'POST', body: JSON.stringify(ts?{status,ts}:{status}) }); }
 async function listEvents(user,from,to){ const q=new URLSearchParams({user,from,to}).toString(); return jfetch('/api/events?'+q); }
 
-/* ====== state & header ====== */
-let STATE = { me:null, timers:[] };
-function clearTimers(){ STATE.timers.forEach(clearInterval); STATE.timers=[]; }
+/* =========================
+   App State
+========================= */
+let ME=null;
+let MODE='admin'; // 'admin' | 'agent'
+let timers=[];    // per-mode
+function clearTimers(){ timers.forEach(clearInterval); timers=[]; }
 
 function renderHeader(){
-  const meta=$('#hdr-meta'); const btn=$('#btn-logout');
-  if(STATE.me){
-    meta.textContent = `${STATE.me.username} · ${STATE.me.role}`;
-    btn.style.display='inline-flex';
-    btn.onclick = async ()=>{ try{ await logout(); }finally{ location.href='/' } };
-  } else {
-    meta.textContent='Not signed in'; btn.style.display='none';
+  const meta=$('#hdr-meta');
+  $('#btn-agent').style.display = MODE==='admin' ? '' : 'none';
+  $('#btn-admin').style.display = MODE==='agent' ? '' : 'none';
+  if(ME){
+    meta.textContent = `${ME.username} · ${ME.role}`;
+  }else{
+    meta.textContent = 'Not signed in';
   }
 }
 
-/* ====== main render ====== */
-function render(){
-  renderHeader();
-  const app=$('#app'); if (!STATE.me) { app.innerHTML=''; return; }
-  if (STATE.me.role==='AGENT') return renderAgentView(STATE.me);
-  return renderAdminView(STATE.me);
+/* =========================
+   Dual Bars (Projected vs Actual)
+========================= */
+function buildDualBars(date, scheduleBlocks, events){
+  const wrap=document.createElement('div'); wrap.className='timeline-wrap';
+  const has=Array.isArray(scheduleBlocks)&&scheduleBlocks.length;
+  const startMin = has ? Math.min(...scheduleBlocks.map(b=>b.start)) : 480;
+  const endMin   = has ? Math.max(...scheduleBlocks.map(b=>b.end))   : 1020;
+  const total = Math.max(1, endMin - startMin);
+  const dayStart = Date.parse(date+'T00:00:00');
+
+  const proj = (scheduleBlocks||[]).map(b=>({ status:b.status, start:b.start, width:b.end-b.start }));
+
+  function eventsToSegs(evts){
+    const segs=[]; let cur=evts.length?evts[0].status:null;
+    const pts=evts.map(ev=> Math.max(startMin, Math.min(endMin, Math.floor((Number(ev.ts)-dayStart)/60000))));
+    let cursor=startMin;
+    for(let i=0;i<pts.length;i++){ const p=pts[i]; if(p>cursor) segs.push({status:cur,start:cursor,width:p-cursor}); cursor=p; cur=evts[i].status; }
+    if(cursor<endMin) segs.push({status:cur,start:cursor,width:endMin-cursor});
+    return segs;
+  }
+  const act = eventsToSegs(events||[]);
+
+  function row(label, segs, compare){
+    const row = document.createElement('div'); row.className='row'; row.style.marginBottom = label==='Projected' ? '6px':'0';
+    const lab = document.createElement('div'); lab.className='rowlabel'; lab.textContent = label;
+    const bar = document.createElement('div'); bar.className = 'gridbar'; bar.style.flex='1';
+    segs.forEach(s=>{
+      const seg = document.createElement('div');
+      seg.className = 'seg ' + (s.status ? statusByKey(s.status).color : '');
+      const w = (s.width/total*100).toFixed(4)+'%';
+      seg.style.width = w;
+      if (compare) {
+        const probe = s.start + Math.max(1, Math.floor(s.width/2));
+        const exp = (scheduleBlocks||[]).find(b => probe>=b.start && probe<b.end);
+        if (exp && s.status && exp.status !== s.status) seg.classList.add('diff');
+      }
+      bar.appendChild(seg);
+    });
+    row.appendChild(lab); row.appendChild(bar);
+    return row;
+  }
+
+  wrap.appendChild(row('Projected', proj, false));
+  wrap.appendChild(row('Actual',    act,  true));
+
+  const now=Date.now(); const nowMin=Math.floor((now-dayStart)/60000);
+  const nowPct=Math.max(0, Math.min(100, ((nowMin-startMin)/total)*100));
+  const nl=document.createElement('div'); nl.className='nowline'; nl.style.left = nowPct+'%';
+  wrap.appendChild(nl);
+
+  return wrap;
+
+  function row(lbl, segs, cmp){ return row.__impl ? row.__impl(lbl, segs, cmp) : (row.__impl=(label, segs, compare)=>{ const r=document.createElement('div'); r.className='row'; r.style.marginBottom = label==='Projected' ? '6px':'0'; const lab=document.createElement('div'); lab.className='rowlabel'; lab.textContent=label; const bar=document.createElement('div'); bar.className='gridbar'; bar.style.flex='1'; segs.forEach(s=>{ const el=document.createElement('div'); el.className='seg '+(s.status?statusByKey(s.status).color:''); el.style.width=(s.width/total*100).toFixed(4)+'%'; if(compare){ const probe=s.start+Math.max(1,Math.floor(s.width/2)); const exp=(scheduleBlocks||[]).find(b=> probe>=b.start && probe<b.end); if(exp && s.status && exp.status!==s.status) el.classList.add('diff'); } bar.appendChild(el); }); r.append(lab,bar); return r; })(lbl,segs,cmp); }
 }
 
-/* ====== USER VIEW ====== */
-function renderAgentView(user){
-  const app=$('#app'); clearTimers(); app.innerHTML='';
-  const date=isoDate(new Date());
-  const wrap=el('div',{class:'grid grid-2'});
+/* =========================
+   Adherence Calculations
+========================= */
+function calcAdherence(date, blocks, events){
+  if(!blocks || !blocks.length) return { pct: 100, inMin:0, outMin:0, lines:[], byStatus:{} };
+  const dayStart=Date.parse(date+'T00:00:00');
+  const startMin=Math.min(...blocks.map(b=>b.start));
+  const endMin=Math.max(...blocks.map(b=>b.end));
+  let idx=0, cur=events.length?events[0].status:null, curStart=startMin;
+  let inMin=0, outMin=0;
+  const lines=[]; const byStatus={};
 
-  const todayCard=el('div',{class:'card'});
-  const titleRow=el('div',{class:'row-between'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
-  const timelines=el('div');
-  const statsRow=el('div',{class:'row', style:{marginTop:'10px'}},
-    el('div',{style:{fontWeight:'800', fontSize:'32px'}}, '100%'),
-    el('div',{class:'muted'}, 'in: 0m · out: 0m')
-  );
-  todayCard.append(titleRow,timelines,statsRow);
+  function pushLine(st, sM, eM){
+    const startTS=dayStart + sM*60000; const dur=Math.max(0,eM-sM);
+    if(st){ lines.push(`${fmtTS(startTS)} ${statusByKey(st).label} ${fmtDur(dur)}`); byStatus[st]=(byStatus[st]||0)+dur; }
+  }
 
-  const statusCard=el('div',{class:'card'});
-  statusCard.append(el('h3',{},'Set status'));
-  const btns=el('div',{class:'row', style:{flexWrap:'wrap'}});
-  STATUSES.forEach(s=> btns.appendChild(el('button',{class:'btn', style:{color:'#001018', background:getComputedStyleColor(s.color)}, onclick:()=> setStatus(s.key)}, s.label)));
-  statusCard.append(btns, el('div',{class:'muted', style:{marginTop:'12px'}},'Recent switches'), el('div',{id:'recent', class:'scroll'}));
+  for(let m=startMin;m<=endMin;m++){
+    const ms=dayStart + m*60000;
+    if(idx+1<events.length && Number(events[idx+1].ts) <= ms){
+      pushLine(cur, curStart, m); idx++; cur=events[idx].status; curStart=m;
+    }
+  }
+  pushLine(cur, curStart, endMin);
 
-  wrap.append(todayCard,statusCard);
-  app.appendChild(wrap);
+  idx=0; cur=events.length?events[0].status:null;
+  const nowMin=Math.min(Math.max(startMin, Math.floor((Date.now()-dayStart)/60000)), endMin);
+  for(let m=startMin;m<nowMin;m++){
+    const ms=dayStart + m*60000;
+    while(idx+1<events.length && Number(events[idx+1].ts) <= ms){ idx++; cur=events[idx].status; }
+    const expected=(blocks||[]).find(b=> m>=b.start && m<b.end);
+    if(!expected) continue;
+    if(!cur) outMin++; else if(cur===expected.status) inMin++; else outMin++;
+  }
+  const total=inMin+outMin; const pct = total ? (inMin/total*100) : 100;
+  return { pct, inMin, outMin, lines, byStatus };
+}
 
-  const SCHEDULE={ blocks:[] }, EVENTS={ list:[] };
+/* =========================
+   Agent View (for selected agent)
+========================= */
+function renderAgentView(ctx){
+  clearTimers();
+  const app=$('#app'); app.innerHTML='';
 
+  const whoUser = ctx.username;
+  const date = isoDate(new Date());
+
+  const grid = document.createElement('div'); grid.className='grid grid-2';
+
+  // LEFT: Bars + KPIs
+  const left = document.createElement('div'); left.className='card';
+  const head = document.createElement('div'); head.className='row-between';
+  head.innerHTML = `<h2>Today — ${whoUser}</h2><div class="muted">${date}</div>`;
+  const bars = document.createElement('div'); bars.style.marginTop='12px';
+  const krow = document.createElement('div'); krow.className='row'; krow.style.marginTop='12px';
+  krow.innerHTML = `<div class="kpi" id="pct">100%</div><div class="kpi-sub" id="inout">in: 0m · out: 0m</div>`;
+  left.append(head,bars,krow);
+
+  // RIGHT: Status buttons + recent
+  const right = document.createElement('div'); right.className='card';
+  right.innerHTML = `<h3>Set status</h3><div id="statusBtns" class="row" style="flex-wrap:wrap; margin-top:8px;"></div><div class="muted" style="margin-top:14px;">Recent switches</div><div id="recent" class="scroll" style="margin-top:6px;"></div>`;
+
+  grid.append(left,right); app.appendChild(grid);
+
+  function getColor(cls){ const map={ 'st-available':'#10b981','st-bathroom':'#f59e0b','st-break':'#fbbf24','st-lunch':'#fb923c','st-training':'#a78bfa','st-meeting':'#60a5fa','st-offline':'#9ca3af' }; return map[cls]||'#9ca3af'; }
+
+  // state
+  const S={ blocks:[], events:[] };
+
+  // buttons
+  const host = $('#statusBtns'); host.innerHTML='';
+  STATUSES.forEach(s=>{
+    const b=document.createElement('button');
+    b.className='btn'; b.style.color='#fff'; b.style.background=getColor(s.color);
+    b.textContent=s.label;
+    b.onclick = async ()=>{
+      const ev={ status:s.key, ts: Date.now() };
+      S.events.push(ev); draw();
+      try{ await postEvent(s.key); }catch{}
+    };
+    host.appendChild(b);
+  });
+
+  function renderRecent(){
+    const r=$('#recent'); r.innerHTML='';
+    S.events.slice(-10).reverse().forEach(ev=>{
+      const row=document.createElement('div'); row.className='row-between'; row.style.cssText='border-top:1px solid var(--border); padding:6px 0';
+      const l=document.createElement('div'); const dot=document.createElement('span'); dot.className='status-dot '+statusByKey(ev.status).color; l.append(dot, document.createTextNode(' '+statusByKey(ev.status).label));
+      const when=document.createElement('div'); when.className='muted'; when.textContent=fmtTS(ev.ts);
+      row.append(l,when); r.appendChild(row);
+    });
+  }
+
+  function draw(){
+    bars.innerHTML=''; bars.appendChild(buildDualBars(date, S.blocks, S.events));
+    const k=calcAdherence(date, S.blocks, S.events);
+    $('#pct').textContent=Math.round(k.pct)+'%';
+    $('#inout').textContent='in: '+fmtDur(k.inMin)+' · out: '+fmtDur(k.outMin);
+    renderRecent();
+  }
+
+  // initial load
   (async()=>{
     try{
-      const s=await getSchedule(user.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
-      const ev=await listEvents(user.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
-      update();
-    }catch(e){}
+      const sched = await getSchedule(whoUser, date); S.blocks = (sched&&sched.blocks)||[];
+      const ev    = await listEvents(whoUser, date, date); S.events = Array.isArray(ev)?ev:[];
+    }catch{}
+    draw();
   })();
 
-  STATE.timers.push(setInterval(update, 1000));
-  STATE.timers.push(setInterval(async()=>{
-    try{
-      const s=await getSchedule(user.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
-      const ev=await listEvents(user.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
-    }catch(e){}
-  }, 15000));
-
-  function setStatus(status){
-    const ev={ status, ts: Date.now() };
-    EVENTS.list.push(ev); update();
-    postEvent(status).catch(()=>{});
-  }
-
-  function update(){
-    timelines.innerHTML=''; timelines.appendChild(buildDualBars(date, SCHEDULE.blocks, EVENTS.list));
-    const x=calcAdherence(date, SCHEDULE.blocks, EVENTS.list);
-    statsRow.firstChild.textContent = Math.round(x.pct)+'%';
-    statsRow.lastChild.textContent  = 'in: '+fmtDur(x.inMin)+' · out: '+fmtDur(x.outMin);
-    const r=$('#recent', statusCard); r.innerHTML='';
-    const last=EVENTS.list.slice(-10).reverse();
-    last.forEach(ev=> r.appendChild(el('div',{class:'row-between', style:{borderTop:'1px solid var(--border)', padding:'6px 0'}},
-      el('div',{}, el('span',{class:'status-dot '+statusByKey(ev.status).color}),' ', statusByKey(ev.status).label),
-      el('div',{class:'muted'}, fmtTS(ev.ts))
-    )));
-  }
+  // live ticks + refresh
+  timers.push(setInterval(draw, 1000));
+  timers.push(setInterval(async()=>{ try{ const ev=await listEvents(whoUser, date, date); S.events=Array.isArray(ev)?ev:S.events; }catch{} }, 15000));
 }
 
-/* ====== ADMIN VIEW ====== */
-function renderAdminView(me){
-  const app=$('#app'); clearTimers(); app.innerHTML='';
-  const adminCard=el('div',{class:'card mt-4'});
+/* =========================
+   Admin View
+========================= */
+function renderAdminView(){
+  clearTimers();
+  const app=$('#app'); app.innerHTML='';
 
-  const header=el('div',{class:'row', style:{flexWrap:'wrap', gap:'12px', alignItems:'flex-end'}},
-    el('div',{}, el('div',{class:'label'},'Agent'), el('select',{id:'selUser', class:'field', style:{minWidth:'200px'}}, el('option',{value:''},'Pick a user'))),
-    el('div',{}, el('div',{class:'label'},'Date'), el('input',{id:'day', class:'field', type:'date', value:isoDate(new Date())})),
-    el('div',{style:{marginLeft:'auto'}}, el('button',{id:'addBlock', class:'btn btn-brand'},'+ Block'), ' ', el('button',{id:'saveSched', class:'btn', disabled:true},'Save to Server'))
-  );
-  adminCard.appendChild(header);
+  const adminCard=document.createElement('div'); adminCard.className='card';
 
-  const grid=el('div',{class:'grid grid-2 mt-4'});
-  const schedCard=el('div',{class:'card'}, el('h3',{},'Schedule Blocks'), el('div',{id:'blocks'}));
-  const dayCard=el('div',{class:'card'}, el('h3',{},'Daily Overview'), el('div',{id:'bars'}), el('div',{id:'pct', class:'muted', style:{marginTop:'10px'}}), el('div',{class:'mt-3'}, el('h4',{},'AUX breakdown (durations)'), el('ul',{id:'byStatus'})), el('div',{class:'mt-3'}, el('h4',{},'Timeline (IMED style)'), el('div',{id:'lines', class:'scroll card'})) );
-  grid.append(schedCard, dayCard);
-  adminCard.appendChild(grid);
+  adminCard.innerHTML = `
+    <div class="row" style="flex-wrap:wrap; gap:12px; align-items:flex-end;">
+      <div>
+        <div class="label">Agent</div>
+        <select id="selUser" class="field" style="min-width:200px"><option value="">Pick a user</option></select>
+      </div>
+      <div>
+        <div class="label">Date</div>
+        <input id="day" class="field" type="date" value="${isoDate(new Date())}">
+      </div>
+      <div style="margin-left:auto">
+        <button id="addBlock" class="btn btn-brand">+ Block</button>
+        <button id="saveSched" class="btn" disabled>Save to Server</button>
+      </div>
+    </div>
 
-  const usersCard=el('div',{class:'card mt-4'},
-    el('h3',{},'Users'),
-    el('div',{class:'row', style:{flexWrap:'wrap', gap:'8px', alignItems:'flex-end', marginBottom:'12px'}},
-      el('input',{id:'newU', class:'field', placeholder:'Username', style:{maxWidth:'200px'}}),
-      el('input',{id:'newP', class:'field', type:'password', placeholder:'Temp password', value:'Welcome123', style:{maxWidth:'200px'}}),
-      el('select',{id:'newR', class:'field', style:{maxWidth:'140px'}}, el('option',{value:'AGENT'},'AGENT'), el('option',{value:'ADMIN'},'ADMIN')),
-      el('button',{id:'createU', class:'btn btn-brand'},'Create')
-    ),
-    el('div',{id:'usersTblWrap'})
-  );
-  adminCard.appendChild(usersCard);
+    <div class="grid grid-2" style="margin-top:16px;">
+      <div class="card">
+        <h3>Schedule Blocks</h3>
+        <div id="blocks"></div>
+      </div>
 
-  const dl=el('div',{class:'mt-4'},
-    el('button',{id:'dle', class:'btn'},'Download Events (month)'), ' ',
-    el('button',{id:'dls', class:'btn'},'Download Schedules (month)'), ' ',
-    el('button',{id:'dla', class:'btn'},'Download Adherence (month)')
-  );
-  adminCard.appendChild(dl);
+      <div class="card">
+        <h3>Daily Overview</h3>
+        <div id="bars"></div>
+        <div id="pct" class="muted" style="margin-top:10px;"></div>
+        <div style="margin-top:12px;">
+          <h4>AUX breakdown (durations)</h4>
+          <ul id="byStatus"></ul>
+        </div>
+        <div style="margin-top:12px;">
+          <h4>Timeline (IMED style)</h4>
+          <div id="lines" class="scroll card"></div>
+        </div>
+      </div>
+    </div>
 
+    <div class="card" style="margin-top:16px;">
+      <h3>Users</h3>
+      <div class="row" style="flex-wrap:wrap; gap:8px; align-items:flex-end; margin-bottom:12px;">
+        <input id="newU" class="field" placeholder="Username" style="max-width:200px">
+        <input id="newP" class="field" type="password" placeholder="Temp password" value="Welcome123" style="max-width:200px">
+        <select id="newR" class="field" style="max-width:140px">
+          <option value="AGENT">AGENT</option>
+          <option value="ADMIN">ADMIN</option>
+        </select>
+        <button id="createU" class="btn btn-brand">Create</button>
+      </div>
+      <div id="usersTblWrap"></div>
+    </div>
+
+    <div class="row" style="margin-top:16px;">
+      <button id="dle" class="btn">Download Events (month)</button>
+      <button id="dls" class="btn">Download Schedules (month)</button>
+      <button id="dla" class="btn">Download Adherence (month)</button>
+    </div>
+  `;
   app.appendChild(adminCard);
 
   // state
   const DAY={ value: isoDate(new Date()) }; const SELECTED={ value:'' }; const BLOCKS={ list:[] }; const EVENTS={ list:[] }; const USERS={ list:[] };
 
+  function sanitizeBlocks(list){
+    // coerce to ints, filter invalid, sort, optional merge adjacency
+    let arr = (list||[]).map(b=>{
+      let s = typeof b.start==='number'?b.start : parseHM(b.start);
+      let e = typeof b.end==='number'  ?b.end   : parseHM(b.end);
+      return { status:b.status, start: s|0, end: e|0 };
+    }).filter(b=> b && b.status && b.start>=0 && b.end>0 && b.end>b.start);
+    arr.sort((a,b)=> a.start-b.start || a.end-b.end);
+    // clamp 0..1440, merge exact-adjacent with same status
+    const out=[];
+    for(const b of arr){
+      b.start=Math.max(0,Math.min(1440,b.start));
+      b.end=Math.max(0,Math.min(1440,b.end));
+      const last=out[out.length-1];
+      if(last && last.status===b.status && last.end===b.start){ last.end=b.end; }
+      else out.push({...b});
+    }
+    return out;
+  }
+  function parseHM(v){ if(!v) return 0; if(typeof v==='number') return v; const [h,m]=String(v).split(':').map(x=>parseInt(x,10)||0); return (h*60+m)|0; }
+
   function refreshUsersUI(){
     const sel=$('#selUser'); sel.innerHTML='<option value="">Pick a user</option>';
-    (USERS.list||[]).forEach(u=> sel.appendChild(el('option',{value:u.username}, `${u.username} · ${u.role}`)));
+    (USERS.list||[]).forEach(u=> sel.appendChild(new Option(`${u.username} · ${u.role}`, u.username)));
   }
+
   function renderBlocksUI(){
     const host=$('#blocks'); host.innerHTML='';
     BLOCKS.list.forEach((b,i)=>{
-      const row=el('div',{class:'row', style:{marginBottom:'8px'}},
-        el('select',{class:'field', style:{maxWidth:'160px'}, onchange:e=>{ b.status=e.target.value; } }, ...STATUSES.map(s=> el('option',{ value:s.key, selected:s.key===b.status }, s.label))),
-        el('input',{type:'time', class:'field', style:{maxWidth:'140px'}, value:toHM(b.start), onchange:e=>{ const h=parseInt(e.target.value.slice(0,2)), m=parseInt(e.target.value.slice(3,5)); b.start=h*60+m; } }), 'to',
-        el('input',{type:'time', class:'field', style:{maxWidth:'140px'}, value:toHM(b.end), onchange:e=>{ const h=parseInt(e.target.value.slice(0,2)), m=parseInt(e.target.value.slice(3,5)); b.end=h*60+m; } }),
-        el('button',{class:'btn', onclick:()=>{ BLOCKS.list.splice(i,1); renderBlocksUI(); updateDayUI(); } },'Remove')
-      );
-      host.appendChild(row);
+      const row=document.createElement('div'); row.className='row'; row.style.marginBottom = '8px';
+      const sel=document.createElement('select'); sel.className='field'; sel.style.maxWidth='160px';
+      STATUSES.forEach(s=> sel.appendChild(new Option(s.label, s.key, false, s.key===b.status)));
+      sel.onchange = e=>{ b.status=e.target.value; };
+      const t1=document.createElement('input'); t1.type='time'; t1.className='field'; t1.style.maxWidth='140px'; t1.value=toHM(b.start);
+      const t2=document.createElement('input'); t2.type='time'; t2.className='field'; t2.style.maxWidth='140px'; t2.value=toHM(b.end);
+      t1.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.start=(parseInt(hh)*60+parseInt(mm))|0; };
+      t2.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.end  =(parseInt(hh)*60+parseInt(mm))|0; };
+      const rm=document.createElement('button'); rm.className='btn'; rm.textContent='Remove';
+      rm.onclick=()=>{ BLOCKS.list.splice(i,1); renderBlocksUI(); updateDayUI(); enableSave(); };
+      row.append(sel, t1, document.createTextNode('to'), t2, rm); host.appendChild(row);
     });
   }
+
   function updateDayUI(){
     const bars=$('#bars'); bars.innerHTML=''; bars.appendChild(buildDualBars(DAY.value, BLOCKS.list, EVENTS.list));
     const d=calcAdherence(DAY.value, BLOCKS.list, EVENTS.list);
     $('#pct').textContent = `Adherence: ${Math.round(d.pct)}% · in ${fmtDur(d.inMin)} / out ${fmtDur(d.outMin)}`;
     const by=$('#byStatus'); by.innerHTML='';
-    Object.keys(d.byStatus).forEach(k=> by.appendChild(el('li',{}, `${statusByKey(k).label}: ${fmtDur(d.byStatus[k])}`)));
-    const lines=$('#lines'); lines.innerHTML=''; (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--border)'}}, t)));
+    Object.keys(d.byStatus||{}).forEach(k=> by.appendChild(el('li',{}, `${statusByKey(k).label}: ${fmtDur(d.byStatus[k])}`)));
+    const lines=$('#lines'); lines.innerHTML='';
+    (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--border)'}}, t)));
   }
+
   function updateMonthButtons(){
     const dt=new Date(DAY.value+'T00:00:00');
     const y=dt.getUTCFullYear(); const m=('0'+(dt.getUTCMonth()+1)).slice(-2);
     const monthStart=`${y}-${m}-01`; const monthEnd=new Date(Date.UTC(y, parseInt(m), 0)).toISOString().slice(0,10);
-    function dl(path,name){
-      fetch(path).then(r=>r.blob()).then(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); });
-    }
+    function dl(path,name){ fetch(path).then(r=>r.blob()).then(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); }); }
     $('#dle').onclick=()=>dl(`/api/export/events?from=${monthStart}&to=${monthEnd}`, `events_${y}${m}.csv`);
     $('#dls').onclick=()=>dl(`/api/export/schedules?from=${monthStart}&to=${monthEnd}`, `schedules_${y}${m}.csv`);
     $('#dla').onclick=()=>dl(`/api/export/adherence?from=${monthStart}&to=${monthEnd}`, `adherence_${y}${m}.csv`);
   }
 
+  function enableSave(){ $('#saveSched').disabled = !SELECTED.value || !BLOCKS.list.length; }
+
+  // load users + table
   (async()=>{ try{ USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); }catch(e){} })();
 
+  // selections
   $('#selUser').onchange = async (e)=>{
-    SELECTED.value=e.target.value; $('#saveSched').disabled=!SELECTED.value;
+    SELECTED.value=e.target.value; enableSave();
     if(!SELECTED.value) return;
     try{
       const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
       const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
-      renderBlocksUI(); updateDayUI(); updateMonthButtons();
-    }catch(e){}
-  };
-  $('#day').onchange = $('#addBlock').onclick = function(){
-    if (this.id==='addBlock') { BLOCKS.list.push({ status:'available', start:480, end:540 }); }
+    }catch{ BLOCKS.list=[]; EVENTS.list=[]; }
     renderBlocksUI(); updateDayUI(); updateMonthButtons();
   };
-  $('#saveSched').onclick = async ()=>{ try{ await saveSchedule(SELECTED.value, DAY.value, BLOCKS.list); alert('Saved'); }catch(e){ alert('Save failed: '+(e.message||e)); } };
-  $('#createU').onclick = async ()=>{
-    const u=$('#newU').value.trim(); const p=$('#newP').value; const r=$('#newR').value;
-    if(!u||!p) return alert('Enter username and password');
+  $('#day').onchange = async (e)=>{
+    DAY.value=e.target.value; if(!SELECTED.value) return;
     try{
-      const res = await createUser(u,p,r);
-      if(res && res.username){ USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); $('#newU').value=''; $('#newP').value='Welcome123'; $('#newR').value='AGENT'; }
-      else alert('Create failed');
-    }catch(e){ alert('Create failed: '+(e.message||e)); }
+      const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
+      const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
+    }catch{ BLOCKS.list=[]; EVENTS.list=[]; }
+    renderBlocksUI(); updateDayUI(); updateMonthButtons();
+  };
+  $('#addBlock').onclick = ()=>{ BLOCKS.list.push({ status:'available', start:480, end:540 }); renderBlocksUI(); updateDayUI(); enableSave(); };
+
+  $('#saveSched').onclick = async ()=>{
+    if(!SELECTED.value){ toast('Pick an agent first'); return; }
+    const cleaned = sanitizeBlocks(BLOCKS.list);
+    if(!cleaned.length){ toast('Add at least one block'); return; }
+    try{
+      await saveSchedule(SELECTED.value, DAY.value, cleaned);
+      toast('Saved ✓');
+      // re-read to confirm
+      const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
+      renderBlocksUI(); updateDayUI();
+    }catch(e){
+      const msg=String(e.message||e);
+      if(/403/.test(msg)) showError('Save failed (403). You must be ADMIN or SUPERADMIN to save schedules.');
+      else showError('Save failed: '+msg);
+    }
   };
 
   function renderUsersTable(){
@@ -275,34 +470,22 @@ function renderAdminView(me){
     wrap.appendChild(t);
   }
 
-  (function mountMyAgentCard(){
-    const tmpDiv=el('div'); $('#app').insertBefore(tmpDiv, adminCard);
-    const date=isoDate(new Date());
-    const SCHEDULE={blocks:[]}, EVENTS={list:[]};
-    const card=el('div',{class:'card'});
-    const title=el('div',{class:'row-between'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
-    const bars=el('div');
-    const stats=el('div',{class:'row', style:{marginTop:'10px'}}, el('div',{style:{fontWeight:'800', fontSize:'28px'}}, '100%'), el('div',{class:'muted'}, 'in: 0m · out: 0m'));
-    card.append(title,bars,stats); tmpDiv.appendChild(card);
-
-    async function refresh(){
-      try{
-        const s=await getSchedule(me.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
-        const ev=await listEvents(me.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
-        redraw();
-      }catch(e){}
-    }
-    function redraw(){
-      bars.innerHTML=''; bars.appendChild(buildDualBars(date,SCHEDULE.blocks,EVENTS.list));
-      const d=calcAdherence(date,SCHEDULE.blocks,EVENTS.list);
-      stats.firstChild.textContent=Math.round(d.pct)+'%';
-      stats.lastChild.textContent='in: '+fmtDur(d.inMin)+' · out: '+fmtDur(d.outMin);
-    }
-    refresh(); STATE.timers.push(setInterval(redraw,1000)); STATE.timers.push(setInterval(refresh,15000));
-  })();
+  // Live tick for overview
+  timers.push(setInterval(()=>{ if(BLOCKS.list.length) updateDayUI(); }, 1000));
+  // Periodic refresh events for selected user/day
+  timers.push(setInterval(async()=>{
+    try{
+      if(!SELECTED.value) return;
+      const ev=await listEvents(SELECTED.value, DAY.value, DAY.value);
+      EVENTS.list=Array.isArray(ev)?ev:EVENTS.list;
+      updateDayUI();
+    }catch{}
+  }, 15000));
 }
 
-/* ====== visuals ====== */
+/* =========================
+   Helper: tiny element factory
+========================= */
 function el(tag, attrs, ...children){
   const n=document.createElement(tag);
   if(attrs) Object.keys(attrs).forEach(k=>{
@@ -314,67 +497,31 @@ function el(tag, attrs, ...children){
   children.flat().forEach(c=>{ if(c==null) return; if(c.nodeType) n.appendChild(c); else n.appendChild(document.createTextNode(String(c))); });
   return n;
 }
-function buildDualBars(date, scheduleBlocks, events){
-  const wrap=el('div',{class:'timeline-wrap'});
-  const mins = (scheduleBlocks && scheduleBlocks.length) ? [Math.min(...scheduleBlocks.map(b=>b.start)), Math.max(...scheduleBlocks.map(b=>b.end))] : [480,1020];
-  const startMin=mins[0], endMin=mins[1]; const total=endMin-startMin||1;
-  const dayStart=Date.parse(date+'T00:00:00');
-  function blocksToSegs(blocks){ return (blocks||[]).map(b=>({ status:b.status, start:b.start, width:(b.end-b.start) })); }
-  function eventsToSegs(events){ const segs=[]; let cur=(events||[]).length?events[0].status:null; const pts=(events||[]).map(ev=> Math.max(startMin, Math.min(endMin, Math.floor((Number(ev.ts)-dayStart)/60000)))); let cursor=startMin; for(let i=0;i<pts.length;i++){ const p=pts[i]; if(p>cursor) segs.push({status:cur,start:cursor,width:p-cursor}); cursor=p; cur=events[i].status; } if(cursor<endMin) segs.push({status:cur,start:cursor,width:endMin-cursor}); return segs; }
-  const proj=blocksToSegs(scheduleBlocks||[]); const act=eventsToSegs(events||[]);
-  function row(segs, compare){
-    const bar=el('div',{class:'gridbar'});
-    segs.forEach(s=>{
-      const w=(s.width/total*100).toFixed(4)+'%';
-      let diff=false;
-      if(compare){
-        const probe=s.start+Math.max(1,Math.floor(s.width/2));
-        const exp=(scheduleBlocks||[]).find(b=> probe>=b.start && probe<b.end);
-        diff = !!(exp && s.status && exp.status!==s.status);
-      }
-      const seg=el('div',{class:'seg '+(s.status?statusByKey(s.status).color:'' ) + (compare && diff ? ' diff':''), style:{width:w}});
-      bar.appendChild(seg);
-    });
-    return bar;
-  }
-  wrap.appendChild(el('div',{class:'row', style:{marginBottom:'6px'}}, el('div',{class:'rowlabel'},'Projected'), el('div',{style:{flex:'1'}}, row(proj,false))));
-  wrap.appendChild(el('div',{class:'row'}, el('div',{class:'rowlabel'},'Actual'), el('div',{style:{flex:'1'}}, row(act,true))));
-  const now=Date.now(); const dayStartMs=dayStart; const nowMin=Math.floor((now-dayStartMs)/60000);
-  const nowPct=Math.max(0, Math.min(100, ((nowMin-startMin)/total)*100));
-  const nl=el('div',{class:'nowline', style:{left:nowPct+'%'}});
-  wrap.appendChild(nl); return wrap;
-}
-function getComputedStyleColor(cls){ const map={ 'st-available':'#10b981','st-bathroom':'#f59e0b','st-break':'#fbbf24','st-lunch':'#fb923c','st-training':'#a78bfa','st-meeting':'#60a5fa','st-offline':'#9ca3af' }; return map[cls]||'#9ca3af'; }
-function calcAdherence(date, blocks, events){
-  if(!blocks||!blocks.length) return { pct:100, inMin:0, outMin:0, lines:[], byStatus:{} };
-  const dayStart=Date.parse(date+'T00:00:00');
-  const startMin=Math.min(...blocks.map(b=>b.start));
-  const endMin=Math.max(...blocks.map(b=>b.end));
-  let idx=0, cur=(events||[]).length?events[0].status:null, curStart=startMin;
-  const lines=[]; const byStatus={};
-  function pushLine(st, sM, eM){ const startTS=dayStart + sM*60000; const dur=Math.max(0,eM-sM); if(st){ lines.push(`${fmtTS(startTS)} ${statusByKey(st).label} ${fmtDur(dur)}`); byStatus[st]=(byStatus[st]||0)+dur; } }
-  for(let m=startMin;m<=endMin;m++){ const ms=dayStart + m*60000; if(idx+1<(events||[]).length && Number(events[idx+1].ts) <= ms){ pushLine(cur, curStart, m); idx++; cur=events[idx].status; curStart=m; } }
-  pushLine(cur, curStart, endMin);
-  let inMin=0, outMin=0; idx=0; cur=(events||[]).length?events[0].status:null;
-  const nowMin=Math.min(Math.max(startMin, Math.floor((Date.now()-dayStart)/60000)), endMin);
-  for(let m=startMin;m<nowMin;m++){
-    const ms=dayStart + m*60000;
-    while(idx+1<(events||[]).length && Number(events[idx+1].ts) <= ms){ idx++; cur=events[idx].status; }
-    const expected=(blocks||[]).find(b=> m>=b.start && m<b.end);
-    if(!expected) continue; if(!cur) outMin++; else if(cur===expected.status) inMin++; else outMin++;
-  }
-  const total=inMin+outMin; const pct = total? (inMin/total*100):100;
-  return { pct, inMin, outMin, lines, byStatus };
-}
 
-/* ====== boot ====== */
+/* =========================
+   Boot
+========================= */
 (async function init(){
   try{
     const w = await whoami();
     if (!w.authed) { location.href='/'; return; }
-    STATE.me = w.me;
+    ME = w.me;
   }catch(e){ location.href='/'; return; }
-  render();
+
+  // header buttons
+  $('#btn-logout').onclick = async ()=>{ await logout().catch(()=>{}); location.href='/'; };
+  $('#btn-agent').onclick  = ()=>{
+    MODE='agent'; renderHeader();
+    // if an agent is selected in Admin, preview that agent; otherwise preview self
+    const sel = $('#selUser'); const uname = sel && sel.value ? sel.value : ME.username;
+    renderAgentView({ username: uname });
+  };
+  $('#btn-admin').onclick  = ()=>{ MODE='admin'; renderHeader(); renderAdminView(); };
+
+  renderHeader();
+  // default land in Admin if you have rights; otherwise land in Agent (self)
+  if (ME.role==='ADMIN' || ME.role==='SUPERADMIN'){ renderAdminView(); }
+  else { MODE='agent'; renderHeader(); renderAgentView({ username: ME.username }); }
 })();
 </script>
 </body>
