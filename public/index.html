@@ -23,6 +23,44 @@
   <main class="wrap">
     <div id="card" class="card" style="width:min(460px, 100%);"></div>
   </main>
+<script>
+/* Use Cloudflare Pages Functions on your domain */
+const USING_PAGES = location.hostname.endsWith('pages.dev')
+                 || location.hostname.endsWith('staragentdash.work');
+
+/* optional bearer fallback for GitHub – not needed on staragentdash.work */
+let ACCESS_TOKEN = null;
+
+async function api(path, opts = {}) {
+  // On Pages, always call same-origin /api/*
+  const url = USING_PAGES
+    ? `/api${path}`                                        // ex: /api/login, /api/whoami, /api/schedules
+    : `https://allstar-auth.ataymia.workers.dev${path}`;   // GitHub fallback
+
+  const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
+  if (!USING_PAGES && ACCESS_TOKEN) headers.Authorization = `Bearer ${ACCESS_TOKEN}`;
+
+  const res = await fetch(url, {
+    credentials: 'include',
+    method: opts.method || 'GET',
+    headers,
+    body: opts.body
+  });
+
+  const ct = res.headers.get('content-type') || '';
+  const body = ct.includes('json') ? await res.json() : await res.text();
+  if (!res.ok) throw new Error(body?.error || (`HTTP ${res.status}`));
+  return body;
+}
+
+/* convenience wrappers */
+const whoami = () => api('/whoami'); // GET /api/whoami
+async function loginWithEmail(email, password) {
+  const out = await api('/login', { method:'POST', body: JSON.stringify({ email, password }) }); // POST /api/login
+  ACCESS_TOKEN = out?.access || null; // (GitHub fallback only)
+  return out;
+}
+</script>
 
   <script>
     const $ = (s)=>document.querySelector(s);
