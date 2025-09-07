@@ -10,8 +10,6 @@ function readCookie(req: Request, name: string): string | null {
 }
 
 function setCookie(name: string, val: string): string {
-  // Not HttpOnly here because middleware is already server-side and
-  // we only need it once to survive the handoff.
   return `${name}=${val}; Path=/; Secure; SameSite=Lax`;
 }
 
@@ -19,16 +17,12 @@ export const onRequest: PagesFunction = async (ctx) => {
   const { request, env, next } = ctx;
   const url = new URL(request.url);
 
-  // only guard /hub
   if (!PROTECTED.some(rx => rx.test(url.pathname))) return next();
 
-  // 0) optional one-time handoff: /hub?at=<token>
   const handoff = url.searchParams.get("at");
-
-  // 1) do we already have the cookie?
   let token = readCookie(request, "allstar_at");
 
-  // 2) if no cookie but we have a handoff token, set cookie now and clean URL
+  // If we have a one-time token in the URL, set cookie and clean the URL
   if (!token && handoff) {
     const h = new Headers();
     h.append("Set-Cookie", setCookie("allstar_at", handoff));
@@ -37,19 +31,18 @@ export const onRequest: PagesFunction = async (ctx) => {
     return new Response(null, { status: 302, headers: h });
   }
 
-  // 3) still no token → bounce to login
   if (!token) return Response.redirect(new URL("/", url), 302);
 
-  // 4) verify with Auth Worker
   if (!env.AUTH_BASE) {
     console.error("Missing AUTH_BASE on Pages");
     return Response.redirect(new URL("/?err=auth-misconfig", url), 302);
   }
+
   const me = await fetch(`${env.AUTH_BASE}/me`, {
     headers: { Cookie: `access_token=${token}` }
   });
+
   if (!me.ok) return Response.redirect(new URL("/", url), 302);
 
-  // 5) allow through
   return next();
 };
