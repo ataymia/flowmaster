@@ -1,4 +1,4 @@
-import { json, setCookie } from './_util';
+import { json, setCookie } from './_utils';
 
 export const onRequestPost: PagesFunction = async ({ request, env }) => {
   const body = await request.json() as any; // {email?, username?, password}
