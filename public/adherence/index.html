@@ -31,7 +31,7 @@
 
 <script>
 /* =========================
-   Config & Status Palette
+   Status palette
 ========================= */
 const STATUSES = [
   { key:'available', label:'Available', color:'st-available' },
@@ -56,6 +56,17 @@ const statusByKey = (k)=> STATUSES.find(s=>s.key===k) || { label:k, color:'st-of
 function toast(msg, ms=2200){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
 function showError(msg){ const b=$('#error'); if(!b) return; b.style.display='block'; b.textContent='⚠️ '+msg; console.error('[Allstar]', msg); }
 function getColor(cls){ const map={ 'st-available':'#10b981','st-bathroom':'#d946ef','st-break':'#facc15','st-lunch':'#fb923c','st-training':'#8b5cf6','st-meeting':'#3b82f6','st-offline':'#9ca3af' }; return map[cls]||'#9ca3af'; }
+function el(tag, attrs, ...children){
+  const n=document.createElement(tag);
+  if(attrs) Object.keys(attrs).forEach(k=>{
+    if(k==='class') n.className=attrs[k];
+    else if(k==='style') Object.assign(n.style, attrs[k]);
+    else if(k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]);
+    else n.setAttribute(k, attrs[k]);
+  });
+  children.flat().forEach(c=>{ if(c==null) return; if(c.nodeType) n.appendChild(c); else n.appendChild(document.createTextNode(String(c))); });
+  return n;
+}
 
 /* =========================
    API Proxies (Pages)
@@ -69,7 +80,7 @@ async function jfetch(url, opts={}) {
   return body;
 }
 const whoami = ()=> jfetch('/api/whoami');
-const logout = ()=> jfetch('/api/logout', { method:'POST' });
+const logout  = ()=> jfetch('/api/logout', { method:'POST' });
 
 async function listUsers(){ return jfetch('/api/users'); }
 async function createUser(username,password,role){ return jfetch('/api/users', { method:'POST', body: JSON.stringify({ username,password,role }) }); }
@@ -87,13 +98,11 @@ async function listEvents(user,from,to){ const q=new URLSearchParams({user,from,
 let ME=null;
 let IS_ADMIN=false;
 let MODE='admin'; // 'admin' | 'agent'
-let timers=[];    // per-mode
+let timers=[];    // per-mode intervals
 function clearTimers(){ timers.forEach(clearInterval); timers=[]; }
-
 function renderHeader(){
   const meta=$('#hdr-meta');
-  if(ME){ meta.textContent = `${ME.username} · ${ME.role}`; } else { meta.textContent = 'Not signed in'; }
-
+  meta.textContent = ME ? `${ME.username} · ${ME.role}` : 'Not signed in';
   if (IS_ADMIN) {
     $('#btn-agent').style.display = (MODE==='admin') ? '' : 'none';
     $('#btn-admin').style.display = (MODE==='agent') ? '' : 'none';
@@ -117,7 +126,7 @@ function buildDualBars(date, scheduleBlocks, events){
   const proj = (scheduleBlocks||[]).map(b=>({ status:b.status, start:b.start, width:b.end-b.start }));
 
   function eventsToSegs(evts){
-    const segs=[]; let cur=null; /* <-- critical fix: start as null so first segment is uncolored until first switch */
+    const segs=[]; let cur=null; // start as null so first segment is blank until first switch
     const pts=evts.map(ev=> Math.max(startMin, Math.min(endMin, Math.floor((Number(ev.ts)-dayStart)/60000))));
     let cursor=startMin;
     for(let i=0;i<pts.length;i++){
@@ -272,7 +281,7 @@ function renderAgentView(ctx){
 }
 
 /* =========================
-   Admin Tabs
+   Admin View (with Tabs)
 ========================= */
 function renderAdminView(){
   if(!IS_ADMIN){ MODE='agent'; renderHeader(); return renderAgentView({ username: ME.username }); }
@@ -295,21 +304,10 @@ function renderAdminView(){
   `;
   app.append(tabs, panes);
 
-  // tabs events
-  tabs.addEventListener('click', (e)=>{
-    const btn = e.target.closest('button[data-tab]');
-    if(!btn) return;
-    tabs.querySelectorAll('button').forEach(b=> b.classList.remove('btn-brand'));
-    btn.classList.add('btn-brand');
-    panes.querySelectorAll('.card').forEach(p=> p.style.display='none');
-    $('#tab-'+btn.dataset.tab).style.display='block';
-    if(btn.dataset.tab==='live') mountLive();
-    if(btn.dataset.tab==='history') mountHistory();
-  });
-
-  // ------- Schedule Tab -------
+  // State shared across schedule tab
   const DAY={ value: isoDate(new Date()) }; const SELECTED={ value:'' }; const BLOCKS={ list:[] }; const EVENTS={ list:[] }; const USERS={ list:[] };
 
+  // Helpers for schedule tab
   function sanitizeBlocks(list){
     function parseHM(v){ if(!v) return 0; if(typeof v==='number') return v; const [h,m]=String(v).split(':').map(x=>parseInt(x,10)||0); return (h*60+m)|0; }
     let arr = (list||[]).map(b=>{
@@ -328,9 +326,42 @@ function renderAdminView(){
     }
     return out;
   }
+  function refreshUsersUI(){
+    const sel=$('#selUser'); if(!sel) return;
+    sel.innerHTML='<option value="">Pick a user</option>';
+    (USERS.list||[]).forEach(u=> sel.appendChild(new Option(`${u.username} · ${u.role}`, u.username)));
+  }
+  function renderBlocksUI(){
+    const host=$('#blocks'); if(!host) return;
+    host.innerHTML='';
+    BLOCKS.list.forEach((b,i)=>{
+      const row=document.createElement('div'); row.className='row'; row.style.marginBottom = '8px';
+      const sel=document.createElement('select'); sel.className='field'; sel.style.maxWidth='160px';
+      STATUSES.forEach(s=> sel.appendChild(new Option(s.label, s.key, false, s.key===b.status)));
+      sel.onchange = e=>{ b.status=e.target.value; };
+      const t1=document.createElement('input'); t1.type='time'; t1.className='field'; t1.style.maxWidth='140px'; t1.value=toHM(b.start);
+      const t2=document.createElement('input'); t2.type='time'; t2.className='field'; t2.style.maxWidth='140px'; t2.value=toHM(b.end);
+      t1.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.start=(parseInt(hh)*60+parseInt(mm))|0; };
+      t2.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.end  =(parseInt(hh)*60+parseInt(mm))|0; };
+      const rm=document.createElement('button'); rm.className='btn'; rm.textContent='Remove';
+      rm.onclick=()=>{ BLOCKS.list.splice(i,1); renderBlocksUI(); updateDayUI(); enableSave(); };
+      row.append(sel, t1, document.createTextNode('to'), t2, rm); host.appendChild(row);
+    });
+  }
+  function updateDayUI(){
+    const bars=$('#bars'); if(!bars) return;
+    bars.innerHTML=''; bars.appendChild(buildDualBars(DAY.value, BLOCKS.list, EVENTS.list));
+    const d=calcAdherence(DAY.value, BLOCKS.list, EVENTS.list);
+    const pctEl=$('#pct'); if(pctEl) pctEl.textContent = `Adherence: ${Math.round(d.pct)}% · in ${fmtDur(d.inMin)} / out ${fmtDur(d.outMin)}`;
+    const by=$('#byStatus'); if(by){ by.innerHTML=''; Object.keys(d.byStatus||{}).forEach(k=> by.appendChild(el('li',{}, `${statusByKey(k).label}: ${fmtDur(d.byStatus[k])}`))); }
+    const lines=$('#lines'); if(lines){ lines.innerHTML=''; (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--border)'}}, t))); }
+  }
+  function enableSave(){ const btn=$('#saveSched'); if(btn) btn.disabled = !SELECTED.value || !BLOCKS.list.length; }
 
+  // ----- Tab Renderers -----
   function renderScheduleTab(){
-    const root = $('#tab-schedule'); root.innerHTML = `
+    const root = $('#tab-schedule');
+    root.innerHTML = `
       <div class="row" style="flex-wrap:wrap; gap:12px; align-items:flex-end;">
         <div>
           <div class="label">Agent</div>
@@ -368,41 +399,10 @@ function renderAdminView(){
       </div>
     `;
 
-    function refreshUsersUI(){
-      const sel=$('#selUser'); sel.innerHTML='<option value="">Pick a user</option>';
-      (USERS.list||[]).forEach(u=> sel.appendChild(new Option(`${u.username} · ${u.role}`, u.username)));
-    }
-    function renderBlocksUI(){
-      const host=$('#blocks'); host.innerHTML='';
-      BLOCKS.list.forEach((b,i)=>{
-        const row=document.createElement('div'); row.className='row'; row.style.marginBottom = '8px';
-        const sel=document.createElement('select'); sel.className='field'; sel.style.maxWidth='160px';
-        STATUSES.forEach(s=> sel.appendChild(new Option(s.label, s.key, false, s.key===b.status)));
-        sel.onchange = e=>{ b.status=e.target.value; };
-        const t1=document.createElement('input'); t1.type='time'; t1.className='field'; t1.style.maxWidth='140px'; t1.value=toHM(b.start);
-        const t2=document.createElement('input'); t2.type='time'; t2.className='field'; t2.style.maxWidth='140px'; t2.value=toHM(b.end);
-        t1.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.start=(parseInt(hh)*60+parseInt(mm))|0; };
-        t2.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.end  =(parseInt(hh)*60+parseInt(mm))|0; };
-        const rm=document.createElement('button'); rm.className='btn'; rm.textContent='Remove';
-        rm.onclick=()=>{ BLOCKS.list.splice(i,1); renderBlocksUI(); updateDayUI(); enableSave(); };
-        row.append(sel, t1, document.createTextNode('to'), t2, rm); host.appendChild(row);
-      });
-    }
-    function updateDayUI(){
-      const bars=$('#bars'); bars.innerHTML=''; bars.appendChild(buildDualBars(DAY.value, BLOCKS.list, EVENTS.list));
-      const d=calcAdherence(DAY.value, BLOCKS.list, EVENTS.list);
-      $('#pct').textContent = `Adherence: ${Math.round(d.pct)}% · in ${fmtDur(d.inMin)} / out ${fmtDur(d.outMin)}`;
-      const by=$('#byStatus'); by.innerHTML='';
-      Object.keys(d.byStatus||{}).forEach(k=> by.appendChild(el('li',{}, `${statusByKey(k).label}: ${fmtDur(d.byStatus[k])}`)));
-      const lines=$('#lines'); lines.innerHTML='';
-      (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--border)'}}, t)));
-    }
-    function enableSave(){ $('#saveSched').disabled = !SELECTED.value || !BLOCKS.list.length; }
-
     // load users
     (async()=>{ try{ USERS.list=await listUsers()||[]; refreshUsersUI(); }catch(e){ showError('Could not load users'); } })();
 
-    // wiring
+    // wire handlers
     $('#selUser').onchange = async (e)=>{
       SELECTED.value=e.target.value; enableSave();
       if(!SELECTED.value) return;
@@ -431,25 +431,15 @@ function renderAdminView(){
         const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
         renderBlocksUI(); updateDayUI();
       }catch(e){
-        const msg=String(e.message||e);
-        showError('Save failed: '+msg);
+        showError('Save failed: '+String(e.message||e));
       }
     };
 
-    // live tick for overview
+    // live tick + event refresh
     timers.push(setInterval(()=>{ if(BLOCKS.list.length) updateDayUI(); }, 1000));
-    // periodic refresh events for selected agent/day
-    timers.push(setInterval(async()=>{
-      try{
-        if(!SELECTED.value) return;
-        const ev=await listEvents(SELECTED.value, DAY.value, DAY.value);
-        EVENTS.list=Array.isArray(ev)?ev:EVENTS.list;
-        updateDayUI();
-      }catch{}
-    }, 10000));
+    timers.push(setInterval(async()=>{ try{ if(!SELECTED.value) return; const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:EVENTS.list; updateDayUI(); }catch{} }, 10000));
   }
 
-  // ------- Live Status Tab -------
   function mountLive(){
     const root = $('#tab-live');
     root.innerHTML = `
@@ -466,7 +456,6 @@ function renderAdminView(){
       grid.innerHTML='';
       let users=[];
       try { users = await listUsers() || []; } catch { users=[]; }
-      // Only AGENT rows
       users = users.filter(u => u.role === 'AGENT');
       await Promise.all(users.map(async (u)=>{
         let last = null;
@@ -491,7 +480,6 @@ function renderAdminView(){
     timers.push(setInterval(refresh, 10000));
   }
 
-  // ------- History Tab -------
   function mountHistory(){
     const root = $('#tab-history');
     root.innerHTML = `
@@ -542,7 +530,7 @@ function renderAdminView(){
       const to   = $('#histTo').value;
       if(!user){ toast('Pick a user first'); return; }
       const tbody = $('#histTable tbody'); tbody.innerHTML='';
-      const dates = daysInRange(from, to).slice(0, 60); // safety cap 60 days
+      const dates = daysInRange(from, to).slice(0, 60); // safety cap
       for (const date of dates){
         try{
           const s=await getSchedule(user, date); const blocks=(s&&s.blocks)||[];
@@ -556,39 +544,29 @@ function renderAdminView(){
           const tr=document.createElement('tr'); tr.innerHTML=`<td>${date}</td><td colspan="3" class="muted">error</td>`; tbody.appendChild(tr);
         }
       }
-      // CSV links
-      $('#csvEvents').onclick = ()=> window.open(`/api/export/events?from=${from}&to=${to}`, '_blank');
+      // CSV links (open in new tab)
+      $('#csvEvents').onclick    = ()=> window.open(`/api/export/events?from=${from}&to=${to}`, '_blank');
       $('#csvSchedules').onclick = ()=> window.open(`/api/export/schedules?from=${from}&to=${to}`, '_blank');
-      $('#csvAdh').onclick = ()=> window.open(`/api/export/adherence?from=${from}&to=${to}`, '_blank');
+      $('#csvAdh').onclick       = ()=> window.open(`/api/export/adherence?from=${from}&to=${to}`, '_blank');
     };
   }
 
-  // mount initial tab
-  renderScheduleTab();
-  function renderScheduleTab(){ /* defined inside renderAdminView above */ }
-  renderScheduleTab = renderScheduleTab.bind(this); // keep reference
-
-  // initial load of schedule tab content
-  (function initSchedule(){ /* no-op placeholder to satisfy reference */ })();
-  // actually render
-  (function(){ renderScheduleTab(); })();
-
-  // live tick on whichever active tab needs it – handled in each tab’s setup
-}
-
-/* =========================
-   Helper: tiny element factory
-========================= */
-function el(tag, attrs, ...children){
-  const n=document.createElement(tag);
-  if(attrs) Object.keys(attrs).forEach(k=>{
-    if(k==='class') n.className=attrs[k];
-    else if(k==='style') Object.assign(n.style, attrs[k]);
-    else if(k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]);
-    else n.setAttribute(k, attrs[k]);
+  // tab click handling
+  tabs.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-tab]');
+    if(!btn) return;
+    tabs.querySelectorAll('button').forEach(b=> b.classList.remove('btn-brand'));
+    btn.classList.add('btn-brand');
+    panes.querySelectorAll('.card').forEach(p=> p.style.display='none');
+    const id = '#tab-'+btn.dataset.tab;
+    $(id).style.display='block';
+    if (id==='#tab-live')    mountLive();
+    if (id==='#tab-history') mountHistory();
+    if (id==='#tab-schedule') renderScheduleTab();
   });
-  children.flat().forEach(c=>{ if(c==null) return; if(c.nodeType) n.appendChild(c); else n.appendChild(document.createTextNode(String(c))); });
-  return n;
+
+  // initial mount: Schedule
+  renderScheduleTab();
 }
 
 /* =========================
@@ -609,13 +587,12 @@ function el(tag, attrs, ...children){
     $('#btn-admin').style.display='none';
     $('#btn-agent').onclick = ()=>{
       MODE='agent'; renderHeader();
-      // If admin has selected someone in Schedule tab, try to read it; else preview self
       const sel = document.querySelector('#selUser');
       const uname = sel && sel.value ? sel.value : ME.username;
       renderAgentView({ username: uname });
     };
     $('#btn-admin').onclick = ()=>{ MODE='admin'; renderHeader(); renderAdminView(); };
-    renderHeader(); renderAdminView();
+    MODE='admin'; renderHeader(); renderAdminView();
   } else {
     MODE='agent'; renderHeader(); renderAgentView({ username: ME.username });
   }
