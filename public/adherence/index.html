@@ -4,70 +4,25 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Allstar Agent Adherence</title>
+  <link rel="stylesheet" href="/theme.css">
   <style>
-    :root { --brand:#e11d48; --muted:#f8fafc; --text:#0f172a; --sub:#475569; --line:#e5e7eb; --bg:#ffffff; }
-    * { box-sizing:border-box; }
-    body { margin:0; font:14px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:var(--bg); color:var(--text); }
-    a { color:var(--brand); text-decoration:none; }
-    h1,h2,h3 { margin:0 0 .5rem 0; }
-    .container { max-width:1040px; margin:0 auto; padding:16px; }
-    .header { position:sticky; top:0; z-index:50; backdrop-filter: blur(6px); background:rgba(255,255,255,.85); border-bottom:1px solid var(--line); }
-    .header-inner { display:flex; align-items:center; gap:10px; padding:10px 16px; }
-    .title { font-weight:800; font-size:18px; letter-spacing:.3px; }
-    .muted { color:var(--sub); }
-    .btn { display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
-    .btn:hover { background:#fafafa; }
-    .btn-brand { border-color:transparent; background:var(--brand); color:#fff; }
-    .btn-brand:hover { filter:brightness(.95); }
-    .btn-danger { border-color:#fecaca; background:#fee2e2; color:#991b1b; }
-    .card { background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px; }
-    .grid { display:grid; gap:16px; }
-    .grid-2 { grid-template-columns: 1fr 1fr; }
-    .row { display:flex; gap:8px; align-items:center; }
-    .row-between { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-    .field { display:block; width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:10px; }
-    .label { display:block; font-size:12px; color:var(--sub); margin-bottom:4px; }
-    .table { width:100%; border-collapse:collapse; font-size:13px; }
-    .table th, .table td { text-align:left; padding:8px 10px; border-top:1px solid var(--line); }
-    .scroll { max-height:260px; overflow:auto; }
-    .pill { display:inline-flex; align-items:center; padding:4px 8px; border-radius:999px; background:#f1f5f9; font-size:12px; }
-    .spacer { height:8px; }
-    .mt-2 { margin-top:8px; } .mt-3 { margin-top:12px; } .mt-4 { margin-top:16px; } .mt-6 { margin-top:24px; }
-    .mb-2 { margin-bottom:8px; } .mb-3 { margin-bottom:12px; } .mb-4 { margin-bottom:16px; }
-    .status-dot { width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; }
-    .gridbar { height:20px; border-radius:8px; overflow:hidden; position:relative; background:#f3f4f6; }
-    .seg { height:100%; display:inline-block; position:relative; }
-    .seg.diff::after { content:""; position:absolute; inset:0; background:rgba(239,68,68,0.35); }
-    .rowlabel { font-size:12px; color:#6b7280; width:7rem; }
-    .timeline-wrap { position:relative; }
-    .nowline { position:absolute; top:-4px; bottom:-4px; width:2px; background:#111827; }
-    .st-available { background:#10b981; }
-    .st-bathroom  { background:#f59e0b; }
-    .st-break     { background:#fbbf24; }
-    .st-lunch     { background:#fb923c; }
-    .st-training  { background:#a78bfa; }
-    .st-meeting   { background:#60a5fa; }
-    .st-offline   { background:#9ca3af; }
-    .error-banner { position:fixed; inset:auto 0 0 0; background:#fee2e2; color:#991b1b; padding:10px 14px; border-top:1px solid #fecaca; z-index:9999; display:none; }
     .logo { height:40px; width:auto; border-radius:8px; }
-    @media (max-width: 880px) { .grid-2 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div id="error" class="error-banner"></div>
-  <div class="header">
-    <div class="header-inner container">
-      <a href="/hub" class="title" style="color:var(--brand); text-decoration:none;">ALLSTAR</a>
-      <div class="title">Allstar Agent Adherence</div>
-      <div id="hdr-meta" class="muted" style="margin-left:auto">Loading…</div>
-      <button id="btn-logout" class="btn" style="display:none">Logout</button>
-    </div>
-  </div>
 
-  <div id="app" class="container" style="padding-top:16px;"></div>
+  <header class="appbar">
+    <a href="/hub" class="brand" style="color:var(--brand); text-decoration:none;">ALLSTAR</a>
+    <div class="brand">Allstar Agent Adherence</div>
+    <div id="hdr-meta" class="muted" style="margin-left:auto">Loading…</div>
+    <button id="btn-logout" class="btn" style="display:none">Logout</button>
+  </header>
+
+  <main id="app" class="container" style="padding-top:16px;"></main>
 
 <script>
-// === CONFIG ===
+/* ====== config ====== */
 const STATUSES = [
   { key:'available', label:'Available', color:'st-available' },
   { key:'bathroom',  label:'Bathroom',  color:'st-bathroom'  },
@@ -78,8 +33,8 @@ const STATUSES = [
   { key:'offline',   label:'Offline',   color:'st-offline'   },
 ];
 
-// ---------- utils ----------
-const $ = (sel, el)=> (el||document).querySelector(sel);
+/* ====== utils ====== */
+const $ = (s, el)=> (el||document).querySelector(s);
 const pad = (n)=> String(n).padStart(2,'0');
 const isoDate = (d)=> (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10);
 const toHM = (m)=> `${pad(Math.floor(m/60))}:${pad(m%60)}`;
@@ -88,7 +43,7 @@ const fmtTS  = (ms)=> { const d=new Date(ms); return `${pad(d.getHours())}:${pad
 const statusByKey = (k)=> STATUSES.find(s=>s.key===k) || { label:k, color:'st-offline' };
 function showError(msg){ const b=$('#error'); if(!b) return; b.style.display='block'; b.textContent='⚠️ '+msg; console.error('[Allstar]', msg); }
 
-// ---------- Pages API (proxies) ----------
+/* ====== Pages API (same calls) ====== */
 async function jfetch(url, opts={}) {
   const r = await fetch(url, { ...opts, headers:{ 'content-type':'application/json', ...(opts.headers||{}) } });
   if (r.status===204) return null;
@@ -97,28 +52,21 @@ async function jfetch(url, opts={}) {
   if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
   return body;
 }
-
-// session + identity
 async function whoami(){ return jfetch('/api/whoami'); }
 async function logout(){ await jfetch('/api/logout', { method:'POST' }); }
-
-// users (admin only)
 async function listUsers(){ return jfetch('/api/users'); }
 async function createUser(username,password,role){ return jfetch('/api/users', { method:'POST', body: JSON.stringify({ username,password,role }) }); }
 async function patchUser(id,patch){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'PATCH', body: JSON.stringify(patch) }); }
 async function deleteUserApi(id){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'DELETE' }); }
-
-// schedules + events
 async function getSchedule(user,date){ const q=new URLSearchParams({user,date}).toString(); return jfetch('/api/schedule?'+q); }
 async function saveSchedule(user,date,blocks){ return jfetch('/api/schedule', { method:'POST', body: JSON.stringify({ username:user, date, blocks }) }); }
 async function postEvent(status,ts){ return jfetch('/api/events', { method:'POST', body: JSON.stringify(ts?{status,ts}:{status}) }); }
 async function listEvents(user,from,to){ const q=new URLSearchParams({user,from,to}).toString(); return jfetch('/api/events?'+q); }
 
-// ---------- state ----------
+/* ====== state & header ====== */
 let STATE = { me:null, timers:[] };
 function clearTimers(){ STATE.timers.forEach(clearInterval); STATE.timers=[]; }
 
-// ---------- header ----------
 function renderHeader(){
   const meta=$('#hdr-meta'); const btn=$('#btn-logout');
   if(STATE.me){
@@ -130,7 +78,7 @@ function renderHeader(){
   }
 }
 
-// ---------- main render ----------
+/* ====== main render ====== */
 function render(){
   renderHeader();
   const app=$('#app'); if (!STATE.me) { app.innerHTML=''; return; }
@@ -138,23 +86,26 @@ function render(){
   return renderAdminView(STATE.me);
 }
 
-// ---------- USER VIEW ----------
+/* ====== USER VIEW ====== */
 function renderAgentView(user){
   const app=$('#app'); clearTimers(); app.innerHTML='';
   const date=isoDate(new Date());
   const wrap=el('div',{class:'grid grid-2'});
 
   const todayCard=el('div',{class:'card'});
-  const titleRow=el('div',{class:'row-between mb-3'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
+  const titleRow=el('div',{class:'row-between'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
   const timelines=el('div');
-  const statsRow=el('div',{class:'row mt-3'}, el('div',{style:{fontWeight:'800', fontSize:'32px'}}, '100%'), el('div',{class:'muted'}, 'in: 0m · out: 0m'));
+  const statsRow=el('div',{class:'row', style:{marginTop:'10px'}},
+    el('div',{style:{fontWeight:'800', fontSize:'32px'}}, '100%'),
+    el('div',{class:'muted'}, 'in: 0m · out: 0m')
+  );
   todayCard.append(titleRow,timelines,statsRow);
 
   const statusCard=el('div',{class:'card'});
   statusCard.append(el('h3',{},'Set status'));
   const btns=el('div',{class:'row', style:{flexWrap:'wrap'}});
-  STATUSES.forEach(s=> btns.appendChild(el('button',{class:'btn', style:{color:'#fff', background:getComputedStyleColor(s.color)}, onclick:()=> setStatus(s.key)}, s.label)));
-  statusCard.append(btns, el('div',{class:'mt-4'}, el('h4',{},'Recent switches'), el('div',{id:'recent', class:'scroll'})));
+  STATUSES.forEach(s=> btns.appendChild(el('button',{class:'btn', style:{color:'#001018', background:getComputedStyleColor(s.color)}, onclick:()=> setStatus(s.key)}, s.label)));
+  statusCard.append(btns, el('div',{class:'muted', style:{marginTop:'12px'}},'Recent switches'), el('div',{id:'recent', class:'scroll'}));
 
   wrap.append(todayCard,statusCard);
   app.appendChild(wrap);
@@ -190,14 +141,14 @@ function renderAgentView(user){
     statsRow.lastChild.textContent  = 'in: '+fmtDur(x.inMin)+' · out: '+fmtDur(x.outMin);
     const r=$('#recent', statusCard); r.innerHTML='';
     const last=EVENTS.list.slice(-10).reverse();
-    last.forEach(ev=> r.appendChild(el('div',{class:'row-between', style:{borderTop:'1px solid var(--line)', padding:'6px 0'}},
+    last.forEach(ev=> r.appendChild(el('div',{class:'row-between', style:{borderTop:'1px solid var(--border)', padding:'6px 0'}},
       el('div',{}, el('span',{class:'status-dot '+statusByKey(ev.status).color}),' ', statusByKey(ev.status).label),
       el('div',{class:'muted'}, fmtTS(ev.ts))
     )));
   }
 }
 
-// ---------- ADMIN VIEW ----------
+/* ====== ADMIN VIEW ====== */
 function renderAdminView(me){
   const app=$('#app'); clearTimers(); app.innerHTML='';
   const adminCard=el('div',{class:'card mt-4'});
@@ -211,7 +162,7 @@ function renderAdminView(me){
 
   const grid=el('div',{class:'grid grid-2 mt-4'});
   const schedCard=el('div',{class:'card'}, el('h3',{},'Schedule Blocks'), el('div',{id:'blocks'}));
-  const dayCard=el('div',{class:'card'}, el('h3',{},'Daily Overview'), el('div',{id:'bars'}), el('div',{id:'pct', class:'mt-3 muted'}), el('div',{class:'mt-3'}, el('h4',{},'AUX breakdown (durations)'), el('ul',{id:'byStatus'})), el('div',{class:'mt-3'}, el('h4',{},'Timeline (IMED style)'), el('div',{id:'lines', class:'scroll card'})) );
+  const dayCard=el('div',{class:'card'}, el('h3',{},'Daily Overview'), el('div',{id:'bars'}), el('div',{id:'pct', class:'muted', style:{marginTop:'10px'}}), el('div',{class:'mt-3'}, el('h4',{},'AUX breakdown (durations)'), el('ul',{id:'byStatus'})), el('div',{class:'mt-3'}, el('h4',{},'Timeline (IMED style)'), el('div',{id:'lines', class:'scroll card'})) );
   grid.append(schedCard, dayCard);
   adminCard.appendChild(grid);
 
@@ -261,7 +212,7 @@ function renderAdminView(me){
     $('#pct').textContent = `Adherence: ${Math.round(d.pct)}% · in ${fmtDur(d.inMin)} / out ${fmtDur(d.outMin)}`;
     const by=$('#byStatus'); by.innerHTML='';
     Object.keys(d.byStatus).forEach(k=> by.appendChild(el('li',{}, `${statusByKey(k).label}: ${fmtDur(d.byStatus[k])}`)));
-    const lines=$('#lines'); lines.innerHTML=''; (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--line)'}}, t)));
+    const lines=$('#lines'); lines.innerHTML=''; (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--border)'}}, t)));
   }
   function updateMonthButtons(){
     const dt=new Date(DAY.value+'T00:00:00');
@@ -275,10 +226,8 @@ function renderAdminView(me){
     $('#dla').onclick=()=>dl(`/api/export/adherence?from=${monthStart}&to=${monthEnd}`, `adherence_${y}${m}.csv`);
   }
 
-  // load users
   (async()=>{ try{ USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); }catch(e){} })();
 
-  // react to selections
   $('#selUser').onchange = async (e)=>{
     SELECTED.value=e.target.value; $('#saveSched').disabled=!SELECTED.value;
     if(!SELECTED.value) return;
@@ -326,15 +275,14 @@ function renderAdminView(me){
     wrap.appendChild(t);
   }
 
-  // mount my summary card
   (function mountMyAgentCard(){
     const tmpDiv=el('div'); $('#app').insertBefore(tmpDiv, adminCard);
     const date=isoDate(new Date());
     const SCHEDULE={blocks:[]}, EVENTS={list:[]};
     const card=el('div',{class:'card'});
-    const title=el('div',{class:'row-between mb-3'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
+    const title=el('div',{class:'row-between'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
     const bars=el('div');
-    const stats=el('div',{class:'row mt-3'}, el('div',{style:{fontWeight:'800', fontSize:'28px'}}, '100%'), el('div',{class:'muted'}, 'in: 0m · out: 0m'));
+    const stats=el('div',{class:'row', style:{marginTop:'10px'}}, el('div',{style:{fontWeight:'800', fontSize:'28px'}}, '100%'), el('div',{class:'muted'}, 'in: 0m · out: 0m'));
     card.append(title,bars,stats); tmpDiv.appendChild(card);
 
     async function refresh(){
@@ -354,7 +302,7 @@ function renderAdminView(me){
   })();
 }
 
-// ---------- visuals ----------
+/* ====== visuals ====== */
 function el(tag, attrs, ...children){
   const n=document.createElement(tag);
   if(attrs) Object.keys(attrs).forEach(k=>{
@@ -391,13 +339,12 @@ function buildDualBars(date, scheduleBlocks, events){
   }
   wrap.appendChild(el('div',{class:'row', style:{marginBottom:'6px'}}, el('div',{class:'rowlabel'},'Projected'), el('div',{style:{flex:'1'}}, row(proj,false))));
   wrap.appendChild(el('div',{class:'row'}, el('div',{class:'rowlabel'},'Actual'), el('div',{style:{flex:'1'}}, row(act,true))));
-  const now=Date.now(); const nowMin=Math.floor((now-dayStart)/60000);
+  const now=Date.now(); const dayStartMs=dayStart; const nowMin=Math.floor((now-dayStartMs)/60000);
   const nowPct=Math.max(0, Math.min(100, ((nowMin-startMin)/total)*100));
   const nl=el('div',{class:'nowline', style:{left:nowPct+'%'}});
   wrap.appendChild(nl); return wrap;
 }
 function getComputedStyleColor(cls){ const map={ 'st-available':'#10b981','st-bathroom':'#f59e0b','st-break':'#fbbf24','st-lunch':'#fb923c','st-training':'#a78bfa','st-meeting':'#60a5fa','st-offline':'#9ca3af' }; return map[cls]||'#9ca3af'; }
-
 function calcAdherence(date, blocks, events){
   if(!blocks||!blocks.length) return { pct:100, inMin:0, outMin:0, lines:[], byStatus:{} };
   const dayStart=Date.parse(date+'T00:00:00');
@@ -420,7 +367,7 @@ function calcAdherence(date, blocks, events){
   return { pct, inMin, outMin, lines, byStatus };
 }
 
-// ---------- boot ----------
+/* ====== boot ====== */
 (async function init(){
   try{
     const w = await whoami();
