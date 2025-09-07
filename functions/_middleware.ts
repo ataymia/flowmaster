@@ -22,7 +22,6 @@ export const onRequest: PagesFunction = async (ctx) => {
   const handoff = url.searchParams.get("at");
   let token = readCookie(request, "allstar_at");
 
-  // If we have a one-time token in the URL, set cookie and clean the URL
   if (!token && handoff) {
     const h = new Headers();
     h.append("Set-Cookie", setCookie("allstar_at", handoff));
@@ -37,11 +36,9 @@ export const onRequest: PagesFunction = async (ctx) => {
     console.error("Missing AUTH_BASE on Pages");
     return Response.redirect(new URL("/?err=auth-misconfig", url), 302);
   }
-
   const me = await fetch(`${env.AUTH_BASE}/me`, {
     headers: { Cookie: `access_token=${token}` }
   });
-
   if (!me.ok) return Response.redirect(new URL("/", url), 302);
 
   return next();
