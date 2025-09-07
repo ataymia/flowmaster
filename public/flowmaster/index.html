@@ -2,346 +2,1173 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Flowmaster</title>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>FlowMaster — Allstar Services</title>
+
+<!-- ===== THEME (kept Allstar/FlowMaster red) ===== -->
 <style>
-  /* --- Flowmaster owns its look; neutral/dark and not the Allstar pink --- */
   :root{
-    --bg:#0b0f14; --panel:#111823; --card:#0f1622; --ink:#e5edf5;
-    --muted:#9aa7b7; --line:#1c2636; --accent:#3478f6; --accent-2:#3dd68c;
-    --warn:#f59e0b; --danger:#ef4444;
+    --bg:#0f1115; --text:#e5e7eb; --muted:#9ca3af;
+    --primary:#c0392b; --primary-700:#a93226; --primary-100:rgba(192,57,43,.15);
+    --panel:#111827; --card:#1f2937; --border:#374151; --shadow:0 10px 20px rgba(0,0,0,.35);
   }
-  *{box-sizing:border-box} html,body{height:100%;margin:0}
-  body{background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  a{color:#9ec1ff;text-decoration:none}
-  .wrap{max-width:1280px;margin:0 auto;padding:16px}
-  .bar{position:sticky;top:0;z-index:20;background:rgba(11,15,20,.85);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
-  .bar-in{display:flex;align-items:center;gap:10px;padding:12px 16px}
-  .brand{font-weight:800;letter-spacing:.3px}
-  .tab{padding:8px 10px;border-radius:10px;border:1px solid var(--line);color:var(--ink)}
-  .tab:hover{background:#111827}
-  .pill{padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
-  .btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#0e141e;color:var(--ink);cursor:pointer}
-  .btn:hover{background:#111b2a}
-  .btn-ac{border-color:transparent;background:var(--accent);color:#fff}
-  .btn-ok{border-color:transparent;background:var(--accent-2);color:#062012}
-  .btn-warn{background:var(--warn);border-color:transparent;color:#221600}
-  .btn-danger{background:var(--danger);border-color:transparent}
-  .grid{display:grid;gap:16px} .grid-2{grid-template-columns:320px 1fr}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
-  .section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-  .field{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:#0c1320;color:var(--ink)}
-  .sel{appearance:none;background:#0c1320 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="10"><path d="M1 1l7 7 7-7" stroke="%239aa7b7" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>') no-repeat right 10px center;background-size:12px}
-  .row{display:flex;gap:8px;align-items:center}
-  .muted{color:var(--muted)} .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  .list{display:grid;gap:8px} .li{padding:8px;border:1px solid var(--line);border-radius:10px;background:#0c1422}
-  .kbd{border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;padding:1px 6px;background:#0b1120;color:#9ec1ff}
-  textarea.field{resize:vertical;min-height:120px}
-  .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .small{font-size:12px}
-  .tick{width:8px;height:8px;border-radius:999px;display:inline-block;margin-right:6px}
-  .tick.on{background:var(--accent-2)}
-  .tick.off{background:#374151}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--text);
+       font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans");}
+  a{color:#ffcabf}
+  header{position:sticky; top:0; z-index:10; background:var(--panel); border-bottom:2px solid var(--primary);}
+  .container{max-width:1100px; margin:0 auto; padding:18px 20px}
+  .brandbar{display:flex; align-items:center; gap:14px}
+  .brandAccent{color:var(--primary); font-weight:700}
+  h1{margin:0; font-size:24px}
+  .sub{color:var(--muted); margin-top:6px; font-size:14px}
+  .controlbar{display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; align-items:center}
+  select, button, input, textarea{
+    background:var(--card); color:var(--text); border:1px solid var(--border);
+    border-radius:10px; padding:10px 12px; font-size:14px; box-shadow:var(--shadow);
+  }
+  button{cursor:pointer}
+  button.primary{background:var(--primary); color:#fff; border-color:var(--primary)}
+  button.primary:hover{background:var(--primary-700); border-color:var(--primary-700)}
+  .right{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:var(--shadow); margin-top:18px}
+  .sectionTitle{font-weight:800; color:#fff; margin:0 0 8px}
+  .steps{display:flex; flex-direction:column; gap:12px}
+  .step{border:1px solid var(--border); border-left:6px solid var(--primary); border-radius:12px; background:var(--card); padding:14px; display:none}
+  .step.visible{display:block}
+  .step h4{margin:0 0 6px; font-size:16px; color:#fff}
+  .labelBadge{display:inline-block; background:rgba(192,57,43,.22); color:#ffdada; padding:2px 8px; border-radius:999px; font-size:11px; margin-left:6px}
+  .scripttxt{white-space:pre-wrap; margin:8px 0 10px; color:var(--text)}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .copy{border:1px dashed var(--border); padding:6px 10px; border-radius:8px; font-size:12px; background:transparent; color:var(--text)}
+  .foot{display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:10px}
+  .checkbox{accent-color: var(--primary)}
+  .muted{color:var(--muted)}
+  .callout{padding:10px 12px; border:1px dashed var(--primary); background:var(--primary-100); border-radius:8px; font-size:13px; color:#ffdada}
+  .rebuttalBox{border:1px solid var(--border); background:#0b1220; border-radius:10px; padding:10px 12px; margin-top:8px; color:var(--text)}
+  .footerbar{margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  #completeBtn{ display:none; }
+  .toast{position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 14px; border-radius:10px; border:1px solid var(--border); box-shadow:var(--shadow); display:none}
+
+  /* Drawers */
+  .drawer--rebuttals{
+    position:fixed; inset:0; z-index:30; background:#0b1220;
+    border-top:2px solid var(--primary);
+    box-shadow:0 -12px 32px rgba(0,0,0,.45);
+    transform:translateY(100%); transition:transform .25s ease-out;
+    display:flex; flex-direction:column; color:#fff;
+  }
+  .drawer--rebuttals.open{ transform:translateY(0); }
+  .drawer--rebuttals header{position:sticky; top:0; background:#0b1220; border-bottom:1px solid var(--border); padding:16px 18px; display:flex; justify-content:space-between; align-items:center}
+  .drawer--rebuttals .body{ padding:18px; overflow:auto; }
+  .reb-controls{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:12px; }
+  .reb-search{flex:1 1 280px; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:14px; box-shadow:var(--shadow);}
+  .reb-chips{ display:flex; gap:8px; flex-wrap:wrap; }
+  .reb-chip{ border:1px solid var(--border); background:var(--card); color:var(--text); padding:6px 10px; border-radius:999px; font-size:12px; cursor:pointer; user-select:none; }
+  .reb-chip.active{ outline:2px solid var(--primary); }
+  .reb-count{ margin-left:auto; font-size:12px; color:var(--muted); }
+  .rebItem{ border:1px solid var(--border); border-radius:12px; padding:12px; background:var(--card); box-shadow:var(--shadow); }
+  .rebItem h4{ display:flex; align-items:center; gap:8px; margin:0 0 6px; color:#fff; }
+  .reb-badge{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
+  .badge-finance   { background:rgba(46, 204, 113, .18); color:#b6f2c7; border:1px solid rgba(46,204,113,.35); }
+  .badge-schedule  { background:rgba(52, 152, 219, .18); color:#c5e7fb; border:1px solid rgba(52,152,219,.35); }
+  .badge-qualify   { background:rgba(241, 196, 15, .18); color:#fff0b3; border:1px solid rgba(241,196,15,.35); }
+  .badge-interest  { background:rgba(155, 89, 182, .18); color:#ead0f4; border:1px solid rgba(155,89,182,.35); }
+  .badge-policy    { background:rgba(230, 126, 34, .18); color:#ffd8b8; border:1px solid rgba(230,126,34,.35); }
+  .badge-brand     { background:rgba(127, 140, 141, .18); color:#e4ecec; border:1px solid rgba(127,140,141,.35); }
+  .badge-escalate  { background:rgba(192, 57, 43, .18);  color:#ffdada; border:1px solid rgba(192,57,43,.35); }
+  .reb-actions{ display:flex; gap:8px; align-items:center; margin-top:8px; }
+  .reb-copy{ border:1px dashed var(--border); background:transparent; color:var(--text); padding:6px 10px; border-radius:8px; font-size:12px; }
+
+  /* SMS drawer (narrow side panel) */
+  .drawer--sms{
+    position:fixed; top:0; right:-420px; width:380px; height:100vh; z-index:30;
+    background:#0b1220; border-left:2px solid var(--primary);
+    box-shadow:-8px 0 24px rgba(0,0,0,.45); transition:right .25s ease-out;
+    display:flex; flex-direction:column; color:#fff;
+  }
+  .drawer--sms.open{ right:0; }
+  .drawer--sms header{position:sticky; top:0; background:#0b1220; border-bottom:1px solid var(--border); padding:14px 16px; display:flex; justify-content:space-between; align-items:center}
+  .drawer--sms .body{padding:16px; overflow:auto}
+  .smsItem{border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:10px; background:var(--card)}
+  .smsItem h4{margin:0 0 6px; color:#fff}
+  .small{font-size:12px; color:#9ca3af}
+  .mini{font-size:12px; color:#bbb}
+  .sms-hidden{ display:none !important; }
+  mark.hl{background:#fde047;color:#111;padding:0 .12em;border-radius:2px}
+
+  /* Agent-only notes */
+  .note-yellow { color:#fde047; }
+  .note-yellow-all { color:#fde047; }
+  .step.agent-note { border-left-color:#fde047 !important; }
+
+  /* FABs and docks */
+  .fab, .fab-secondary{
+    position:fixed; right:20px; z-index:20; color:#fff; border:none; border-radius:999px;
+    padding:12px 16px; box-shadow:var(--shadow); font-weight:700; background:var(--primary);
+  }
+  .fab{ bottom:20px; }
+  .fab-secondary{ bottom:76px; background:#b82e22; }
+  .fab:hover{background:var(--primary-700)} .fab-secondary:hover{background:#9d281e}
+
+  .bot-dock{
+    position:fixed; right:84px; bottom:20px; z-index:50; width:420px; max-width:calc(100vw - 120px); height:72vh; max-height:86vh;
+    background:#0b1220; border:1px solid var(--border); border-radius:14px; box-shadow: var(--shadow);
+    display:none; flex-direction:column; overflow:hidden;
+  }
+  .bot-dock.open{ display:flex; }
+  .bot-dock header{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border); background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0));}
+  .bot-dock header strong{ font-size:14px; }
+  .bot-dock .bot-actions{ display:flex; gap:8px; align-items:center; }
+  .bot-dock button{ background:var(--card); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:8px; }
+  .bot-dock button.primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+  .bot-dock iframe{ width:100%; height:100%; border:0; background:#0b1220; }
+
+  @media (max-width: 720px){
+    .bot-dock{ right:16px; left:16px; width:auto; height:76vh; }
+    .fab{ right:16px; }
+    .fab-secondary{ right:16px; }
+  }
+
+  /* Admin UI */
+  .admin-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;display:none;align-items:center;justify-content:center}
+  .admin-modal{background:#0b1220;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);width:min(560px,92vw)}
+  .admin-modal header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .admin-modal .body{padding:16px}
+  .admin-modal input{width:100%;}
+  .admin-error{color:#ffb4b4;font-size:12px;margin-top:8px;display:none}
+  .admin-drawer{position:fixed;inset:0;z-index:55;background:#0b1220;transform:translateY(100%);transition:.25s ease-out;border-top:2px solid var(--primary);display:flex;flex-direction:column}
+  .admin-drawer.open{transform:translateY(0)}
+  .admin-drawer header{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .admin-drawer .body{padding:18px;overflow:auto}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(1,minmax(0,1fr))}
+  @media(min-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(min-width:1200px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:14px}
+  .kpi{font-size:28px;font-weight:800;margin:6px 0}
+  .muted-sm{font-size:12px;color:var(--muted)}
   .table{width:100%;border-collapse:collapse}
-  .table th,.table td{padding:6px 8px;border-top:1px solid var(--line);text-align:left}
-  .hint{border-left:3px solid #203049;padding:8px;background:#0b1220;border-radius:6px;color:#a8b6c9}
+  .table th,.table td{border-bottom:1px solid var(--border);padding:8px;text-align:left;font-size:13px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;border:1px solid var(--border);background:#111827}
+</style>
+
+<!-- Google CSE for Address Image Search (images only) -->
+<script async src="https://cse.google.com/cse.js?cx=c38c7e238b4984830"></script>
+<style>
+  /* Force typed text inside Google CSE search bar to black for readability */
+  .gsc-input input.gsc-input { color:#000 !important; }
+  .gssb_a, .gssb_a td { color:#000 !important; }
 </style>
 </head>
+
 <body>
-  <div class="bar">
-    <div class="bar-in">
-      <span class="brand">Flowmaster</span>
-      <a class="tab" href="/hub">Hub</a>
-      <a class="tab" href="/adherence/">Schedule</a>
-      <span id="meta" class="pill" style="margin-left:auto">Checking…</span>
-    </div>
-  </div>
-
-  <div class="wrap">
-    <div class="grid grid-2">
-      <!-- LEFT: queue / scripts / dispositions -->
-      <div class="panel" id="left">
-        <div class="section-title">
-          <strong>Queue</strong>
-          <div class="row small muted">
-            <span id="qsize">0</span>&nbsp;in queue
-          </div>
-        </div>
-        <div class="list" id="queue"></div>
-
-        <div class="section-title" style="margin-top:14px">
-          <strong>Script</strong>
-          <div class="row small"><span class="muted">copy</span>
-            <button class="btn" id="copyScript">Copy</button></div>
-        </div>
-        <select id="scriptSel" class="field sel">
-          <option value="default">General Outreach</option>
-          <option value="reminder">Appointment Reminder</option>
-          <option value="followup">Follow-up</option>
-        </select>
-        <textarea id="scriptBody" class="field mono" style="margin-top:8px"></textarea>
-
-        <div class="section-title" style="margin-top:14px">
-          <strong>Disposition</strong>
-          <span class="small muted">S to save</span>
-        </div>
-        <div class="row">
-          <select id="disp" class="field sel">
-            <option value="">— pick —</option>
-            <option>Contacted · Completed</option>
-            <option>Contacted · Reschedule</option>
-            <option>No Answer · VM left</option>
-            <option>Wrong Number</option>
-            <option>Do Not Call</option>
-          </select>
-          <button class="btn-ok" id="saveDisp">Save</button>
-        </div>
-      </div>
-
-      <!-- RIGHT: active contact / timer / tools -->
-      <div class="panel" id="right">
-        <div class="section-title">
-          <strong>Active Contact</strong>
-          <div class="row small muted">
-            <span class="tick off" id="timerLed"></span>
-            <span id="timer">00:00</span>
-            <button class="btn" id="start">Start</button>
-            <button class="btn" id="pause">Pause</button>
-            <button class="btn" id="reset">Reset</button>
-          </div>
-        </div>
-
-        <div class="split">
-          <div>
-            <div class="label small muted">Name</div>
-            <input id="cName" class="field"/>
-          </div>
-          <div>
-            <div class="label small muted">Phone</div>
-            <input id="cPhone" class="field mono"/>
-          </div>
-        </div>
-        <div style="margin-top:8px">
-          <div class="label small muted">Notes <span class="muted small">(autosaves · N to focus)</span></div>
-          <textarea id="notes" class="field mono" placeholder="Call outcomes, promises, blockers…"></textarea>
-        </div>
-
-        <div class="section-title" style="margin-top:14px">
-          <strong>Tools</strong>
-          <span class="small muted">calculator · quick links</span>
-        </div>
-        <div class="split">
-          <div class="card">
-            <div class="row">
-              <input id="calcIn" class="field mono" placeholder="1+2*3/4"/>
-              <button class="btn" id="calcBtn">=</button>
-            </div>
-            <div id="calcOut" class="mono small muted" style="margin-top:6px">—</div>
-          </div>
-          <div class="card">
-            <div class="row">
-              <input id="quickUrl" class="field" placeholder="https://app.example.com/ticket/123"/>
-              <button class="btn" id="goUrl">Go</button>
-              <button class="btn" id="copyUrl">Copy</button>
-            </div>
-            <div class="hint small" style="margin-top:6px">
-              Shortcuts:
-              <span class="kbd">N</span> notes ·
-              <span class="kbd">S</span> copy script ·
-              <span class="kbd">T</span> start/pause timer
-            </div>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:14px">
-          <table class="table small">
-            <thead><tr><th>Field</th><th>Value</th></tr></thead>
-            <tbody id="contactView"></tbody>
-          </table>
-        </div>
+<header>
+  <div class="container">
+    <div class="brandbar">
+      <img alt="Logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMQAAABBCAYAAACO2wsAAAAAAXNSR0IArs4c6QAAA..." style="height:38px"/>
+      <div>
+        <h1>📞 FlowMaster <span class="brandAccent">— Allstar Services</span></h1>
+        <div class="sub">Select a script, work each step in order. Use <strong>Rebuttal?</strong> in steps or tap <strong>Need a rebuttal?</strong>. Press <strong>Complete</strong> to reset.</div>
       </div>
     </div>
+
+    <div class="controlbar">
+      <label for="scriptSelect"><strong>Script:</strong></label>
+      <select id="scriptSelect" title="Choose a script to begin">
+        <option value="">— Select a Script —</option>
+        <option value="out_new">Outbound – New Lead</option>
+        <option value="out_aged">Outbound – Nurtured / Aged Lead</option>
+        <option value="out_agg">Outbound – Aggregator Lead (Lead Guru)</option>
+        <option value="in_new">Inbound – New Lead</option>
+        <option value="in_missed">Inbound – Missed Call / Callback</option>
+        <option value="in_resched">Inbound – Reschedule Appointment</option>
+        <option value="in_cancel">Inbound – Cancel Appointment</option>
+        <option value="in_where">Inbound – Where Is My Sales Agent?</option>
+        <option value="in_storm">Inbound – Storm Damage Call</option>
+        <option value="other_confirm">Appointment Confirmation (Live Call)</option>
+        <option value="other_vm">Appointment Confirmation (Voicemail)</option>
+      </select>
+      <button id="resetAll">↺ Reset</button>
+      <div style="margin-left:auto"></div>
+      <button id="adminBtn" class="copy" style="margin-left:auto">🛠️ Admin</button>
+    </div>
   </div>
+</header>
+
+<main class="container">
+  <section class="right">
+    <h3 class="sectionTitle" id="scriptTitle">Select a script to begin</h3>
+    <div class="steps" id="steps"></div>
+    <div class="footerbar">
+      <button class="primary" id="completeBtn">✅ Complete Call &amp; Reset</button>
+    </div>
+  </section>
+</main>
+
+<!-- Floating Buttons -->
+<button aria-controls="smsDrawer" aria-expanded="false" class="fab-secondary" id="openSms">💬 Sending a text?</button>
+<button aria-controls="rebuttalDrawer" aria-expanded="false" class="fab" id="openDrawer">❓ Need a rebuttal?</button>
+
+<!-- Rebuttals Drawer -->
+<aside aria-hidden="true" class="drawer--rebuttals" id="rebuttalDrawer">
+  <header>
+    <strong>Rebuttals — Quick Reference</strong>
+    <div class="row">
+      <button id="rebRefreshBtn" class="copy" type="button">↻ Refresh from Sheet</button>
+      <button class="primary" id="closeDrawer" style="padding:6px 10px;">✕ Close</button>
+    </div>
+  </header>
+  <div class="body">
+    <!-- Quick Rebuttal (AI + Library) -->
+    <div id="smartReb" style="margin-bottom:14px; border:1px dashed var(--border); border-radius:10px; padding:12px; background:rgba(255,255,255,.03)">
+      <div style="font-weight:700; margin-bottom:6px;">Quick Rebuttal</div>
+      <textarea id="objInput" rows="2" style="width:100%; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px" placeholder="Paste or type the caller’s objection…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button type="button" id="btnSuggest" class="copy">Suggest from Library</button>
+        <button type="button" id="btnGenerate" class="primary">AI Draft</button>
+      </div>
+      <div id="smartOut" class="scripttxt" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Filters + list -->
+    <div id="rebControls" class="reb-controls">
+      <input id="rebSearch" class="reb-search" type="search" placeholder="Search rebuttals (title or text)…" />
+      <div id="rebChips" class="reb-chips"></div>
+      <div id="rebCount" class="reb-count">Showing 0</div>
+    </div>
+    <div id="rebuttalRef"></div>
+  </div>
+</aside>
+
+<!-- SMS Drawer -->
+<aside aria-hidden="true" class="drawer--sms" id="smsDrawer">
+  <header>
+    <strong>SMS — Texting Assistant</strong>
+    <button class="primary" id="closeSms" style="padding:6px 10px;">✕ Close</button>
+  </header>
+  <div class="body">
+    <div class="smsItem">
+      <h4>🧠 Text Reply Assistant <span style="font-size:11px;background:rgba(255,255,255,.08);padding:2px 8px;border-radius:999px">beta</span></h4>
+      <div class="small">Fill once — all templates update live. Paste customer message and click <em>Suggest Reply</em>.</div>
+      <div class="row" style="margin-top:8px">
+        <input id="brandInput" placeholder="Brand (e.g., Allstar Roofing)" style="flex:1;"/>
+        <input id="nameInput" placeholder="Agent Name (e.g., Mia)" style="flex:1;"/>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="brandLink" placeholder="Brand Link (optional)" style="flex:1;"/>
+        <input id="custNameInput" placeholder="Customer First Name (optional)" style="flex:1;"/>
+      </div>
+      <textarea id="incomingText" placeholder="Paste customer text here…" rows="4" style="width:100%; margin-top:8px"></textarea>
+      <div class="row" style="margin-top:8px">
+        <label><input id="firstReplyToggle" type="checkbox"/> This is a first reply?</label>
+        <button class="primary" id="analyzeText">Suggest Reply</button>
+        <button class="copy" id="copySuggested">Copy Suggestion</button>
+      </div>
+      <div id="suggestedWrap" style="margin-top:8px; display:none">
+        <div class="small">Suggested reply (filled):</div>
+        <div class="scripttxt" id="suggestedText" style="border:1px dashed var(--border); padding:8px;"></div>
+      </div>
+    </div>
+
+    <div class="smsItem" id="smsSearchBlock">
+      <h4>🔎 Search Text Templates</h4>
+      <div class="small">Type to filter by title or text. Matches update live across templates and rebuttal texts.</div>
+      <div class="row" style="margin-top:8px">
+        <input id="smsSearch" placeholder="Search SMS templates and rebuttals…" style="flex:1;"/>
+        <span id="smsSearchCount" class="mini" style="min-width:120px;text-align:right">0 matches</span>
+      </div>
+    </div>
+
+    <div class="smsItem">
+      <h4>📲 Standard SMS Templates</h4>
+      <div class="small">“Filled preview” reflects the fields above. Use <em>Copy (filled)</em>.</div>
+      <div id="smsList"></div>
+    </div>
+
+    <div class="smsItem">
+      <h4>🧩 Rebuttal Texts (verbatim)</h4>
+      <div class="small">Mirrors voice rebuttals verbatim for texting.</div>
+      <div id="smsRebuttals"></div>
+    </div>
+  </div>
+</aside>
+
+<!-- Toast -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- AI Bot FAB + dock (you can point to a live bot page later) -->
+<button id="botFab" class="fab" type="button" aria-label="Open AI Assistant" aria-expanded="false" aria-controls="botDock" title="Open AI Assistant">🤖</button>
+<aside id="botDock" class="bot-dock" aria-hidden="true">
+  <header>
+    <strong>AI Assistant</strong>
+    <div class="bot-actions">
+      <button id="botClose" class="primary" type="button" title="Close">Close</button>
+    </div>
+  </header>
+  <iframe id="botFrame" src="" title="Embedded AI Assistant"></iframe>
+</aside>
+
+<!-- Address Image Search FAB + dock -->
+<button id="homeFab" class="fab-secondary" type="button" aria-label="Open Address Image Search" aria-expanded="false" aria-controls="homeDock" title="Open Address Image Search">🏠</button>
+<aside id="homeDock" class="home-dock bot-dock" aria-hidden="true" style="width:520px">
+  <header>
+    <strong>Address Image Search <span style="font-size:11px;opacity:.75;">(images only)</span></strong>
+    <div class="bot-actions">
+      <button id="homeClose" class="primary" type="button" title="Close">Close</button>
+    </div>
+  </header>
+  <div style="flex:1;overflow:auto;padding:10px;">
+    <div class="small" style="opacity:.8;margin-bottom:8px;">Enter a full street address (e.g., “123 Main St, Phoenix AZ”). Results render in this panel.</div>
+    <div class="gcse-search" id="addrSearchWidget"></div>
+  </div>
+</aside>
+
+<!-- ADMIN PASSWORD MODAL -->
+<div id="adminBackdrop" class="admin-backdrop" aria-hidden="true">
+  <div class="admin-modal" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+    <header>
+      <strong id="adminTitle">Admin Access</strong>
+      <button id="adminClose" class="copy" type="button">✕</button>
+    </header>
+    <div class="body">
+      <div class="small" style="margin-bottom:6px">Enter full name to continue (case-insensitive):</div>
+      <input id="adminPassword" placeholder="e.g., MiaMurray" autocomplete="off"/>
+      <div id="adminErr" class="admin-error">Name not recognized.</div>
+      <div class="row" style="margin-top:10px">
+        <button id="adminSubmit" class="primary" type="button">Unlock</button>
+        <button id="adminCancel" class="copy" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN DASHBOARD DRAWER -->
+<aside id="adminDrawer" class="admin-drawer" aria-hidden="true">
+  <header>
+    <strong>Admin Dashboard</strong>
+    <div class="row">
+      <button id="adminRefresh" class="copy" type="button">↻ Refresh</button>
+      <button id="adminExport" class="copy" type="button">⬇ Export Events (JSON)</button>
+      <button id="adminLogout" class="copy" type="button">Sign out</button>
+      <button id="adminDrawerClose" class="primary" type="button">✕ Close</button>
+    </div>
+  </header>
+  <div class="body">
+    <div id="adminStatus" class="muted" style="margin-bottom:10px">Loading stats…</div>
+    <div class="grid">
+      <div class="card"><div class="muted">Total Events</div><div id="kpiEvents" class="kpi">—</div></div>
+      <div class="card"><div class="muted">Rebuttals Saved</div><div id="kpiSaves" class="kpi">—</div></div>
+      <div class="card"><div class="muted">AI Drafts</div><div id="kpiAI" class="kpi">—</div></div>
+      <div class="card"><div class="muted">Copy (Voice)</div><div id="kpiCopyVoice" class="kpi">—</div></div>
+      <div class="card"><div class="muted">Copy (SMS)</div><div id="kpiCopySMS" class="kpi">—</div></div>
+      <div class="card"><div class="muted">Saved in Sheet</div><div id="kpiSavedSheet" class="kpi">—</div></div>
+      <div class="card"><div class="muted">Events by Category</div><div id="catList" class="muted-sm">—</div></div>
+      <div class="card">
+        <div class="muted">Top Rebuttals</div>
+        <table class="table" id="topRebTable"><thead><tr><th>Title</th><th>Count</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <div class="muted">Most Used Scripts</div>
+        <table class="table" id="topScripts"><thead><tr><th>Script</th><th>Count</th></tr></thead><tbody></tbody></table>
+        <div class="muted-sm">Tip: log “script selected” as an event for richer data.</div>
+      </div>
+    </div>
+  </div>
+</aside>
 
 <script>
-/* isolate Flowmaster to avoid leaking globals on the site */
-(() => {
-  const qs = s=>document.querySelector(s), el=(t,a,...c)=>{const n=document.createElement(t);if(a)Object.entries(a).forEach(([k,v])=>k==='class'?n.className=v:k==='style'?Object.assign(n.style,v):k.startsWith('on')?n.addEventListener(k.slice(2),v):n.setAttribute(k,v));c.flat().forEach(x=>n.append(x?.nodeType?x:document.createTextNode(x??'')));return n;}
-  const store = (k,v)=> v===undefined ? JSON.parse(localStorage.getItem(k)||'null') : localStorage.setItem(k,JSON.stringify(v));
-  const compact = s=>String(s||'').trim();
-
-  // ---- auth gate ----
-  async function whoami(){
-    const r = await fetch('/api/whoami',{credentials:'include'});
-    if(!r.ok) throw new Error('unauth');
-    return r.json();
-  }
-
-  // ---- scripts ----
-  const SCRIPTS = {
-    default: `Hi, this is {{agent}} with Allstar. I’m calling for {{name}} regarding your schedule. Do you have a minute?
-\n[If yes] Great! Let’s confirm your shift for {{date}} at {{time}}.\n[If no] No worries—what time should I call back?`,
-    reminder: `Friendly reminder: your shift is {{date}} at {{time}}. Please arrive 10 minutes early. Need help? Reply here.`,
-    followup: `Checking in from Allstar—how did your shift go today? Any issues we should know about?`
+/* ====================== tiny utils + toasts ====================== */
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block';
+  setTimeout(()=>{t.style.display='none';},1400);
+}
+async function copyText(text){
+  try{
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+    }else{
+      const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.left='-9999px';
+      document.body.appendChild(ta); ta.focus(); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    toast('Copied!');
+  }catch{ toast('Copy failed'); }
+}
+function fill(msg, data){
+  return msg
+    .split('[Brand Name]').join(data.brand||'[Brand Name]')
+    .split('[Brand]').join(data.brand||'[Brand]')
+    .split('[Your Name]').join(data.agent||'[Your Name]')
+    .split('[Agent Name]').join(data.agent||'[Agent Name]')
+    .split('[Customer Name]').join(data.cust||'[Customer Name]')
+    .split('[Customer First Name]').join(data.cust||'[Customer First Name]')
+    .split('[Name]').join(data.cust||'[Name]')
+    .split('[Link]').join(data.link||'[Link]');
+}
+function dataNow(){
+  return {
+    brand: document.getElementById('brandInput')?.value.trim() || '',
+    agent: document.getElementById('nameInput')?.value.trim() || '',
+    cust:  document.getElementById('custNameInput')?.value.trim() || '',
+    link:  document.getElementById('brandLink')?.value.trim() || ''
   };
+}
+</script>
 
-  // ---- timer ----
-  let tick=null, secs=0, running=false;
-  const setTimer = v => { secs=v; qs('#timer').textContent = new Date(secs*1000).toISOString().slice(14,19); };
-  const led = on => { const d=qs('#timerLed'); d.classList.remove('on','off'); d.classList.add(on?'on':'off'); };
+<script>
+/* ====================== Rebuttals Library ====================== */
+const REBUTTALS = [
+  { key:'dnc', title:'Do Not Contact / Escalated Customer',
+    text:`“I completely understand the frustration, and I want to apologize for the inconvenience. I’ll make sure your contact information is removed from our lists right away, so you won’t receive further communication from us.” 
 
-  function startTimer(){ if(running) return; running=true; led(true); tick=setInterval(()=>setTimer(secs+1),1000); }
-  function pauseTimer(){ if(!running) return; running=false; led(false); clearInterval(tick); }
-  function resetTimer(){ pauseTimer(); setTimer(0); }
+If persistent & asks for Supervisor: Use de-escalation techniques  
 
-  // ---- queue demo (local) ----
-  function demoQueue(me){
-    const key = `fm.queue.${me.username}`;
-    let q = store(key);
-    if(!Array.isArray(q) || !q.length){
-      q = [
-        {id:'A-1023', name:'Jordan Cole', phone:'(555) 201-8842'},
-        {id:'A-1024', name:'Sam Rivera', phone:'(555) 201-8853'},
-        {id:'A-1025', name:'Terry Chen', phone:'(555) 201-8864'},
-      ];
-      store(key,q);
-    }
-    const host=qs('#queue'); host.innerHTML='';
-    q.forEach((row,i)=>{
-      host.append(el('div',{class:'li row',style:{justifyContent:'space-between'}},
-        el('div',{}, el('div',{}, row.name), el('div',{class:'small muted mono'}, row.phone)),
-        el('div',{},
-          el('button',{class:'btn',onclick:()=>pick(i)},'Load'),
-          ' ',
-          el('button',{class:'btn',onclick:()=>done(i)},'Done'))));
+Assure the caller you will take the appropriate actions to remove their number from our dialer and confirm effective immediately they have been placed on our Do Not Call list. Apologize once again and close the call.
+If the customer persists, transfer to the onsite call center manager.` },
+
+  { key:'other_provider1', title:'Already Chose Another Provider — Work hasn’t started',
+    text:`“I respect that. I’d still love to offer you a free inspection. You’ll get a detailed report on your roof’s condition and lifespan — that way you can compare notes and ensure you’re getting the best value. Can I get you scheduled?”` },
+
+  { key:'other_provider2', title:'Already Chose Another Provider — Work started or complete',
+    text:`“Understood — thanks for your time today. If you need us in the future, you can always reach us at [phone/website].”` },
+
+  { key:'finance1', title:'Financial Concerns — First step',
+    text:`I completely understand. We work with 4 different lenders to offer flexible financing options, including no payments for a set term or low interest rates. Everything’s pending approval but having multiple lenders increases your chances of finding a plan that works. 
+We can go over all the details during your free estimate — when’s a good time to get you scheduled?` },
+
+  { key:'finance2', title:'Financial Concerns — If still resistant',
+    text:`“I completely understand. The good news is we’re running a Labor Day Discount — $2,000 off a new roof. We can review the details during your free estimate. Can I get you booked?”` },
+
+  { key:'selling', title:'Selling the Home',
+    text:`“Thanks for sharing that. When do you plan to put the house on the market? Are you looking to complete the roof project before selling? If so, a free inspection can identify any repairs that could increase your home’s value and help you secure the best possible offer. Would you like me to check my calendar for an appointment?”
+
+If a customer is simply looking for a free estimate driven by a real-estate agent/broker:
+“At this time, we reserve our free roofing estimates for homeowners who are actively considering a roof replacement. Based on what you’ve shared, it sounds like you’re not looking to move forward with a roofing project right now, so we may not be the best fit at this time. If your plans change, we’d be happy to assist you with a full estimate.”` },
+
+  { key:'brand_location', title:'Questions About Brand or Location',
+    text:`“You’ve reached the booking department for [Brand]. Our headquarters are in [HQ Location], and our booking team is based in Arizona. Certain calls are routed here so we can schedule efficiently for your area.”` },
+
+  { key:'not_interested', title:'Not Interested / Changed Their Mind',
+    text:`“I understand you may have something else in mind. Before I let you go, is there anything else we can assist with regarding roofing? If not, no worries — I appreciate your time today. For future roofing needs, you can always reach us at [phone/website].”
+
+If yes:
+“Perfect — let’s get you scheduled for a free consultation. I just need a few quick details.”` },
+
+  { key:'money_variant', title:'“I don’t have money / broke / low credit / fixed income / military discount / free roof”',
+    text:`“I completely understand. We work with four different lenders to offer financing — including no payments for a set term or low interest rates. Because we partner with multiple lenders, your chances of approval are much higher. We can go over the details during your free estimate. Would you like to check the calendar for a time?”
+
+If still resistant:
+“I completely understand. The good news is we’re offering a Labor Day Discount — $2,000 off a new roof. Let’s at least get you scheduled for a free inspection, so you’ll know exactly where things stand.”` },
+
+  { key:'spouse', title:'Need to Talk to Spouse / Other Homeowner',
+    text:`“I completely understand. We actually require that all homeowners be present for the appointment so everyone hears the same information and can make decisions together. What’s a good time when you’ll both be available?”` },
+
+  { key:'busy', title:'Too Busy / No Time',
+    text:`“I hear you — that’s exactly why the inspection only takes about 60 minutes, and we can work around your schedule. Do mornings or evenings usually work better for you?”` },
+
+  { key:'price_phone', title:'Just Want a Price Over the Phone',
+    text:`“I understand. The issue is every roof is different, so any price over the phone would just be a guess. The inspection is free, and it ensures you get an accurate estimate. Let’s get you scheduled so you have realistic numbers.”` },
+
+  { key:'roof_ok', title:'My Roof Seems Fine / No Issues',
+    text:`“That’s great to hear. A free inspection is proactive — it helps catch hidden issues before they become expensive repairs. It only takes 60 minutes, and it gives you peace of mind. Would you like me to check my calendar for a time?”` },
+
+  { key:'repairs_only', title:'Only Want Repairs (Not Full Replacement)',
+    text:`“I understand. We specialize in full roof replacements and gutters. If that’s what you need, we can absolutely help. But if you’re only looking for a small patch or repair, we may not be the right fit.”` },
+
+  { key:'price_match', title:'Price Match / Better Quote',
+    text:`“I completely understand wanting the best price. We provide a detailed, apples-to-apples proposal so you can compare fairly. If you receive a lower written quote for comparable materials and scope, we’re happy to review it together and see what we can do. Let’s keep your free inspection so you have a precise, written estimate to compare.”` },
+
+  { key:'insurance_only', title:'Insurance-Only / Claim-First',
+    text:`“Thanks for letting me know. We work with many homeowners who have insurance claims. The first step is a thorough inspection and photo documentation so you know exactly what’s covered and what isn’t. Your specialist can also explain how estimates align with common carrier requirements. Would mornings or late afternoons work to get you on the schedule?”` },
+
+  { key:'gutter_only', title:'Gutters-Only Request',
+    text:`“I appreciate you reaching out. We specialize in full roof replacements and gutters as part of a replacement. If you’re only looking for a standalone gutter project, we may not be the best fit. However, if you’re considering a roof project now or soon, we can absolutely include new gutters in the proposal.”` },
+
+  { key:'hour_too_long', title:'Hour Seems Too Long',
+    text:`“Our inspections are scheduled for about an hour. The actual roof inspection itself usually takes around 30 minutes, give or take. The rest of the time is set aside for your representative to sit down with you, review their findings in detail, and answer any questions you may have.
+
+Optional: This way, you’ll have a clear understanding of your roof’s condition and next steps.”` }
+];
+
+const CATEGORY_MAP = {
+  dnc:'escalate', other_provider1:'interest', other_provider2:'interest',
+  finance1:'finance', finance2:'finance', selling:'qualify', brand_location:'brand',
+  not_interested:'interest', money_variant:'finance', spouse:'schedule', busy:'schedule',
+  price_phone:'qualify', roof_ok:'qualify', repairs_only:'policy',
+  price_match:'finance', insurance_only:'qualify', gutter_only:'policy', hour_too_long:'schedule'
+};
+const CATEGORY_LABEL = {
+  finance:'Finance', schedule:'Scheduling', qualify:'Qualification', interest:'Interest',
+  policy:'Policy / Scope', brand:'Brand / Location', escalate:'De-escalation'
+};
+const CATEGORY_ORDER = ['finance','schedule','qualify','interest','policy','brand','escalate'];
+function catOf(r){ return CATEGORY_MAP[r.key] || 'qualify'; }
+function badgeClass(cat){
+  return {
+    finance:'badge-finance', schedule:'badge-schedule', qualify:'badge-qualify',
+    interest:'badge-interest', policy:'badge-policy', brand:'badge-brand', escalate:'badge-escalate'
+  }[cat] || 'badge-qualify';
+}
+</script>
+
+<script>
+/* ====================== Scripts (call flows) ====================== */
+const OUTBOUND_MONITOR = `Before we continue, I do want to let you know this call may be monitored or recorded for quality and training purposes.`;
+
+const SCRIPTS = {
+  out_new:{name:"Outbound – New Lead",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Hi, this is [Your Name] calling from [Brand]. How are you doing today?\n\n${OUTBOUND_MONITOR}`},
+    {type:'text',label:'Value',text:`I see you submitted your information through one of our trusted partners about roofing help. We’d like to get you scheduled with one of our representatives for a free, no-obligation estimate for <strong>SINGLE FAMILY RESIDENTIAL HOMES</strong>. It only takes about 60 minutes and will give you a clear picture of your roof’s condition.`},
+    {type:'text',label:'👉 Transition to scheduling',text:`Can I get you scheduled for your free estimate?`},
+    {type:'text',label:'Service Area Check — Detroit (New Leads Only)',text:`<div class='callout'>Please confirm the full property address to ensure the home is in our **service area**.\n\n<strong>Effective immediately, we do not service the City of Detroit.</strong>\nIf the address is in Detroit, use this exact language (do not share internal reasons):\n“Mr./Mrs. [Customer], thank you for reaching out. Unfortunately, your location is outside of our service area, so we’re not able to assist at this time.”\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`},
+    {type:'list',label:'Qualifying Questions',text:`Please verify the name and spelling of your first and last name.\n\nPlease verify the property address?\n\nAre you the homeowner? *\n\nIs your house currently for sale?\n\nIf yes: When do you plan on putting the house on the market?\n\nIf yes: Are you looking to complete the roof project prior to selling?\n\nWill all homeowners be able to attend appointments?\n\nHow old is your roof? (years) *\n\nIs this a residential property? *\n\nAre you experiencing any active leaks? *\n\nIf yes: We specialize in full roof replacements — if that’s what you need, we can help. But if you’re only looking for a quick leak repair, we may not be the right fit.`},
+    {type:'text',label:'Time Zone Note',text:`<div class='callout'>For Rapid & Craftsmen Appts add 3 hours to local time\n\nFor Allstar Appts add 2 hours to local time\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`},
+    {type:'text',label:'Close',text:`“Thanks for booking with us! A rep will meet you at your scheduled time. We’ll call within 48 hours prior and send text reminders. Please be sure to confirm your appointment — if we don’t hear back at least 24 hrs. before, the appointment will be canceled. To reschedule or cancel, just call us.”`}
+  ]},
+
+  out_aged:{name:"Outbound – Nurtured / Aged Lead",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Hi, this is [Your Name] with [Brand]. I’m reaching out because you requested roofing help some time ago, but we haven’t been able to connect.\n\n${OUTBOUND_MONITOR}`},
+    {type:'text',label:'Status Check',text:`Has the project been taken care of yet — or do you still need a professional to take a look?`},
+    {type:'text',label:'Value',text:`If not, we can get a representative out for a free, no-obligation estimate for <strong>SINGLE FAMILY RESIDENTIAL HOMES</strong>. It’s quick, and it’ll give you a clear idea of where things stand.`},
+    {type:'text',label:'👉 Transition to scheduling',text:`Can I get you scheduled for your free estimate?`},
+    {type:'list',label:'Qualifying Questions',text:`Please verify the name and spelling of your first and last name.\n\nPlease verify the property address?\n\nAre you the homeowner? *\n\nIs your house currently for sale?\n\nIf yes: When do you plan on putting the house on the market?\n\nIf yes: Are you looking to complete the roof project prior to selling?\n\nWill all homeowners be able to attend appointments?\n\nHow old is your roof? (years) *\n\nIs this a residential property? *\n\nAre you experiencing any active leaks? *\n\nIf yes: We specialize in full roof replacements — if that’s what you need, we can help. But if you’re only looking for a quick leak repair, we may not be the right fit.`},
+    {type:'text',label:'Close',text:`“Thanks for booking with us! A rep will meet you at your scheduled time. We’ll call within 48 hours prior and send text reminders. Please be sure to confirm your appointment — if we don’t hear back at least 24 hrs. before, the appointment will be canceled. To reschedule or cancel, just call us.”`}
+  ]},
+
+  out_agg:{name:"Outbound – Aggregator Lead (Lead Guru)",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Hi, this is [Your Name] with [Brand]. I can see your request came through with a preferred booking time — thank you for sharing that!\n\n${OUTBOUND_MONITOR}`},
+    {type:'text',label:'👉 Transition to scheduling',text:`Can I get you scheduled for your free estimate?`},
+    {type:'list',label:'Qualifying Questions',text:`Please verify the name and spelling of your first and last name.\n\nPlease verify the property address?\n\nAre you the homeowner? *\n\nIs your house currently for sale?\n\nIf yes: When do you plan on putting the house on the market?\n\nIf yes: Are you looking to complete the roof project prior to selling?\n\nWill all homeowners be able to attend appointments?\n\nHow old is your roof? (years) *\n\nIs this a residential property? *\n\nAre you experiencing any active leaks? *\n\nIf yes: We specialize in full roof replacements — if that’s what you need, we can help. But if you’re only looking for a quick leak repair, we may not be the right fit.`},
+    {type:'text',label:'Close',text:`“Thanks for booking with us! A rep will meet you at your scheduled time. We’ll call within 48 hours prior and send text reminders. Please be sure to confirm your appointment — if we don’t hear back at least 24 hrs. before, the appointment will be canceled. To reschedule or cancel, just call us.”`}
+  ]},
+
+  in_new:{name:"Inbound – New Lead",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Thank you for calling [Brand], my name is [Your Name]. How can I help you today?`},
+    {type:'text',label:'Value',text:`Perfect — we can schedule you for a free, no-obligation inspection for <strong>SINGLE FAMILY RESIDENTIAL HOMES</strong> with one of our specialists. It only takes about 60 minutes and will give you a full report on your roof’s condition.`},
+    {type:'text',label:'👉 Transition to scheduling',text:`Can I get you scheduled for your free estimate?`},
+    {type:'text',label:'Service Area Check — Detroit (New Leads Only)',text:`<div class='callout'>Please confirm the full property address to ensure the home is in our **service area**.\n\n<strong>Effective immediately, we do not service the City of Detroit.</strong>\nIf the address is in Detroit, use this exact language (do not share internal reasons):\n“Mr./Mrs. [Customer], thank you for reaching out. Unfortunately, your location is outside of our service area, so we’re not able to assist at this time.”\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`},
+    {type:'list',label:'Qualifying Questions',text:`Please verify the name and spelling of your first and last name.\n\nPlease verify the property address?\n\nAre you the homeowner? *\n\nIs your house currently for sale?\n\nIf yes: When do you plan on putting the house on the market?\n\nIf yes: Are you looking to complete the roof project prior to selling?\n\nWill all homeowners be able to attend appointments?\n\nHow old is your roof? (years) *\n\nIs this a residential property? *\n\nAre you experiencing any active leaks? *\n\nIf yes: We specialize in full roof replacements — if that’s what you need, we can help. But if you’re only looking for a quick leak repair, we may not be the right fit.`},
+    {type:'text',label:'Time Zone Note',text:`<div class='callout'>For Rapid & Craftsmen Appts add 3 hours to local time\n\nFor Allstar Appts add 2 hours to local time\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`},
+    {type:'text',label:'Close',text:`We’re looking forward to meeting with you. You’ll receive confirmation 24–48 hours prior.`}
+  ]},
+
+  in_missed:{name:"Inbound – Missed Call / Callback",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Thank you for calling [Brand], my name is [Your Name]. I noticed we missed your call earlier, so I wanted to follow up.`},
+    {type:'text',label:'Purpose Check',text:`Were you calling about roofing help for a residential property?`},
+    {type:'text',label:'Value',text:`Great — we can schedule you for a free, no-obligation inspection for <strong>SINGLE FAMILY RESIDENTIAL HOMES</strong>. It only takes about 60 minutes and will give you a full report on your roof’s condition.`},
+    {type:'text',label:'👉 Transition to scheduling',text:`Can I get you scheduled for your free estimate?`},
+    {type:'list',label:'Qualifying Questions',text:`(same as above)`},
+    {type:'text',label:'Time Zone Note',text:`<div class='callout'>For Rapid & Craftsmen Appts add 3 hours to local time\n\nFor Allstar Appts add 2 hours to local time\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`},
+    {type:'text',label:'Close',text:`Thanks — you’ll get reminders and a confirmation before your appointment.`}
+  ]},
+
+  in_resched:{name:"Inbound – Reschedule Appointment",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Thank you for calling [Brand], my name is [Your Name]. How can I help you today?`},
+    {type:'text',label:'Acknowledge',text:`No problem, we can get that rescheduled for you.`},
+    {type:'list',label:'Confirm',text:`Name\n\nProperty address\n\nPreferred phone number`},
+    {type:'text',label:'Offer Times',text:`I have ____ and _____ available. What works for you?`},
+    {type:'text',label:'Time Zone Note',text:`<div class='callout'>For Rapid & Craftsmen Appts add 3 hours to local time\n\nFor Allstar Appts add 2 hours to local time\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`},
+    {type:'text',label:'Close',text:`Got it — your appointment has been rescheduled. You’ll receive confirmation 24–48 hours prior.`}
+  ]},
+
+  in_cancel:{name:"Inbound – Cancel Appointment",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Thank you for calling [Brand], my name is [Your Name]. How can I help you today?`},
+    {type:'text',label:'Empathy',text:`I’m sorry to hear you need to cancel. Let me confirm a few details before I update our records.`},
+    {type:'list',label:'Confirm',text:`Name\n\nProperty address\n\nReason for cancellation`},
+    {type:'text',label:'Rebuttal (once)',text:`I completely understand. Just to note, the inspection is free and only takes 60 minutes. It’s often the best way to know where things stand, even if you’re not ready to move forward right away. Would you like me to keep you on the calendar so you still have the option?`},
+    {type:'text',label:'Same-Day Cancellation Warning',text:`<div class='callout'>If the customer cancels for <strong>today</strong>, immediately send a same-day cancellation note in Teams. Use the “Same-Day Cancellation — Teams” template in the SMS drawer (Template #2) so Sales Managers see it right away.</div>`},
+    {type:'text',label:'If Still Cancel',text:`Understood. I’ll update our records. If you ever need help in the future, you can always reach us at [website/phone].`}
+  ]},
+
+  in_where:{name:"Inbound – Where Is My Sales Agent?",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Thank you for calling [Brand], my name is [Your Name]. How can I help you today?`},
+    {type:'text',label:'Empathy',text:`I completely understand your concern. Let me get a few details so I can check on this for you.`},
+    {type:'list',label:'Confirm',text:`Name\n\nProperty address\n\nPreferred phone number`},
+    {type:'text',label:'Internal Handoff',text:`Reach out to Sales Manager via Teams using the Brand’s Customer Follow-Up thread.\nUse this template:\n\nHi, ________. Customer was scheduled for _____am/pm, and rep has not arrived; they are looking for an updated ETA.\n\nCustomer Name:\nProperty Address:\nPhone #:\n\nDo we have any information available I can relay to the customer?\nThank you!`},
+    {type:'text',label:'Close (to customer)',text:`We’re working on getting an update right now. I can call you back as soon as I get in touch with our Dispatch office.`}
+  ]},
+
+  in_storm:{name:"Inbound – Storm Damage Call",steps:[
+    {type:'text',label:'Greeting & Intro',text:`Thank you for calling [Brand], my name is [Your Name]. How can I help you today?`},
+    {type:'text',label:'Empathy',text:`I’m sorry to hear that — I know how stressful storm damage can be.`},
+    {type:'text',label:'Probe',text:`Is this related to an insurance claim?\nIf yes → warm transfer to brand.\nIf no → treat as a new lead and book inspection.`},
+    {type:'text',label:'Booking',text:`We can send a specialist out for a free, no-obligation inspection for <strong>SINGLE FAMILY RESIDENTIAL HOMES</strong>. It only takes about 60 minutes and will give you a clear understanding of the damage.`},
+    {type:'list',label:'Qualifying Questions',text:`(same as above)`},
+    {type:'text',label:'Time Zone Note',text:`<div class='callout'>For Rapid & Craftsmen Appts add 3 hours to local time\n\nFor Allstar Appts add 2 hours to local time\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`},
+    {type:'text',label:'Close',text:`Thanks — you’ll get confirmation 24–48 hours prior.`}
+  ]},
+
+  other_confirm:{name:"Appointment Confirmation (Live Call)",steps:[
+    {type:'text',label:'Confirm',text:`Hi [Customer Name], this is [Your Name] with [Brand]. I’m calling to confirm your free roofing estimate scheduled for [Date] at [Local Time].`},
+    {type:'text',label:'Same-Day Cancellation Warning',text:`<div class='callout'>If the customer cancels for <strong>today</strong>, immediately send a same-day cancellation note in Teams. Use the “Same-Day Cancellation — Teams” template in the SMS drawer (Template #2) so Sales Managers see it right away.</div>`},
+    {type:'text',label:'Set Expectations',text:`Your sales representative will arrive on time, perform a full inspection of your roof, and then walk you through their findings in detail. To help us keep things efficient, please make sure there’s clear access to the areas they’ll need to inspect.`},
+    {type:'text',label:'Time Zone Note',text:`<div class='callout'>For Rapid & Craftsmen Appts add 3 hours to local time\n\nFor Allstar Appts add 2 hours to local time\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`},
+    {type:'text',label:'Close',text:`We’re looking forward to meeting with you and providing your estimate!`}
+  ]},
+
+  other_vm:{name:"Appointment Confirmation (Voicemail)",steps:[
+    {type:'text',label:'VM Intro',text:`Hi [Customer Name], this is [Your Name] with [Brand]. I’m calling to confirm your free roofing estimate scheduled for [Date] at [Time].`},
+    {type:'text',label:'VM Body',text:`Your representative will be arriving to perform a full inspection of the roof and walk you through their findings. Please make sure there’s access to the areas they’ll need to inspect.`},
+    {type:'text',label:'VM Cancellation Warning',text:`If we don’t hear back from you by the end of the day to confirm or reschedule, we’ll need to cancel the appointment to avoid a missed connection.`},
+    {type:'text',label:'Same-Day Cancellation Warning',text:`<div class='callout'>If the customer cancels for <strong>today</strong>, immediately send a same-day cancellation note in Teams. Use the “Same-Day Cancellation — Teams” template in the SMS drawer (Template #2) so Sales Managers see it right away.</div>`},
+    {type:'text',label:'VM Close',text:`You can call or text us back at this number — we’d be happy to get everything confirmed. Thanks again, and we hope to hear from you soon!`},
+    {type:'text',label:'Time Zone Note',text:`<div class='callout'>For Rapid & Craftsmen Appts add 3 hours to local time\n\nFor Allstar Appts add 2 hours to local time\n\n<span class='muted'>(Agent note — do not read aloud)</span></div>`}
+  ]}
+};
+</script>
+
+<script>
+/* ====================== Script Renderer ====================== */
+const scriptSelect = document.getElementById('scriptSelect');
+const stepsEl      = document.getElementById('steps');
+const titleEl      = document.getElementById('scriptTitle');
+const completeBtn  = document.getElementById('completeBtn');
+
+function stepEl(step, idx, total){
+  const wrap=document.createElement('div'); wrap.className='step'; if(idx===0) wrap.classList.add('visible');
+  const head=document.createElement('h4');
+  head.innerHTML = `${idx+1}. ${step.label} <span class="labelBadge">${step.type==='rebuttal'?'Optional':'Step'}</span>`;
+  const body=document.createElement('div'); body.className='scripttxt'; body.innerHTML=(step.text||'').replace(/\n/g,'<br>');
+  wrap.appendChild(head); wrap.appendChild(body);
+
+  if(step.type==='rebuttal'){
+    const dd=document.createElement('select');
+    dd.innerHTML = `<option value="">— Rebuttal? Choose an objection —</option>` + REBUTTALS.map(r=>`<option value="${r.key}">${r.title}</option>`).join('');
+    const box=document.createElement('div'); box.className='rebuttalBox'; box.style.display='none';
+    const rbT=document.createElement('div'); rbT.style.fontWeight='700';
+    const rbC=document.createElement('div'); rbC.className='scripttxt';
+    box.appendChild(rbT); box.appendChild(rbC);
+    wrap.appendChild(document.createElement('div')).innerHTML=`<div class="callout">If the caller hesitates, pick an objection and address it before scheduling.</div>`;
+    wrap.appendChild(dd); wrap.appendChild(box);
+    dd.addEventListener('change',()=>{
+      const sel=REBUTTALS.find(r=>r.key===dd.value);
+      if(sel){ box.style.display='block'; rbT.textContent=sel.title; rbC.innerHTML=sel.text.replace(/\n/g,'<br>'); }
+      else{ box.style.display='none'; }
     });
-    qs('#qsize').textContent=q.length;
-
-    function pick(i){
-      const c=q[i];
-      qs('#cName').value=c.name;
-      qs('#cPhone').value=c.phone;
-      renderKV();
-      // load a script with tokens:
-      applyScript();
-      // reset timer
-      resetTimer();
-    }
-    function done(i){
-      q.splice(i,1); store(key,q); demoQueue(me);
-    }
   }
 
-  // ---- scripts handling ----
-  function applyScript(){
-    const sel = qs('#scriptSel').value;
-    const body = SCRIPTS[sel] || SCRIPTS.default;
-    const tokens = {
-      agent: (window.__me?.username)||'Agent',
-      name: qs('#cName').value||'there',
-      date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString()
-    };
-    const out = body.replace(/\{\{(\w+)\}\}/g,(_,k)=> tokens[k]||'');
-    qs('#scriptBody').value = out;
-  }
+  const foot=document.createElement('div'); foot.className='foot';
+  const row=document.createElement('div'); row.className='row';
+  const copyBtn=document.createElement('button'); copyBtn.className='copy'; copyBtn.textContent='Copy';
+  copyBtn.addEventListener('click',()=> { copyText(body.textContent); logEvent('copy_voice'); });
+  row.appendChild(copyBtn);
+  const lab=document.createElement('label'); lab.innerHTML=`<input type="checkbox" class="checkbox"> Mark step complete`;
+  row.appendChild(lab); foot.appendChild(row);
+  const prog=document.createElement('div'); prog.className='muted'; prog.textContent=`Step ${idx+1} of ${total}`; foot.appendChild(prog);
+  wrap.appendChild(foot);
 
-  // ---- disposition save (local) ----
-  function saveDisp(){
-    const d = compact(qs('#disp').value);
-    if(!d) return alert('Pick a disposition');
-    const key = `fm.disp.${window.__me.username}`;
-    const list = store(key)||[];
-    list.unshift({at:Date.now(), c:qs('#cName').value, p:qs('#cPhone').value, d});
-    store(key,list.slice(0,200));
-    alert('Saved');
-  }
+  lab.querySelector('input').addEventListener('change',e=>{
+    if(!e.target.checked) return;
+    const next=wrap.nextElementSibling; if(next) next.classList.add('visible'); else completeBtn.style.display='inline-block';
+  });
+  return wrap;
+}
 
-  // ---- contact details view ----
-  function renderKV(){
-    const t=qs('#contactView'); t.innerHTML='';
-    const add=(k,v)=> t.append(el('tr',{}, el('td',{class:'muted small'},k), el('td',{}, v||'—')));
-    add('Name',qs('#cName').value);
-    add('Phone',qs('#cPhone').value);
-    add('Notes',qs('#notes').value?.slice(0,120)+'…');
-    const lastDisp=(store(`fm.disp.${window.__me.username}`)||[])[0];
-    if(lastDisp) add('Last Disposition', `${new Date(lastDisp.at).toLocaleString()} — ${lastDisp.d}`);
-  }
+function loadScript(key){
+  stepsEl.innerHTML=''; completeBtn.style.display='none';
+  if(!key || !SCRIPTS[key]){ titleEl.textContent='Select a script to begin'; return; }
+  const def=SCRIPTS[key]; titleEl.textContent=def.name;
+  def.steps.forEach((s,i)=> stepsEl.appendChild(stepEl(s,i,def.steps.length)));
+  logEvent('script_select', { key });
+}
 
-  // ---- tools ----
-  function calcEval(){
-    const s = qs('#calcIn').value;
-    try{
-      // safe-ish evaluator for + - * / () and decimals
-      if(!/^[\d\.\+\-\*\/\(\)\s]+$/.test(s)) throw 0;
-      // eslint-disable-next-line no-new-func
-      const v = Function(`"use strict";return (${s})`)();
-      qs('#calcOut').textContent = String(v);
-    }catch{ qs('#calcOut').textContent = 'error'; }
-  }
-  function goUrl(){ const u=compact(qs('#quickUrl').value); if(u) window.open(u,'_blank'); }
-  async function copy(txt){
-    try{ await navigator.clipboard.writeText(txt); }catch{}
-  }
+scriptSelect.addEventListener('change',()=> loadScript(scriptSelect.value));
+document.getElementById('resetAll').addEventListener('click',()=>{ scriptSelect.value=''; loadScript(''); });
+completeBtn.addEventListener('click',()=>{ scriptSelect.value=''; loadScript(''); });
+</script>
 
-  // ---- note autosave ----
-  function bindNotes(me){
-    const key = `fm.notes.${me.username}`;
-    const n = store(key)||'';
-    qs('#notes').value = n;
-    qs('#notes').addEventListener('input',()=>{
-      store(key, qs('#notes').value);
-      renderKV();
+<script>
+/* ====================== Drawers + Highlight + Search ====================== */
+const smsDrawer  = document.getElementById('smsDrawer');
+const openSms    = document.getElementById('openSms');
+const closeSms   = document.getElementById('closeSms');
+openSms.addEventListener('click',()=>{ smsDrawer.classList.add('open'); smsDrawer.setAttribute('aria-hidden','false'); openSms.setAttribute('aria-expanded','true'); });
+closeSms.addEventListener('click',()=>{ smsDrawer.classList.remove('open'); smsDrawer.setAttribute('aria-hidden','true'); openSms.setAttribute('aria-expanded','false'); });
+
+const rebuttalDrawer=document.getElementById('rebuttalDrawer');
+document.getElementById('openDrawer').addEventListener('click',()=>{ rebuttalDrawer.classList.add('open'); rebuttalDrawer.setAttribute('aria-hidden','false'); });
+document.getElementById('closeDrawer').addEventListener('click',()=>{ rebuttalDrawer.classList.remove('open'); rebuttalDrawer.setAttribute('aria-hidden','true'); });
+
+/* Chips + list */
+const rebuttalRef = document.getElementById('rebuttalRef');
+const rebSearch   = document.getElementById('rebSearch');
+const rebChips    = document.getElementById('rebChips');
+const rebCount    = document.getElementById('rebCount');
+let activeCategory = '';
+
+function renderChips(){
+  const chips = [''].concat(CATEGORY_ORDER);
+  rebChips.innerHTML = chips.map(cat=>{
+    const label = cat ? CATEGORY_LABEL[cat] : 'All';
+    const active = (cat===activeCategory) ? 'active' : '';
+    return `<div class="reb-chip ${active}" data-cat="${cat}">${label}</div>`;
+  }).join('');
+}
+function cardHTML(r){
+  const cat = catOf(r);
+  const badge = badgeClass(cat);
+  const safe = (r.text||'').replace(/\n/g,'<br>');
+  const id = `copy_${r.key}`;
+  return `
+    <div class="rebItem" data-cat="${cat}">
+      <h4>${r.title} <span class="reb-badge ${badge}">${CATEGORY_LABEL[cat]||'Other'}</span></h4>
+      <div class="scripttxt">${safe}</div>
+      <div class="reb-actions">
+        <button class="reb-copy" data-copy="${id}">Copy</button>
+      </div>
+      <div id="${id}" style="display:none">${r.text||''}</div>
+    </div>`;
+}
+function filterAndRender(){
+  const q = (rebSearch.value || '').toLowerCase().trim();
+  const results = REBUTTALS.filter(r=>{
+    const catOk = !activeCategory || catOf(r)===activeCategory;
+    const hay = (r.title + ' ' + r.text).toLowerCase();
+    const qOk = !q || hay.includes(q);
+    return catOk && qOk;
+  });
+  rebuttalRef.innerHTML = results.map(cardHTML).join('');
+  rebCount.textContent = `Showing ${results.length}`;
+}
+renderChips(); filterAndRender();
+rebChips.addEventListener('click', (e)=>{
+  const el = e.target.closest('.reb-chip'); if(!el) return;
+  activeCategory = el.getAttribute('data-cat') || '';
+  renderChips();
+  filterAndRender();
+});
+rebSearch.addEventListener('input', filterAndRender);
+rebuttalRef.addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-copy]'); if(!btn) return;
+  const id = btn.getAttribute('data-copy');
+  const el = document.getElementById(id);
+  const text = (el && el.textContent) ? el.textContent : '';
+  copyText(text);
+  logEvent('copy_voice');
+});
+
+/* Highlight for searches (rebuttals + SMS drawers) */
+function escapeRegExp(str){ return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function markHTML(html, q){
+  if(!q) return html;
+  try{ return html.replace(new RegExp('('+escapeRegExp(q)+')','ig'), '<mark class="hl">$1</mark>'); }catch{ return html; }
+}
+</script>
+
+<script>
+/* ====================== SMS Templates + Live Fill ====================== */
+const SMS_TEMPLATES = [
+  { key:'opt_out', title:'X) Compliance – STOP / Opt-Out', text:`No problem — we’ve removed your number and you won’t receive further messages. If this was a mistake, reply START to opt back in.`},
+  { key:'first_reply', title:'1) First Reply (All Brands w/ optional link)', text:`Hi [Name], thanks for your response! I’d be happy to help you get scheduled. We can send out one of our roofing specialists to take a look and give you a free estimate. What day and time works best for you? Or you can grab a time here if it’s easier: [Link]`},
+  { key:'same_day_cancel_teams', title:'2) Same-Day Cancellation — Teams', text:`Hi @[Sales Manager] – Customer [Customer Name] called to cancel her [Time] appointment today due to a [Reason]. Airtable has been updated to reflect the changes.`},
+  { key:'qual_questions', title:'3) Qualifying Questions (after interest)', text:`I can definitely see if those times are available. Can you answer a few quick questions so I can get you pre-qualified?\n\nAre you the homeowner?\n\nIs your house currently for sale?\n\nWill all homeowners be able to attend the appointment?\n\nHow old is your roof? (years)\n\nIs this a residential property?\n\nAre you experiencing any active leaks?`},
+  { key:'booked', title:'4) Booked Appointment (after qualification)', text:`Thanks for booking with us! A rep will meet you at your scheduled time. We’ll call within 48 hours prior and send text reminders. Please be sure to confirm your appointment — if we don’t hear back at least 24 hrs. before, the appointment will be canceled. To reschedule or cancel, just call us.`},
+  { key:'financing', title:'5) Financing / Money Concerns', text:`I completely understand. We work with 4 different lenders to offer flexible financing options — including no payments for a set term or low interest rates. Everything’s pending approval, but having multiple lenders increases your chances of finding a plan that works. We can review everything at your free estimate. When’s a good time to get you scheduled?`},
+  { key:'nurture', title:'6) Nurture / Re-Engage', text:`Hey [Name], this is [Brand]. We previously received your request about roofing help and tried giving you a call. I’d be happy to help you get scheduled. We can send out one of our roofing specialists to give you a free estimate. What day and time works best for you?`},
+  { key:'aged', title:'7) Aged Lead', text:`Hi, this is [Brand]. We received your request about roofing help some time ago and wanted to follow up. Has your project already been completed? If not, we’d be happy to get you scheduled for a free estimate. Would you like to check the calendar to see if one of my open time slots works for you?`},
+  { key:'cant_afford', title:'8) Objection – Can’t Afford It', text:`I completely understand. The good news is we’re running a Labor Day Discount right now — you’ll save $2,000 on a new roof, with no shortcuts and no surprises. We can go over details during your free estimate. Would you like to check the calendar to see if any of my open time slots work for you?`},
+  { key:'not_interested', title:'9) Objection – Not Interested', text:`No problem — I understand. The estimate is completely free and only takes about 60 minutes. At the very least, it gives you a clear picture of your roof’s condition. Would you like me to send over my open time slots so you can pick one?`},
+  { key:'roof_fine', title:'10) Objection – Roof Seems Fine', text:`That’s great to hear! Many homeowners feel the same, which is why our free inspections are proactive — they catch hidden issues before they become costly repairs. It only takes 60 minutes. Want me to send over my availability?`},
+  { key:'spouse', title:'11) Spouse / Other Homeowner Not Present', text:`No problem — we actually require all homeowners to be present so everyone hears the same information and can make decisions together. What’s a good time when you’ll both be available?`},
+  { key:'busy', title:'12) Too Busy / No Time', text:`Totally understand. That’s why the inspection only takes about 60 minutes, and we can work around your schedule. Would mornings or afternoons be easier for you?`},
+  { key:'driveby', title:'13) Drive-By / Unattended Estimate', text:`To give you an accurate estimate, we really need to have a specialist take a closer look in person. Photos or satellite images don’t always show things like wear or ventilation issues.\n\nThe inspection is completely free and takes ~60 minutes. Would you like to check my schedule for an open slot?`},
+  { key:'not_qualified', title:'14) Not Qualified', text:`Hi [Customer Name], this is [Your Name] with [Brand Name]. After reviewing your information, I wanted to let you know that at this time we only service asphalt shingle roofing systems on single family homes. Unfortunately, we won’t be the right fit for your project. I truly appreciate your interest — wishing you the best moving forward!`}
+];
+
+const smsListEl=document.getElementById('smsList');
+const smsRebEl =document.getElementById('smsRebuttals');
+function renderSmsLists(){
+  smsListEl.innerHTML='';
+  SMS_TEMPLATES.forEach(t=>{
+    const id=`tmpl_${t.key}`;
+    const card=document.createElement('div'); card.className='smsItem';
+    card.innerHTML=`
+      <h4>${t.title}</h4>
+      <div class="mini">Template:</div>
+      <div class="scripttxt" style="opacity:.85">${t.text.replace(/\n/g,'<br>')}</div>
+      <div class="mini" style="margin-top:6px">Filled preview:</div>
+      <div class="scripttxt" id="${id}" style="border:1px dashed var(--border); padding:8px;"></div>
+      <div class="row"><button class="copy" data-copy="${id}">Copy (filled)</button></div>`;
+    smsListEl.appendChild(card);
+  });
+
+  smsRebEl.innerHTML='';
+  REBUTTALS.forEach(r=>{
+    const id=`rebt_${r.key}`;
+    const card=document.createElement('div'); card.className='smsItem';
+    card.innerHTML=`
+      <h4>${r.title}</h4>
+      <div class="mini">Template:</div>
+      <div class="scripttxt" style="opacity:.85">${(r.text||'').replace(/\n/g,'<br>')}</div>
+      <div class="mini" style="margin-top:6px">Filled preview:</div>
+      <div class="scripttxt" id="${id}" style="border:1px dashed var(--border); padding:8px;"></div>
+      <div class="row"><button class="copy" data-copy="${id}">Copy (filled)</button></div>`;
+    smsRebEl.appendChild(card);
+  });
+
+  smsListEl.addEventListener('click', (e)=>{
+    const btn=e.target.closest('button[data-copy]'); if(!btn) return;
+    const id=btn.getAttribute('data-copy'); const text=(document.getElementById(id)?.textContent)||'';
+    copyText(text); logEvent('copy_sms');
+  });
+  smsRebEl.addEventListener('click', (e)=>{
+    const btn=e.target.closest('button[data-copy]'); if(!btn) return;
+    const id=btn.getAttribute('data-copy'); const text=(document.getElementById(id)?.textContent)||'';
+    copyText(text); logEvent('copy_sms');
+  });
+
+  updateFilledPreviews();
+}
+function updateFilledPreviews(){
+  const d=dataNow();
+  SMS_TEMPLATES.forEach(t=>{
+    const filled=fill(t.text,d);
+    const el=document.getElementById(`tmpl_${t.key}`); if(el) el.textContent=filled;
+  });
+  REBUTTALS.forEach(r=>{
+    const filled=fill(r.text,d);
+    const el=document.getElementById(`rebt_${r.key}`); if(el) el.textContent=filled;
+  });
+}
+['brandInput','nameInput','custNameInput','brandLink'].forEach(id=>{
+  const node=document.getElementById(id);
+  if(node) node.addEventListener('input', updateFilledPreviews);
+});
+renderSmsLists();
+
+/* SMS search + highlight */
+(function(){
+  const qInput = document.getElementById('smsSearch');
+  const countEl = document.getElementById('smsSearchCount');
+  function cardMatches(card, q){
+    if(!q) return true;
+    const text = (card.textContent || '').toLowerCase();
+    return text.indexOf(q) !== -1;
+  }
+  function applyFilter(){
+    const q = (qInput.value || '').toLowerCase().trim();
+    let matches = 0;
+    [smsListEl, smsRebEl].forEach(container=>{
+      if(!container) return;
+      Array.from(container.querySelectorAll('.smsItem')).forEach(card=>{
+        if(cardMatches(card, q)){ card.classList.remove('sms-hidden'); matches++; }
+        else { card.classList.add('sms-hidden'); }
+      });
+    });
+    if(countEl) countEl.textContent = (q ? matches + ' matches' : '0 matches');
+    // Highlights
+    [smsListEl, smsRebEl].forEach(container=>{
+      if(!container) return;
+      Array.from(container.querySelectorAll('.smsItem')).forEach(card=>{
+        card.querySelectorAll('h4, .scripttxt').forEach(el=>{
+          el.dataset.orig = el.dataset.orig || el.innerHTML;
+          el.innerHTML = q ? markHTML(el.dataset.orig, q) : el.dataset.orig;
+        });
+      });
     });
   }
-
-  // ---- boot ----
-  (async function init(){
-    try{
-      const me = await whoami();
-      window.__me = me;
-      qs('#meta').textContent = `${me.username} · ${me.role}`;
-    }catch{
-      location.href='/hub';
-      return;
-    }
-
-    // timer
-    qs('#start').onclick=()=> running?pauseTimer():startTimer();
-    qs('#pause').onclick=pauseTimer;
-    qs('#reset').onclick=resetTimer;
-
-    // scripts
-    qs('#scriptSel').onchange=applyScript;
-    qs('#copyScript').onclick=()=>copy(qs('#scriptBody').value);
-
-    // disp
-    qs('#saveDisp').onclick=saveDisp;
-
-    // contact events
-    qs('#cName').oninput=renderKV;
-    qs('#cPhone').oninput=renderKV;
-
-    // tools
-    qs('#calcBtn').onclick=calcEval;
-    qs('#goUrl').onclick=goUrl;
-    qs('#copyUrl').onclick=()=>copy(qs('#quickUrl').value);
-
-    // keyboard
-    document.addEventListener('keydown',e=>{
-      if(e.key==='n' || e.key==='N'){ e.preventDefault(); qs('#notes').focus(); }
-      if(e.key==='s' || e.key==='S'){ if(document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='TEXTAREA'){ e.preventDefault(); copy(qs('#scriptBody').value); } }
-      if(e.key==='t' || e.key==='T'){ e.preventDefault(); running?pauseTimer():startTimer(); }
-    });
-
-    // init data
-    bindNotes(window.__me);
-    demoQueue(window.__me);
-    applyScript();
-    renderKV();
-  })();
+  if(qInput){
+    qInput.addEventListener('input', applyFilter);
+    document.getElementById('openSms')?.addEventListener('click', ()=> setTimeout(applyFilter, 200));
+  }
 })();
 </script>
+
+<script>
+/* ====================== Quick Rebuttal: Suggest + AI Draft + Save ====================== */
+const proxyURL = "https://allstar-rebuttal-proxy.ataymia.workers.dev";
+const SHEET_WEBAPP = "https://script.google.com/macros/s/AKfycby0A7oy0R3jY9C-vV-GkBxeIGN2HNReW4CJH6Qq1GMV6S22oV00uV3-jdDinL2x14z5AQ/exec";
+
+const objInput = document.getElementById('objInput');
+const btnGen   = document.getElementById('btnGenerate');
+const btnSug   = document.getElementById('btnSuggest');
+const smartOut = document.getElementById('smartOut');
+
+function tokenize(s){ return (s||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(Boolean); }
+function buildIndex(docs){
+  const N=docs.length; const DF=new Map(); const Toks=docs.map(d=>tokenize(d.title+" "+d.text));
+  Toks.forEach(tks=>{const uniq=new Set(tks); uniq.forEach(t=>DF.set(t,(DF.get(t)||0)+1));});
+  const IDF=new Map(); DF.forEach((df,t)=>IDF.set(t,Math.log((1+N)/(1+df))+1));
+  const Vecs=Toks.map(tks=>{const tf=new Map(); tks.forEach(t=>tf.set(t,(tf.get(t)||0)+1));
+    let sum=0; const v=new Map(); tf.forEach((f,t)=>{const w=f*(IDF.get(t)||0); v.set(t,w); sum+=w*w;});
+    const norm=Math.sqrt(sum)||1; const nv=new Map(); v.forEach((w,t)=>nv.set(t,w/norm)); return nv;});
+  return {docs,IDF,Vecs};
+}
+function vectorize(IDF,text){
+  const tks=tokenize(text), tf=new Map(); tks.forEach(t=>tf.set(t,(tf.get(t)||0)+1));
+  let sum=0; const v=new Map(); tf.forEach((f,t)=>{const w=f*(IDF.get(t)||0); v.set(t,w); sum+=w*w;});
+  const norm=Math.sqrt(sum)||1; const nv=new Map(); v.forEach((w,t)=>nv.set(t,w/norm)); return nv;
+}
+function cosineScore(qv,dv){let s=0; qv.forEach((qw,t)=>{const dw=dv.get(t); if(dw) s+=qw*dw;}); return s;}
+function highlight(text,query){
+  const words=Array.from(new Set(tokenize(query))).filter(w=>w.length>2);
+  if(!words.length) return text;
+  const pattern=new RegExp("("+words.map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","gi");
+  return text.replace(pattern,'<mark>$1</mark>');
+}
+async function suggestFromLibrary(q){
+  const corpus=(REBUTTALS||[]).map((r,i)=>({key:r.key||i,title:r.title||"",text:r.text||""}));
+  if(!corpus.length) return [];
+  const {IDF,Vecs,docs}=buildIndex(corpus); const qv=vectorize(IDF,q);
+  const scored=Vecs.map((dv,i)=>({i,score:cosineScore(qv,dv)})).sort((a,b)=>b.score-a.score).slice(0,3);
+  return scored.map(({i})=>{
+    const d=docs[i];
+    const id="__sugg_"+i;
+    return `<div class="rebItem"><h4>${d.title} <span class="reb-badge badge-brand">Suggested</span></h4>
+      <div class="scripttxt">${highlight(d.text,q).replace(/\n/g,'<br>')}</div>
+      <div class="reb-actions"><button class="reb-copy" data-copy="${id}">Copy</button></div>
+      <div id="${id}" style="display:none">${d.text}</div></div>`;
+  }).join("");
+}
+btnSug?.addEventListener('click', async()=>{
+  const q=objInput.value.trim(); if(!q){smartOut.textContent="Type an objection.";return;}
+  smartOut.textContent="Finding suggestions…";
+  try{const html=await suggestFromLibrary(q); smartOut.innerHTML=html||"<div>No matches.</div>";}
+  catch{smartOut.textContent="Error in suggestion.";}
+});
+
+async function aiDraft(objection){
+  const context="Allstar Services: SFR only; 60-minute visit (30-min on-roof + review); Detroit excluded (do not disclose); no phone pricing; professional tone.";
+  const r=await fetch(proxyURL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({objection,context})});
+  if(!r.ok) throw new Error("Proxy error "+r.status);
+  const j=await r.json(); return (j.text||"").trim();
+}
+btnGen?.addEventListener('click',async()=>{
+  const q=objInput.value.trim(); if(!q){smartOut.textContent="Type an objection.";return;}
+  smartOut.textContent="Drafting…";
+  try{
+    const txt=await aiDraft(q);
+    smartOut.innerHTML=`<div class="rebItem"><h4>AI Draft</h4><div class="scripttxt">${(txt||"").replace(/\n/g,'<br>')}</div>
+      <div class="reb-actions"><button class="reb-copy" data-copy="__aidraft">Copy</button><button id="btnSaveAI">Save to Library</button></div>
+      <div id="__aidraft" style="display:none">${txt||""}</div></div>`;
+    logEvent('ai_draft');
+  }catch{smartOut.textContent="Error drafting AI rebuttal.";}
+});
+
+smartOut?.addEventListener('click',async e=>{
+  const copyBtn=e.target.closest('button[data-copy]');
+  if(copyBtn){
+    const id=copyBtn.getAttribute('data-copy'); const el=document.getElementById(id);
+    const txt=(el&&el.textContent)||""; await copyText(txt); logEvent('copy_voice'); return;
+  }
+  const saveBtn=e.target.closest('#btnSaveAI');
+  if(saveBtn){
+    const txtEl=document.getElementById('__aidraft'); const text=(txtEl&&txtEl.textContent)||"";
+    if(!text){toast("Nothing to save.");return;}
+    const title=prompt("Title:", "AI – "+(objInput.value||"Rebuttal")); if(!title) return;
+    const cat=(prompt("Category (finance, schedule, qualify, interest, policy, brand, escalate):","qualify")||"qualify").toLowerCase();
+    const key="ai_"+Date.now();
+    REBUTTALS.push({ key, title, text });
+    CATEGORY_MAP[key]=cat;
+    try{ filterAndRender(); renderSmsLists(); }catch{}
+    toast("Saved to library.");
+    logEvent('reb_save', { key, title, cat });
+    try{
+      await fetch(SHEET_WEBAPP,{method:"POST",headers:{"Content-Type":"text/plain"},
+        body:JSON.stringify({source:"ai",key,title,category:cat,text,objection:objInput.value||"",ts:new Date().toISOString()})});
+    }catch{}
+  }
+});
+
+/* Refresh from Sheet (optional) */
+document.getElementById('rebRefreshBtn')?.addEventListener('click', async ()=>{
+  toast('Syncing from Sheet…');
+  try{
+    const url = SHEET_WEBAPP + (SHEET_WEBAPP.includes('?') ? '&' : '?') + 'mode=list';
+    const res = await fetch(url); const text = await res.text();
+    let data={}; try{ data=JSON.parse(text); }catch{}
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    let added = 0;
+    rows.forEach(row=>{
+      const title=row.title||row.Title||row.name||'';
+      const t=row.text||row.Text||row.body||row.rebuttal||'';
+      const cat=(row.category||row.Category||'qualify').toLowerCase();
+      if(!title||!t) return;
+      if(!REBUTTALS.find(x=>x.title.toLowerCase().trim()===title.toLowerCase().trim())){
+        const key='row_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+        REBUTTALS.push({key,title:textClamp(title,120),text:t});
+        CATEGORY_MAP[key]=cat; added++;
+      }
+    });
+    if(added){ filterAndRender(); renderSmsLists(); toast(`Imported ${added} item(s)`); }
+    else { toast('No new items'); }
+  }catch{ toast('Sync failed'); }
+});
+function textClamp(s,n){ return (s||'').length>n? (s.slice(0,n-1)+'…') : s; }
+</script>
+
+<script>
+/* ====================== AI Bot + Address Dock ====================== */
+(function(){
+  // Bot dock
+  const fab=document.getElementById('botFab');
+  const dock=document.getElementById('botDock');
+  const close=document.getElementById('botClose');
+  const frame=document.getElementById('botFrame');
+  const BOT_SRC = 'allstarbot.html'; // replace with your live URL when ready
+  function openDock(){ dock.classList.add('open'); dock.setAttribute('aria-hidden','false'); fab?.setAttribute('aria-expanded','true'); if(frame && !frame.src) frame.src = BOT_SRC; }
+  function closeDock(){ dock.classList.remove('open'); dock.setAttribute('aria-hidden','true'); fab?.setAttribute('aria-expanded','false'); }
+  fab?.addEventListener('click', ()=> dock.classList.contains('open')? closeDock(): openDock());
+  close?.addEventListener('click', closeDock);
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && dock.classList.contains('open')) closeDock(); });
+
+  // Address dock (Google CSE)
+  const hf=document.getElementById('homeFab');
+  const hd=document.getElementById('homeDock');
+  const hc=document.getElementById('homeClose');
+  function openHome(){ hd.classList.add('open'); hd.setAttribute('aria-hidden','false'); hf?.setAttribute('aria-expanded','true');
+    // force render if needed
+    try{
+      const hasGoogle = window.google && window.google.search && window.google.search.cse && window.google.search.cse.element;
+      const target = document.getElementById('addrSearchWidget');
+      const empty = target && target.children && target.children.length === 0;
+      if(hasGoogle && empty){ window.google.search.cse.element.render({ div: 'addrSearchWidget', tag: 'search' }); }
+    }catch{}
+  }
+  function closeHome(){ hd.classList.remove('open'); hd.setAttribute('aria-hidden','true'); hf?.setAttribute('aria-expanded','false'); }
+  hf?.addEventListener('click', ()=> hd.classList.contains('open')? closeHome(): openHome());
+  hc?.addEventListener('click', closeHome);
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && hd.classList.contains('open')) closeHome(); });
+})();
+</script>
+
+<script>
+/* ====================== Admin: simple allowlist + metrics ====================== */
+const ADMIN_ALLOWLIST = ["miamurray","matthorne","stevenlanasky","dianaangulo","mattryder"].map(x=>x.toLowerCase());
+const adminBtn = document.getElementById('adminBtn');
+const backdrop = document.getElementById('adminBackdrop');
+const drawer   = document.getElementById('adminDrawer');
+const adminStatus=document.getElementById('adminStatus');
+
+document.getElementById('adminClose')?.addEventListener('click',()=> showAdminModal(false));
+document.getElementById('adminCancel')?.addEventListener('click',()=> showAdminModal(false));
+document.getElementById('adminDrawerClose')?.addEventListener('click',()=> drawer.classList.remove('open'));
+document.getElementById('adminLogout')?.addEventListener('click',()=>{ sessionStorage.removeItem('fm_admin'); drawer.classList.remove('open'); toast('Signed out'); });
+document.getElementById('adminRefresh')?.addEventListener('click', renderAdmin);
+document.getElementById('adminExport')?.addEventListener('click', exportEvents);
+
+adminBtn?.addEventListener('click', ()=>{
+  const who = (sessionStorage.getItem('fm_admin')||'').toLowerCase();
+  if(who && ADMIN_ALLOWLIST.includes(who)){ openAdmin(); return; }
+  showAdminModal(true);
+});
+function showAdminModal(on){ backdrop.style.display = on ? 'flex':'none'; backdrop.setAttribute('aria-hidden', on?'false':'true'); if(on) document.getElementById('adminPassword').focus(); }
+document.getElementById('adminSubmit')?.addEventListener('click', ()=>{
+  const v=(document.getElementById('adminPassword').value||'').trim().toLowerCase();
+  const err=document.getElementById('adminErr');
+  if(!v || !ADMIN_ALLOWLIST.includes(v)){ err.style.display='block'; setTimeout(()=> err.style.display='none', 1800); return; }
+  sessionStorage.setItem('fm_admin', v);
+  showAdminModal(false);
+  openAdmin();
+});
+function openAdmin(){ drawer.classList.add('open'); renderAdmin(); }
+
+/* Metrics store: localStorage “fm_events” array */
+function getEvents(){ try{ return JSON.parse(localStorage.getItem('fm_events')||'[]'); }catch{ return []; } }
+function setEvents(arr){ localStorage.setItem('fm_events', JSON.stringify(arr)); }
+
+/* Unified event logger */
+function logEvent(type, data){
+  const ev = { type, data: data||{}, ts: Date.now() };
+  const arr = getEvents(); arr.push(ev); setEvents(arr);
+}
+window.logEvent = logEvent;
+
+/* Admin renderer */
+function renderAdmin(){
+  const arr = getEvents();
+  const byType = arr.reduce((m,ev)=>{ m[ev.type]=(m[ev.type]||0)+1; return m; },{});
+  const saves = arr.filter(e=>e.type==='reb_save').length;
+  const ai    = arr.filter(e=>e.type==='ai_draft').length;
+  const cv    = arr.filter(e=>e.type==='copy_voice').length;
+  const cs    = arr.filter(e=>e.type==='copy_sms').length;
+
+  document.getElementById('kpiEvents').textContent = arr.length.toString();
+  document.getElementById('kpiSaves').textContent  = saves.toString();
+  document.getElementById('kpiAI').textContent     = ai.toString();
+  document.getElementById('kpiCopyVoice').textContent = cv.toString();
+  document.getElementById('kpiCopySMS').textContent   = cs.toString();
+
+  // “Saved in Sheet” KPI based on ‘sheet_saved’ marks if you post back success
+  document.getElementById('kpiSavedSheet').textContent = (arr.filter(e=>e.type==='sheet_saved').length).toString();
+
+  // Events by Category (from saved rebuttals)
+  const catCnt = {};
+  arr.filter(e=>e.type==='reb_save').forEach(e=>{
+    const cat = (e.data && e.data.cat) || 'other';
+    catCnt[cat] = (catCnt[cat]||0) + 1;
+  });
+  const catList = Object.keys(catCnt).sort((a,b)=>catCnt[b]-catCnt[a]).map(k=>`${k}: ${catCnt[k]}`).join(' · ') || '—';
+  document.getElementById('catList').textContent = catList;
+
+  // Top Rebuttals (by title counted from saves)
+  const topMap = {};
+  arr.filter(e=>e.type==='reb_save').forEach(e=>{
+    const t=(e.data&&e.data.title)||'Untitled';
+    topMap[t]=(topMap[t]||0)+1;
+  });
+  const top = Object.entries(topMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const tb=document.querySelector('#topRebTable tbody'); tb.innerHTML='';
+  top.forEach(([title,count])=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${title}</td><td>${count}</td>`;
+    tb.appendChild(tr);
+  });
+
+  // Most used scripts (count script_select)
+  const scMap = {};
+  arr.filter(e=>e.type==='script_select').forEach(e=>{
+    const key=(e.data&&e.data.key)||'unknown';
+    scMap[key]=(scMap[key]||0)+1;
+  });
+  const sc = Object.entries(scMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const ts=document.querySelector('#topScripts tbody'); ts.innerHTML='';
+  sc.forEach(([key,count])=>{
+    const nm = (SCRIPTS[key]&&SCRIPTS[key].name)||key;
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${nm}</td><td>${count}</td>`;
+    ts.appendChild(tr);
+  });
+
+  adminStatus.textContent = `Events in local log: ${arr.length}`;
+}
+
+/* Export */
+function exportEvents(){
+  const arr = getEvents();
+  const blob = new Blob([JSON.stringify(arr,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `flowmaster_events_${new Date().toISOString().slice(0,10)}.json`; a.click();
+}
+</script>
+
+<script>
+/* ====================== Agent note styling pass ====================== */
+(function(){
+  const agentLineRegexes = [/^(if\s+yes:.*)$/i,/^(if\s+no:.*)$/i,/^(at\s+this\s+time.*)$/i,/^(reach out.*)$/i,/^(use .*template.*)$/i,/^(for rapid.*)$/i,/^(internal.*)$/i,/^note:.*$/i];
+  function isAgentLabel(label){
+    const L=(label||"").toLowerCase();
+    return L.includes("time zone note") || L.includes("same day cancellation") || L.includes("service area check — detroit");
+  }
+  function colorAgentLines(html){
+    const parts = html.split(/<br\s*\/?>/i); const out=[];
+    for (let raw of parts){
+      const plain = raw.replace(/<[^>]+>/g,"").trim();
+      if (agentLineRegexes.some(re=> re.test(plain))) out.push("<span class='note-yellow'>" + raw.trim() + "</span>");
+      else out.push(raw);
+    }
+    return out.join("<br>");
+  }
+  function sweep(){
+    document.querySelectorAll(".step").forEach(step=>{
+      const h4=step.querySelector("h4"); const body=step.querySelector(".scripttxt"); if(!body) return;
+      const labelText=h4?h4.textContent||"":""; if(isAgentLabel(labelText)){ step.classList.add("agent-note"); body.classList.add("note-yellow-all"); }
+      else{ body.innerHTML = colorAgentLines(body.innerHTML); }
+    });
+  }
+  const __orig = window.loadScript;
+  window.loadScript = function(key){ __orig(key); sweep(); };
+})();
+</script>
+
 </body>
 </html>
