@@ -1,18 +1,19 @@
-import { proxyWithAuth } from './_util';
+// functions/api/schedules.ts
+import { proxyWithAuth } from './_utils';
 
-export const onRequest: PagesFunction = async ({ request, env }) => {
-  if(request.method==='GET'){
-    const url = new URL(request.url);
-    const q = '/schedules?'+url.searchParams.toString();
-    const r = await proxyWithAuth(env, request, q, { method:'GET' });
-    return new Response(r.body, { status:r.status, headers:r.headers });
-  }
-  if(request.method==='POST'){
-    const body = await request.text();
-    const r = await proxyWithAuth(env, request, '/schedules', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body
-    });
-    return new Response(r.body, { status:r.status, headers:r.headers });
-  }
-  return new Response(null,{status:405});
+export const onRequestGet: PagesFunction = async (ctx) => {
+  // proxy /api/schedules?user=&date=  ->  Worker /schedules?user=&date=
+  const url = new URL(ctx.request.url);
+  const qs = url.search ? url.search : '';
+  return proxyWithAuth(ctx, `/schedules${qs}`);
+};
+
+export const onRequestPost: PagesFunction = async (ctx) => {
+  // Pass JSON body to Worker /schedules (create/update)
+  const body = await ctx.request.text();
+  return proxyWithAuth(ctx, '/schedules', {
+    method: 'POST',
+    body,
+    headers: { 'content-type': 'application/json' },
+  });
 };
