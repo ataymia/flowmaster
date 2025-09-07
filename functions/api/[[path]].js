@@ -13,16 +13,14 @@ export const onRequest = async (ctx) => {
   const subpath = url.pathname.replace(/^\/api\/?/, ""); // everything after /api/
   const { API_URL, NOTION_TOKEN, NOTION_DATABASE_ID } = ctx.env;
 
-  // Helper: forward Set-Cookie headers
   const forwardSetCookies = (from, toHeaders) => {
     const setc = from.headers.get("set-cookie");
     if (!setc) return;
-    // Pages supports multiple Set-Cookie via append if the upstream has multiple
     const cookies = Array.isArray(setc) ? setc : [setc];
     for (const c of cookies) toHeaders.append("Set-Cookie", c);
   };
 
-  // ---- Billboard (Notion) ----
+  // Billboard from Notion
   if (subpath === "billboard") {
     if (!NOTION_TOKEN || !NOTION_DATABASE_ID) {
       return new Response(JSON.stringify({ error: "Notion env not set" }), {
@@ -36,7 +34,7 @@ export const onRequest = async (ctx) => {
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${NOTION_TOKEN}`,
+            Authorization: `Bearer ${NOTION_TOKEN}`,
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json",
           },
@@ -48,18 +46,26 @@ export const onRequest = async (ctx) => {
       );
       const j = await qRes.json();
       if (!qRes.ok) {
-        return new Response(JSON.stringify({ items: [], note: "notion_error", status: qRes.status, detail: JSON.stringify(j) }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            items: [],
+            note: "notion_error",
+            status: qRes.status,
+            detail: JSON.stringify(j),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
       }
       const items = (j.results || []).map((r) => {
         const props = r.properties || {};
-        const titleParts = (props.Title?.title || []);
-        const title = titleParts.map(t => t.plain_text).join("") || "Update";
-        const textParts = (props.Text?.rich_text || []);
-        const text = textParts.map(t => t.plain_text).join("");
-        const date = props.Date?.date?.start || props["Date 1"]?.date?.start || null;
+        const title = (props.Title?.title || [])
+          .map((t) => t.plain_text)
+          .join("") || "Update";
+        const text = (props.Text?.rich_text || [])
+          .map((t) => t.plain_text)
+          .join("");
+        const date =
+          props.Date?.date?.start || props["Date 1"]?.date?.start || null;
         const vis1 = props["Select"]?.select?.name || null;
         const vis2 = props["Select 1"]?.select?.name || null;
         const vis3 = props["Select 2"]?.select?.name || null;
@@ -77,19 +83,21 @@ export const onRequest = async (ctx) => {
     }
   }
 
-  // ---- whoami passthrough to /me (for clarity) ----
+  // whoami → /me passthrough
   if (subpath === "whoami") {
     const upstream = await fetch(`${API_URL}/me`, {
       headers: { cookie: ctx.request.headers.get("cookie") || "" },
       cf: { cacheTtl: 0, cacheEverything: false },
     });
     const body = await upstream.text();
-    const h = new Headers({ "content-type": upstream.headers.get("content-type") || "application/json" });
+    const h = new Headers({
+      "content-type": upstream.headers.get("content-type") || "application/json",
+    });
     forwardSetCookies(upstream, h);
     return new Response(body, { status: upstream.status, headers: h });
   }
 
-  // ---- Generic proxy to Worker ----
+  // Generic proxy to Worker for everything else
   const target = `${API_URL}/${subpath}`;
   const init = {
     method: ctx.request.method,
@@ -98,17 +106,13 @@ export const onRequest = async (ctx) => {
     redirect: "manual",
     cf: { cacheTtl: 0, cacheEverything: false },
   };
-
-  // Clean hop-by-hop headers + ensure cookies forwarded
   init.headers.delete("host");
-  // On GET/HEAD no body; otherwise stream it
   if (!["GET", "HEAD"].includes(ctx.request.method)) {
     init.body = ctx.request.body;
   }
 
   const upstream = await fetch(target, init);
   const resHeaders = new Headers(upstream.headers);
-  // Ensure same-origin cookies are set on Pages domain
   const outHeaders = new Headers();
   for (const [k, v] of resHeaders.entries()) {
     if (k.toLowerCase() === "set-cookie") continue;
