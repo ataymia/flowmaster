@@ -1,45 +1,32 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Allstar Agent Hub</title>
 <style>
-  :root{
-    --bg:#0f1115; --text:#e5e7eb; --muted:#9ca3af;
-    --brand:#c0392b; --brand-700:#a93226; --panel:#111827; --card:#1f2937; --border:#374151;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
-  a{color:inherit;text-decoration:none}
-  header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:2px solid var(--brand)}
-  .container{max-width:1100px;margin:0 auto;padding:18px 20px}
-  .row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-  h1{margin:0;font-size:24px}
-  .brand{color:var(--brand);font-weight:800}
-  .muted{color:var(--muted)}
-  .pill{border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px;background:#111827}
-  .main{padding:22px 20px}
-  .grid{display:grid;gap:16px;grid-template-columns:repeat(1,minmax(0,1fr))}
-  @media(min-width:760px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
-  .cardLink{
-    display:block; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px;
-    transition:transform .12s ease-out, box-shadow .12s ease-out, border-color .12s ease-out;
-    position:relative; overflow:hidden;
-  }
-  .cardLink:hover{ transform:translateY(-2px); box-shadow:0 14px 30px rgba(0,0,0,.35); border-color:var(--brand) }
-  .cardLink h3{ margin:0 0 6px; font-size:18px }
-  .cardLink p{ margin:0; color:var(--muted) }
-  .badge{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; margin-left:8px;
-          background:rgba(192,57,43,.18); color:#ffdada; border:1px solid rgba(192,57,43,.35);}
-  .ctaRow{display:flex; gap:10px; flex-wrap:wrap}
-  .btn{border:1px solid var(--border);background:var(--card);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer}
-  .btn.brand{background:var(--brand);border-color:var(--brand);color:#fff}
-  .btn.brand:hover{background:var(--brand-700)}
-  .notice{margin-top:14px;padding:10px 12px;border:1px dashed var(--brand);border-radius:10px;background:rgba(192,57,43,.1);color:#ffdada}
-  /* make absolutely sure nothing blocks clicks */
-  .no-overlay{position:relative;z-index:1;pointer-events:auto}
+:root{ --bg:#0f1115; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af;
+       --brand:#c0392b; --brand-700:#a93226; --card:#1f2937; --border:#374151; }
+*{box-sizing:border-box} html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+a{color:inherit;text-decoration:none}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:2px solid var(--brand)}
+.container{max-width:1100px;margin:0 auto;padding:18px 20px}
+.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+h1{margin:0;font-size:24px}
+.brand{color:var(--brand);font-weight:800}
+.pill{border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px;background:#111827;margin-left:auto}
+.btn{border:1px solid var(--border);background:var(--card);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer}
+.btn.brand{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.brand:hover{background:var(--brand-700)}
+.notice{margin:16px 0;padding:12px;border:1px dashed var(--brand);border-radius:12px;background:rgba(192,57,43,.08);color:#ffdada;display:none}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(1,minmax(0,1fr))}
+@media(min-width:760px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.cardLink{display:block;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;transition:transform .12s ease, border-color .12s ease}
+.cardLink:hover{transform:translateY(-2px);border-color:var(--brand)}
+.cardLink h3{margin:0 0 6px;font-size:18px}
+.cardLink p{margin:0;color:var(--muted)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;margin-left:8px;background:rgba(192,57,43,.18);color:#ffdada;border:1px solid rgba(192,57,43,.35);}
 </style>
 </head>
 <body>
@@ -47,81 +34,57 @@
   <div class="container">
     <div class="row">
       <h1>Allstar <span class="brand">Agent Hub</span></h1>
-      <div id="hdrUser" class="pill no-overlay" style="margin-left:auto">Checking sign-in…</div>
+      <div id="hdrUser" class="pill">Checking sign-in…</div>
       <button id="btnLogout" class="btn">Logout</button>
     </div>
   </div>
 </header>
 
-<main class="container main">
-  <div id="news" class="notice" style="display:none"></div>
-
-  <div class="grid no-overlay" id="navGrid">
-    <a class="cardLink" href="/flowmaster" id="linkFlow">
-      <h3>📞 FlowMaster <span class="badge">Scripts + Rebuttals + SMS</span></h3>
-      <p>All the call flows, quick rebuttals, SMS helper, and tools in one place.</p>
+<main class="container">
+  <div id="news" class="notice"></div>
+  <div class="grid">
+    <a class="cardLink" href="/flowmaster">
+      <h3>📞 FlowMaster <span class="badge">Scripts + Rebuttals</span></h3>
+      <p>Call flows, rebuttals, SMS helper, and tools in one place.</p>
     </a>
-
-    <a class="cardLink" href="/schedule" id="linkSched">
+    <a class="cardLink" href="/schedule">
       <h3>📅 Adherence &amp; Scheduling <span class="badge">Live % + Editor</span></h3>
-      <p>Agents: set live status. Admins: edit schedules, view live status &amp; history, export CSV.</p>
+      <p>Agents set live status; Admins edit schedules, view status &amp; history, export CSV.</p>
     </a>
-
-    <a class="cardLink" href="/hub" id="linkHome">
+    <a class="cardLink" href="/hub">
       <h3>📰 Team Billboard</h3>
-      <p>Company memos and updates — auto-pulled from Notion.</p>
+      <p>Company memos auto-pulled from Notion.</p>
     </a>
-
-    <a class="cardLink" href="https://notion.so/" target="_blank" rel="noopener">
+    <a class="cardLink" href="https://www.notion.so/" target="_blank" rel="noopener">
       <h3>✍️ Manage News in Notion</h3>
-      <p>Admins: update the Team Billboard here — the Hub auto-refreshes.</p>
+      <p>Admins update the Team Billboard in Notion; the Hub auto-refreshes.</p>
     </a>
   </div>
 </main>
 
 <script>
 const API = "/api";
-const whoEl = document.getElementById('hdrUser');
-const btnLogout = document.getElementById('btnLogout');
-const newsEl = document.getElementById('news');
-
 async function whoami(){
-  try{
-    const r = await fetch(API + "/whoami", { credentials:'include' });
-    if(!r.ok) throw 0;
-    return await r.json();
-  }catch{
-    return null;
-  }
+  try{ const r=await fetch(API+"/whoami",{credentials:"include"}); if(!r.ok) return null; return await r.json(); }catch{return null;}
 }
-async function logout(){
-  try{ await fetch(API + "/logout", {method:"POST", credentials:"include"}); }catch{}
-  location.href = "/hub"; // back to login
-}
+async function logout(){ try{ await fetch(API+"/logout",{method:"POST",credentials:"include"}); }catch{} location.href="/"; }
 
-btnLogout.addEventListener('click', logout);
+document.getElementById('btnLogout').addEventListener('click', logout);
 
 (async ()=>{
   const me = await whoami();
-  if(!me || !me.username){
-    whoEl.textContent = "Not signed in";
-    // If your login lives at / (root), kick them there:
-    location.href = "/";
-    return;
-  }
-  whoEl.textContent = `${me.username} · ${me.role}`;
-})();
+  const hdr = document.getElementById('hdrUser');
+  if(!me || !me.username){ location.href="/"; return; }
+  hdr.textContent = `${me.username} · ${me.role}`;
 
-// Optional: show any hub/news message already injected by your Pages Function
-(async ()=>{
   try{
     const r = await fetch(API + "/billboard", { credentials:"include" });
-    if (r.ok){
-      const j = await r.json();
-      if (j && Array.isArray(j.items) && j.items.length){
-        newsEl.style.display = 'block';
-        newsEl.innerHTML = `<strong>Latest:</strong> ${j.items[0].title || 'Update'} — ${j.items[0].text || ''}`;
-      }
+    const j = r.ok ? await r.json() : { items: [] };
+    if (j.items && j.items.length){
+      const it = j.items[0];
+      const news = document.getElementById('news');
+      news.style.display = 'block';
+      news.innerHTML = `<strong>Latest:</strong> ${it.title}${it.text ? " — " + it.text : ""}`;
     }
   }catch{}
 })();
