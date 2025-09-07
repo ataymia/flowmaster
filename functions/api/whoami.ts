@@ -1,27 +1,30 @@
-// functions/api/whoami.ts
-interface Env { AUTH_BASE: string }
+import { upstream, json, setCookie, pickCookieFromSetCookie } from './_utils';
 
-function pickAccessTokenFromCookie(h: string | null): string | null {
-  const m = (h || '').match(/(?:^|;\s*)access_token=([^;]+)/i);
-  return m ? decodeURIComponent(m[1]) : null;
-}
+export async function onRequestGet(ctx: { request: Request }) {
+  // Try with whatever access_token we have
+  let me = await upstream('/me', ctx.request);
+  if (me.ok) {
+    const j = await me.json();
+    return json({ authed: true, ...j });
+  }
 
-export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
-  const upstream = `${env.AUTH_BASE.replace(/\/$/, '')}/me`;
-  const cookie = request.headers.get('cookie') || '';
-  const token = pickAccessTokenFromCookie(cookie);
+  // Attempt silent refresh using refresh_token (Path=/ ensures the browser sends it)
+  const ref = await upstream('/auth/refresh', ctx.request, { method: 'POST' });
+  if (ref.ok) {
+    // Mirror the new access_token to our domain
+    const setCookies = (ref.headers as any).getSetCookie?.() ?? ref.headers.get('set-cookie') ?? '';
+    const access = pickCookieFromSetCookie(setCookies, 'access_token');
+    const h = new Headers();
+    if (access) h.append('Set-Cookie', setCookie('access_token', access, { maxAge: 60*15, path: '/' }));
 
-  const res = await fetch(upstream, {
-    method: 'GET',
-    headers: {
-      cookie,
-      origin: request.headers.get('origin') || '',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
+    // Now call /me again
+    me = await upstream('/me', ctx.request);
+    if (me.ok) {
+      const j = await me.json();
+      return new Response(JSON.stringify({ authed: true, ...j }), { status: 200, headers: h });
+    }
+    return new Response(JSON.stringify({ authed: false }), { status: 401, headers: h });
+  }
 
-  return new Response(await res.text(), {
-    status: res.status,
-    headers: { 'content-type': res.headers.get('content-type') || 'application/json' },
-  });
+  return json({ authed: false }, 401);
 }
