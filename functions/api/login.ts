@@ -1,32 +1,36 @@
-// flowmaster/functions/api/login.ts
-export const onRequestPost: PagesFunction = async (ctx) => {
-  const { request, env } = ctx;
-  const body = await request.json();
+// Proxies login to the Auth Worker and mirrors tokens into this domain's cookies.
+export const onRequestPost: PagesFunction = async ({ request, env }) => {
+  const body = await request.json().catch(() => ({}));
 
-  // Forward (email, password) or (username, password) to your Auth Worker
   const r = await fetch(`${env.AUTH_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
 
-  // Pass through errors so the UI can show them
+  const headers = new Headers({ 'content-type': 'application/json' });
+
   if (!r.ok) {
     const text = await r.text();
-    return new Response(text, { status: r.status, headers: { 'content-type': 'application/json' } });
+    return new Response(text, { status: r.status, headers });
   }
 
-  // Grab the access token from the worker's Set-Cookie
+  // Worker returns tokens both in Set-Cookie and JSON body; use either.
   const setCookie = r.headers.get('set-cookie') || '';
-  const accessMatch = setCookie.match(/access_token=([^;]+)/);
-  const accessToken = accessMatch ? accessMatch[1] : null;
+  const mAccess = setCookie.match(/access_token=([^;]+)/);
+  const mRefresh = setCookie.match(/refresh_token=([^;]+)/);
 
-  const headers = new Headers({ 'content-type': 'application/json' });
-  if (accessToken) {
-    headers.append('Set-Cookie', `allstar_at=${accessToken}; Path=/; HttpOnly; Secure; SameSite=Lax`);
-  }
+  const data = await r.json(); // { username, role, mustChangePassword, access, refresh }
+  const accessToken  = (mAccess && mAccess[1])  || data.access  || null;
+  const refreshToken = (mRefresh && mRefresh[1]) || data.refresh || null;
 
-  // Return worker body (username/role/mustChangePassword)
-  const data = await r.json();
-  return new Response(JSON.stringify({ ok: true, ...data }), { headers });
+  if (accessToken)  headers.append('Set-Cookie', `allstar_at=${accessToken}; Path=/; HttpOnly; Secure; SameSite=Lax`);
+  if (refreshToken) headers.append('Set-Cookie', `allstar_rt=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Lax`);
+
+  return new Response(JSON.stringify({
+    ok: true,
+    username: data.username,
+    role: data.role,
+    mustChangePassword: data.mustChangePassword
+  }), { headers });
 };
