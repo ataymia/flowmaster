@@ -1,12 +1,11 @@
 :root {
-  /* Flowmaster-style dark + red accent */
   --bg: #0b0f14;
   --surface: #0f172a;
   --border: #1f2937;
   --text: #e5e7eb;
   --muted: #9ca3af;
-  --link: #fda4af;   /* soft rose for links */
-  --brand: #e11d48;  /* primary red accent */
+  --link: #fda4af;
+  --brand: #e11d48; /* Allstar red */
 }
 
 /* base */
@@ -48,10 +47,7 @@ header.appbar {
 .grid-2 { grid-template-columns: 1fr 1fr; }
 @media (max-width: 880px) { .grid-2 { grid-template-columns: 1fr; } }
 
-.field, input, select, button {
-  font: inherit;
-  color: var(--text);
-}
+.field, input, select, button { font: inherit; color: var(--text); }
 .field, input, select {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -85,24 +81,25 @@ header.appbar {
 /* timelines */
 .gridbar { height:20px; border-radius:8px; overflow:hidden; position:relative; background:#0a121a; border:1px solid var(--border); }
 .seg { height:100%; display:inline-block; position:relative; }
-.seg.diff::after { content:""; position:absolute; inset:0; background:rgba(239,68,68,0.28); }
+.seg.diff::after { content:""; position:absolute; inset:0; background:rgba(239,68,68,0.33); }
 .rowlabel { font-size:12px; color:var(--muted); width:7rem; }
 .timeline-wrap { position:relative; }
 .nowline { position:absolute; top:-4px; bottom:-4px; width:2px; background:#ffffffaa; }
 
-/* status colors */
+/* status colors (more diverse) */
 .status-dot { width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; }
-.st-available { background:#10b981; }
-.st-bathroom  { background:#f59e0b; }
-.st-break     { background:#fbbf24; }
-.st-lunch     { background:#fb923c; }
-.st-training  { background:#a78bfa; }
-.st-meeting   { background:#60a5fa; }
-.st-offline   { background:#9ca3af; }
+.st-available { background:#10b981; } /* green */
+.st-bathroom  { background:#d946ef; } /* magenta */
+.st-break     { background:#facc15; } /* yellow */
+.st-lunch     { background:#fb923c; } /* orange */
+.st-training  { background:#8b5cf6; } /* violet */
+.st-meeting   { background:#3b82f6; } /* blue */
+.st-offline   { background:#9ca3af; } /* gray */
 
-/* banners */
+/* banners & toast */
 .error-banner {
   position: fixed; inset: auto 0 0 0;
   background: #7f1d1d; color:#fee2e2;
   padding: 10px 14px; border-top: 1px solid #991b1b; z-index: 9999; display:none;
 }
+.toast { position: fixed; right: 16px; bottom: 16px; background: var(--surface); border:1px solid var(--border); padding:10px 12px; border-radius:10px; display:none; }
