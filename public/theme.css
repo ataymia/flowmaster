@@ -1,12 +1,12 @@
 :root {
-  /* Flowmaster-inspired tokens */
+  /* Flowmaster-style dark + red accent */
   --bg: #0b0f14;
   --surface: #0f172a;
   --border: #1f2937;
   --text: #e5e7eb;
   --muted: #9ca3af;
-  --link: #93c5fd;
-  --brand: #38bdf8; /* accent you can tweak */
+  --link: #fda4af;   /* soft rose for links */
+  --brand: #e11d48;  /* primary red accent */
 }
 
 /* base */
@@ -66,7 +66,7 @@ header.appbar {
   background: var(--bg); color: var(--text); cursor:pointer;
 }
 .btn:hover { background:#0a121a; }
-.btn-brand { background: var(--brand); border-color: transparent; color: #001018; }
+.btn-brand { background: var(--brand); border-color: transparent; color: #fff; }
 .btn-brand:hover { filter: brightness(.95); }
 .btn-danger { background: #7f1d1d; color: #fee2e2; border-color: #991b1b; }
 
@@ -90,7 +90,7 @@ header.appbar {
 .timeline-wrap { position:relative; }
 .nowline { position:absolute; top:-4px; bottom:-4px; width:2px; background:#ffffffaa; }
 
-/* status colors (unchanged) */
+/* status colors */
 .status-dot { width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; }
 .st-available { background:#10b981; }
 .st-bathroom  { background:#f59e0b; }
