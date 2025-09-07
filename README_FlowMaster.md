@@ -9,7 +9,7 @@ Agents no longer need to bounce between multiple tabs; FlowMaster centralizes ev
 ---
  
 ## 🔑 Key Features
-- **Script Engine**
+- **Script Engine** 
   - Inbound, Outbound, and Special-Case flows  
   - Service area checks (ex: 🚫 Detroit exclusion)  
   - Automatic step progression + completion tracking  
