@@ -1,166 +1,136 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Allstar Agent Hub — Sign in</title>
-  <link rel="stylesheet" href="/theme.css">
-  <style>
-    .wrap { min-height: 100dvh; display:grid; place-items:center; padding: 24px; }
-    .subtitle { color: var(--muted); }
-    .inline-banner {
-      background:#1f2937; border:1px solid var(--border);
-      color:var(--text); padding:10px 12px; border-radius:10px; display:none;
-      margin-bottom:10px;
+<!-- keep your <head> as-is, just ensure theme.css is linked -->
+<link rel="stylesheet" href="/theme.css" />
+
+<div id="app" class="container" style="padding:32px 16px;"></div>
+
+<script type="module">
+  // ====== CONFIG ======
+  const API = '/api'; // Pages Functions prefix
+
+  // ====== tiny fetch helper ======
+  async function api(path, opts = {}) {
+    const res = await fetch(API + path, { credentials: 'include', ...opts });
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { if (ct.includes('application/json')) { const j = await res.json(); msg = j.error || msg; } } catch {}
+      throw new Error(msg);
     }
-  </style>
-</head>
-<body>
-  <header class="appbar">
-    <div class="brand" style="color:var(--brand)">Allstar Agent Hub</div>
-  </header>
+    return ct.includes('application/json') ? res.json() : res.text();
+  }
 
-  <main class="wrap">
-    <div id="card" class="card" style="width:min(460px, 100%);"></div>
-  </main>
-<script>
-/* Use Cloudflare Pages Functions on your domain */
-const USING_PAGES = location.hostname.endsWith('pages.dev')
-                 || location.hostname.endsWith('staragentdash.work');
+  // ====== Auth calls (renamed: whoami -> getMe) ======
+  const getMe = () => api('/whoami').catch(() => ({ authed:false }));
+  const login = (email, password) =>
+    api('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+  const logout = () => api('/logout', { method: 'POST' }).catch(() => null);
 
-/* optional bearer fallback for GitHub – not needed on staragentdash.work */
-let ACCESS_TOKEN = null;
+  // ====== News ======
+  const fetchNews = (aud) => api(`/news?aud=${encodeURIComponent(aud)}`);
 
-async function api(path, opts = {}) {
-  // On Pages, always call same-origin /api/*
-  const url = USING_PAGES
-    ? `/api${path}`                                        // ex: /api/login, /api/whoami, /api/schedules
-    : `https://allstar-auth.ataymia.workers.dev${path}`;   // GitHub fallback
+  // ====== UI helpers ======
+  const $ = (s, el=document) => el.querySelector(s);
+  const h = (tag, attrs={}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k,v] of Object.entries(attrs)) {
+      if (k === 'class') n.className = v;
+      else if (k === 'style') Object.assign(n.style, v);
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v);
+    }
+    for (const k of kids.flat()) n.append(k?.nodeType ? k : document.createTextNode(k ?? ''));
+    return n;
+  };
 
-  const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
-  if (!USING_PAGES && ACCESS_TOKEN) headers.Authorization = `Bearer ${ACCESS_TOKEN}`;
+  // ====== Screens ======
+  function renderLogin() {
+    const app = $('#app'); app.innerHTML = '';
+    app.append(
+      h('div', { class:'card', style:{maxWidth:'460px', margin:'48px auto'} },
+        h('h2', {}, 'Allstar Agent Hub'),
+        h('p', { class:'muted', style:{marginTop:'4px'} }, 'Sign in with your scheduling credentials.'),
+        h('label', { class:'label', style:{marginTop:'12px'} }, 'Email'),
+        h('input', { id:'email', class:'field', placeholder:'you@allstarservicesnow.com' }),
+        h('label', { class:'label', style:{marginTop:'12px'} }, 'Password'),
+        h('input', { id:'pass', class:'field', type:'password', placeholder:'••••••••' }),
+        h('div', { id:'err', class:'muted', style:{color:'#ef4444', display:'none', marginTop:'8px'} }),
+        h('button', {
+          class:'btn btn-brand', style:{width:'100%', marginTop:'16px'},
+          onclick: async () => {
+            $('#err').style.display = 'none';
+            const email = $('#email').value.trim();
+            const pass  = $('#pass').value;
+            try {
+              await login(email, pass);
+              const me = await getMe();
+              if (!me?.authed) throw new Error('Login failed');
+              renderHub(me);
+            } catch (e) {
+              $('#err').textContent = e.message || 'Sign in failed';
+              $('#err').style.display = 'block';
+            }
+          }
+        }, 'Sign in')
+      )
+    );
+  }
 
-  const res = await fetch(url, {
-    credentials: 'include',
-    method: opts.method || 'GET',
-    headers,
-    body: opts.body
-  });
+  function renderHub(me) {
+    const app = $('#app'); app.innerHTML = '';
+    const role = me?.role || 'AGENT';
+    const aud = role === 'ADMIN' || role === 'SUPERADMIN' ? 'ADMIN' : 'AGENT';
 
-  const ct = res.headers.get('content-type') || '';
-  const body = ct.includes('json') ? await res.json() : await res.text();
-  if (!res.ok) throw new Error(body?.error || (`HTTP ${res.status}`));
-  return body;
-}
+    const header = h('div', { class:'row-between', style:{marginBottom:'16px'} },
+      h('div', { class:'title', style:{color:'var(--brand)'} }, 'Allstar Agent Hub'),
+      h('div', { class:'row', style:{gap:'8px'} },
+        h('span', { class:'muted' }, `${me.username} · ${role}`),
+        h('a', { class:'btn', href:'/adherence/' }, 'Adherence'),
+        h('a', { class:'btn', href:'/flowmaster/' }, 'Flowmaster'),
+        h('button', { class:'btn', onclick: async ()=>{ await logout(); renderLogin(); } }, 'Logout')
+      )
+    );
 
-/* convenience wrappers */
-const whoami = () => api('/whoami'); // GET /api/whoami
-async function loginWithEmail(email, password) {
-  const out = await api('/login', { method:'POST', body: JSON.stringify({ email, password }) }); // POST /api/login
-  ACCESS_TOKEN = out?.access || null; // (GitHub fallback only)
-  return out;
-}
+    const newsWrap = h('div', { class:'card' },
+      h('h3', {}, 'Team News & Memos'),
+      h('div', { id:'newsList', style:{marginTop:'8px'} }, h('div', { class:'muted' }, 'Loading…'))
+    );
+
+    app.append(header, newsWrap);
+
+    // load Notion-backed news
+    fetchNews(aud).then(({ items=[] }) => {
+      const host = $('#newsList'); host.innerHTML = '';
+      if (!items.length) {
+        host.append(h('div', { class:'muted' }, 'No memos yet.'));
+        return;
+      }
+      for (const it of items) {
+        const line = h('div', { class:'card', style:{marginTop:'8px'} },
+          h('div', { class:'row-between' },
+            h('strong', {}, it.title || '(untitled)'),
+            h('span', { class:'pill', style:{display: it.pinned ? 'inline-flex' : 'none'} }, 'Pinned')
+          ),
+          it.publishedAt ? h('div', { class:'muted', style:{fontSize:'12px', marginTop:'4px'} },
+            `Published ${it.publishedAt}${it.expiresAt ? ` · Expires ${it.expiresAt}` : ''}`
+          ) : null,
+          h('div', { style:{marginTop:'8px', whiteSpace:'pre-wrap'} }, it.body || '')
+        );
+        host.append(line);
+      }
+    }).catch(err => {
+      const host = $('#newsList'); host.innerHTML = '';
+      host.append(h('div', { class:'muted', style:{color:'#ef4444'} }, `News error: ${err.message || err}`));
+    });
+  }
+
+  // ====== boot ======
+  (async () => {
+    const me = await getMe();
+    if (me?.authed) renderHub(me);
+    else renderLogin();
+  })();
 </script>
-
-  <script>
-    const $ = (s)=>document.querySelector(s);
-
-    async function jfetch(url, opts={}) {
-      const r = await fetch(url, { ...opts, headers:{ 'content-type':'application/json', ...(opts.headers||{}) } });
-      const ct = r.headers.get('content-type') || '';
-      const body = ct.includes('application/json') ? await r.json() : await r.text();
-      if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
-      return body;
-    }
-    const whoami = ()=> jfetch('/api/whoami');
-    const logout  = ()=> jfetch('/api/logout', { method:'POST' });
-
-    function renderLoginForm(message){
-      const c = $('#card');
-      c.innerHTML = `
-        <div class="row" style="margin-bottom:12px;">
-          <div class="brand" style="color:var(--brand)">ALLSTAR</div>
-          <div class="subtitle">sign in</div>
-        </div>
-        <div id="msg" class="inline-banner"${message ? '' : ' style="display:none"'}>${message||''}</div>
-        <label class="label">Email (or username)</label>
-        <input id="idp" class="field" placeholder="you@company.com">
-        <label class="label" style="margin-top:10px">Password</label>
-        <input id="pw" type="password" class="field" placeholder="••••••••">
-        <div class="row" style="margin-top:14px;">
-          <button id="login" class="btn btn-brand" style="width:100%;">Sign in</button>
-        </div>
-        <div class="muted" style="margin-top:12px; font-size:12px;">
-          You’ll stay signed in for 7 days on this device.
-        </div>
-      `;
-      $('#login').addEventListener('click', doLogin);
-      document.addEventListener('keydown', onEnterOnce);
-    }
-
-    function renderAlreadySignedIn(me){
-      const c = $('#card');
-      c.innerHTML = `
-        <div class="row" style="margin-bottom:12px;">
-          <div class="brand" style="color:var(--brand)">ALLSTAR</div>
-          <div class="subtitle">you’re signed in</div>
-        </div>
-        <div class="inline-banner" style="display:block">Signed in as <b>${escapeHtml(me.username)}</b> (${me.role})</div>
-        <div class="row" style="margin-top:6px; gap:8px;">
-          <a class="btn btn-brand" href="/hub" style="flex:1; text-align:center;">Continue to Hub</a>
-          <button id="switch" class="btn" style="flex:1;">Sign in as different user</button>
-        </div>
-        <div class="row" style="margin-top:6px;">
-          <button id="signout" class="btn btn-danger" style="width:100%;">Sign out</button>
-        </div>
-      `;
-      $('#switch').addEventListener('click', async ()=>{
-        await logout();
-        renderLoginForm();
-        $('#idp').focus();
-      });
-      $('#signout').addEventListener('click', async ()=>{
-        await logout();
-        renderLoginForm('Signed out.');
-      });
-    }
-
-    function onEnterOnce(e){
-      if(e.key === 'Enter'){
-        document.removeEventListener('keydown', onEnterOnce);
-        doLogin();
-      }
-    }
-
-    async function doLogin(){
-      const msg = (t)=>{ const m=$('#msg'); if(!m) return; m.textContent=t||''; m.style.display = t ? 'block' : 'none'; };
-      msg('');
-      const idp = $('#idp')?.value?.trim();
-      const pw  = $('#pw')?.value;
-      if (!idp || !pw) { msg('Enter email/username and password'); return; }
-      try {
-        await jfetch('/api/login', {
-          method:'POST',
-          body: JSON.stringify(idp.includes('@') ? { email:idp, password:pw } : { username:idp, password:pw })
-        });
-        location.href = '/hub';
-      } catch(e) {
-        msg('Invalid email/username or password');
-      }
-    }
-
-    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-    // initial render: DO NOT auto-redirect; show state.
-    (async ()=>{
-      try {
-        const w = await whoami();
-        if (w.authed) renderAlreadySignedIn(w.me);
-        else renderLoginForm();
-      } catch {
-        renderLoginForm();
-      }
-    })();
-  </script>
-</body>
-</html>
