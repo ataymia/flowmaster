@@ -1,4 +1,4 @@
-import { proxyWithAuth } from './_util';
+import { proxyWithAuth } from './_utils';
 
 export const onRequest: PagesFunction = async ({ request, env }) => {
   if(request.method==='GET'){
