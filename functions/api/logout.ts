@@ -1,8 +1,7 @@
-import { clearCookie, json } from './_utils';
-
-export async function onRequestPost() {
-  const h = new Headers({ 'content-type': 'application/json' });
-  h.append('Set-Cookie', clearCookie('access_token',  '/'));
-  h.append('Set-Cookie', clearCookie('refresh_token', '/'));
-  return new Response(null, { status: 204, headers: h });
-}
+import { json, setCookie } from './_util';
+export const onRequestPost: PagesFunction = async () => {
+  const h = new Headers();
+  h.append('Set-Cookie', setCookie('access_token','',{maxAge:0}));
+  h.append('Set-Cookie', setCookie('refresh_token','',{maxAge:0}));
+  return json({ok:true}, 200, Object.fromEntries(h));
+};
