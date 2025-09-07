@@ -2,8 +2,6 @@
 
 export const AUTH_BASE =
   (globalThis as any).AUTH_BASE ||
-  // fallback so /api/debug-auth still shows the value:
-  // you can override via Cloudflare Pages > Settings > Environment variables
   'https://allstar-auth.ataymia.workers.dev';
 
 export type Ctx = Parameters<PagesFunction>[0];
@@ -16,40 +14,59 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
   });
 }
 
-/** Pass browser auth (cookies) to the Worker and proxy the response back */
-export async function proxyWithAuth(
-  ctx: Ctx,
-  path: string,
-  init: RequestInit = {}
-): Promise<Response> {
-  const url = AUTH_BASE + path;
-
-  // Forward cookies (access_token/refresh_token clones) to the Worker
-  const inCookie = ctx.request.headers.get('cookie') || '';
-  const headers = new Headers(init.headers || {});
-  if (inCookie) headers.set('cookie', inCookie);
-
-  // If the original request was JSON, keep content-type on pass-through
-  const reqCT = ctx.request.headers.get('content-type');
-  if (reqCT && !headers.has('content-type')) headers.set('content-type', reqCT);
-
-  // Do the server-to-server fetch
-  const res = await fetch(url, {
-    method: init.method || ctx.request.method,
-    headers,
-    body: init.body,
-  });
-
-  // Copy through Set-Cookie (so refresh cycles still work)
-  const out = new Response(res.body, {
-    status: res.status,
-    headers: new Headers(res.headers),
-  });
-
-  return out;
+/**
+ * Build a Set-Cookie header value.
+ * NOTE: Your upstream Worker already sets HttpOnly/SameSite, etc.
+ * We provide this to satisfy existing imports (login/logout/refresh).
+ */
+export function setCookie(
+  name: string,
+  value: string,
+  opts: {
+    path?: string;
+    maxAge?: number;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: 'Strict' | 'Lax' | 'None';
+  } = {}
+): string {
+  const parts = [`${name}=${value}`];
+  parts.push(`Path=${opts.path ?? '/'}`);
+  if (typeof opts.maxAge === 'number') parts.push(`Max-Age=${opts.maxAge}`);
+  if (opts.httpOnly ?? true) parts.push('HttpOnly');
+  if (opts.secure ?? true) parts.push('Secure');
+  parts.push(`SameSite=${opts.sameSite ?? 'None'}`);
+  return parts.join('; ');
 }
 
-/** Tiny helper – parse cookies when needed */
+/**
+ * Extract a cookie line from an upstream response's Set-Cookie headers.
+ * If not found, returns empty string.
+ */
+export function pickCookieFromSetCookie(headers: Headers, cookieName: string): string {
+  const setCookies = headers.getSetCookie
+    ? headers.getSetCookie() // Cloudflare Workers runtime method
+    : headers.get('set-cookie'); // fallback (may be a single concatenated string)
+
+  if (!setCookies) return '';
+
+  if (Array.isArray(setCookies)) {
+    for (const line of setCookies) {
+      if (line.startsWith(`${cookieName}=`)) return line;
+    }
+    return '';
+  }
+
+  // split the combined header safely (CRLF + comma isn't guaranteed; this heuristic works for our simple case)
+  const lines = setCookies.split(/,(?=[^;]+?=)/g);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith(`${cookieName}=`)) return trimmed;
+  }
+  return '';
+}
+
+/** Parse cookies from the incoming Request (when needed) */
 export function parseCookies(request: Request): Record<string, string> {
   const out: Record<string, string> = {};
   const c = request.headers.get('cookie');
@@ -59,4 +76,46 @@ export function parseCookies(request: Request): Record<string, string> {
     if (idx > -1) out[part.slice(0, idx)] = decodeURIComponent(part.slice(idx + 1));
   }
   return out;
+}
+
+/**
+ * Low-level upstream call to the Auth Worker.
+ * We forward browser cookies so the Worker can authenticate the user.
+ * We return the upstream response as-is (including Set-Cookie).
+ */
+export async function upstream(
+  ctx: Ctx,
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  const url = AUTH_BASE + path;
+
+  const headers = new Headers(init.headers || {});
+  const inCookie = ctx.request.headers.get('cookie');
+  if (inCookie) headers.set('cookie', inCookie);
+
+  // keep content-type if body is JSON
+  const reqCT = ctx.request.headers.get('content-type');
+  if (reqCT && !headers.has('content-type')) headers.set('content-type', reqCT);
+
+  const res = await fetch(url, {
+    method: init.method || ctx.request.method,
+    headers,
+    body: init.body,
+  });
+
+  // stream back with upstream headers (including Set-Cookie)
+  return new Response(res.body, { status: res.status, headers: new Headers(res.headers) });
+}
+
+/**
+ * Alias with clearer intent for “proxying a browser-authenticated call”.
+ * Currently identical to `upstream`.
+ */
+export async function proxyWithAuth(
+  ctx: Ctx,
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  return upstream(ctx, path, init);
 }
