@@ -1,4 +1,4 @@
-import { json } from './_util';
+import { json } from './_utils';
 
 function pickRich(r:any){ if(!r) return ''; if(Array.isArray(r)) return r.map(x=>x?.plain_text||'').join(''); return ''; }
 export const onRequestGet: PagesFunction = async ({ request, env }) => {
