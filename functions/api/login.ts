@@ -1,33 +1,29 @@
-// functions/api/login.ts
-interface Env { AUTH_BASE: string }
+import { AUTH_BASE, json, setCookie } from './_utils';
 
-export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
-  const upstream = `${env.AUTH_BASE.replace(/\/$/, '')}/auth/login`;
-  const res = await fetch(upstream, {
+export async function onRequestPost({ request }: { request: Request }) {
+  // pass through body to worker /auth/login
+  const body = await request.text();
+  const res = await fetch(`${AUTH_BASE}/auth/login`, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      origin: request.headers.get('origin') || '',
-    },
-    body: await request.text(),
+    headers: { 'content-type': 'application/json' },
+    body
   });
 
-  // Pass body through
-  const out = new Response(await res.arrayBuffer(), {
-    status: res.status,
-    headers: {
-      'content-type': res.headers.get('content-type') || 'application/json',
-    },
-  });
+  let data: any = null;
+  try { data = await res.json(); } catch {}
 
-  // *** CRITICAL: forward ALL Set-Cookie headers so the browser stores access_token on staragentdash.work
-  const getAll = (res.headers as any).getAll?.bind(res.headers);
-  const getSetCookie = (res.headers as any).getSetCookie?.bind(res.headers);
-  const cookies: string[] =
-    (getAll && getAll('set-cookie')) ||
-    (getSetCookie && getSetCookie()) ||
-    (res.headers.get('set-cookie') ? [res.headers.get('set-cookie') as string] : []);
-  for (const c of cookies) out.headers.append('set-cookie', c);
+  // Worker (per our earlier change) returns access & refresh in body.
+  const access  = data?.access || '';
+  const refresh = data?.refresh || '';
 
-  return out;
+  const headers = new Headers({ 'content-type': 'application/json' });
+  if (access)  headers.append('Set-Cookie', setCookie('access_token',  access,  { maxAge: 60*15, path: '/' }));
+  if (refresh) headers.append('Set-Cookie', setCookie('refresh_token', refresh, { maxAge: 60*60*24*7, path: '/' }));
+
+  // Return minimal payload to the client
+  const payload = data && res.ok
+    ? { ok: true, username: data.username, role: data.role, mustChangePassword: !!data.mustChangePassword }
+    : { ok: false };
+
+  return new Response(JSON.stringify(payload), { status: res.status, headers });
 }
