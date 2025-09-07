@@ -1,16 +1,14 @@
-// Proxies GET/POST to Allstar-Auth /schedules, forwarding auth.
-// Robust: sends cookies AND Authorization: Bearer <access_token>.
+interface Env { AUTH_BASE: string }
 
-function pickAccessTokenFromCookie(h) {
+function pickAccessTokenFromCookie(h: string | null): string | null {
   const c = h || "";
   const m = c.match(/(?:^|;\s*)access_token=([^;]+)/i);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const url = new URL(request.url);
-  const qs = url.search || "";
-  const upstream = `${env.AUTH_BASE.replace(/\/$/, "")}/schedules${qs}`;
+  const upstream = `${env.AUTH_BASE.replace(/\/$/, "")}/schedules${url.search || ""}`;
 
   const cookie = request.headers.get("cookie") || "";
   const token = pickAccessTokenFromCookie(cookie);
@@ -24,15 +22,16 @@ export async function onRequestGet({ request, env }) {
     },
   });
 
-  const text = await res.text();
-  return new Response(text, {
+  return new Response(await res.text(), {
     status: res.status,
     headers: { "content-type": res.headers.get("content-type") || "application/json" },
   });
 }
 
-export async function onRequestPost({ request, env }) {
-  let body;
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
+  type Block = { status: string; start: number | string; end: number | string };
+  let body: { username?: string; date?: string; blocks?: Block[] };
+
   try { body = await request.json(); }
   catch { return new Response(JSON.stringify({ error: "Bad JSON" }), { status: 400 }); }
 
@@ -40,22 +39,22 @@ export async function onRequestPost({ request, env }) {
   const date = (body.date || "").trim();
   const rawBlocks = Array.isArray(body.blocks) ? body.blocks : [];
 
-  // sanitize blocks -> minutes, sorted, merged
-  function toMin(v) {
+  const toMin = (v: number | string): number => {
     if (typeof v === "number" && Number.isFinite(v)) return Math.max(0, Math.min(1440, v | 0));
     const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || ""));
     if (!m) return 0;
-    return Math.max(0, Math.min(1440, ((+m[1])*60 + (+m[2])) | 0));
-  }
+    return Math.max(0, Math.min(1440, ((+m[1]) * 60 + (+m[2])) | 0));
+  };
+
   let blocks = rawBlocks
     .map(b => ({ status: String(b.status || "").trim(), start: toMin(b.start), end: toMin(b.end) }))
     .filter(b => b.status && b.end > b.start)
-    .sort((a,b)=> a.start-b.start || a.end-b.end);
+    .sort((a, b) => a.start - b.start || a.end - b.end);
 
-  const merged = [];
+  const merged: { status: string; start: number; end: number }[] = [];
   for (const b of blocks) {
-    const last = merged[merged.length-1];
-    if (last && last.status===b.status && last.end===b.start) last.end = b.end;
+    const last = merged[merged.length - 1];
+    if (last && last.status === b.status && last.end === b.start) last.end = b.end;
     else merged.push({ ...b });
   }
   blocks = merged;
