@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Schedule | Allstar Agent Hub</title>
+  <style>
+    :root { color-scheme: dark }
+    body { font-family: ui-sans-serif, system-ui, -apple-system; margin:0; background:#0b0f14; color:#e5e7eb }
+    header { position:sticky; top:0; background:#0f172a; padding:12px 16px; border-bottom:1px solid #1f2937 }
+    a { color:#93c5fd; text-decoration:none }
+    main { max-width:900px; margin:16px auto; padding:0 16px }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px }
+    input, select, button { padding:8px 10px; border-radius:8px; border:1px solid #374151; background:#0b0f14; color:#e5e7eb }
+    button.action { background:#2563eb; border:0; cursor:pointer }
+    table { width:100%; border-collapse:collapse; margin-top:8px }
+    th, td { padding:8px 10px; border-bottom:1px solid #1f2937; text-align:left; font-size:14px }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid #374151; border-radius:999px; font-size:12px; margin-left:6px }
+    .muted { opacity:.75 }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/hub">← Back to Hub</a>
+  </header>
+  <main>
+    <h2>Schedule</h2>
+    <div class="row">
+      <div id="me" class="muted">Loading user…</div>
+      <label>Date <input id="date" type="date" /></label>
+      <button id="load" class="action">Load</button>
+    </div>
+
+    <div id="schedWrap">
+      <table id="sched">
+        <thead><tr><th>Status</th><th>Start</th><th>End</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div id="noSched" class="muted" style="display:none;">No schedule for this date.</div>
+    </div>
+
+    <h3>Update my status</h3>
+    <div class="row">
+      <button class="action st" data-s="AVAILABLE">Available</button>
+      <button class="action st" data-s="BREAK">Break</button>
+      <button class="action st" data-s="LUNCH">Lunch</button>
+      <button class="action st" data-s="MEETING">Meeting</button>
+      <button class="action st" data-s="OFFLINE">Offline</button>
+      <span id="msg" class="muted"></span>
+    </div>
+  </main>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const fmt = (m) => {
+      const h = Math.floor(m/60).toString().padStart(2,'0');
+      const mm = (m%60).toString().padStart(2,'0');
+      return `${h}:${mm}`;
+    };
+    function todayISO() { const d = new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+
+    async function who() {
+      const r = await fetch('/api/whoami'); const j = await r.json();
+      if (!j.authed) { location.href = '/'; return; }
+      $('#me').textContent = `${j.me.username} (${j.me.role})`;
+      return j.me;
+    }
+
+    async function loadSched() {
+      const date = $('#date').value || todayISO();
+      const r = await fetch(`/api/schedule?date=${encodeURIComponent(date)}`);
+      if (!r.ok) { $('#noSched').style.display=''; $('#sched tbody').innerHTML=''; return; }
+      const j = await r.json();
+      const rows = j.blocks || [];
+      const tb = $('#sched tbody'); tb.innerHTML='';
+      if (!rows.length) { $('#noSched').style.display=''; return; }
+      $('#noSched').style.display='none';
+      for (const b of rows) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><span class="pill">${b.status}</span></td><td>${fmt(b.start)}</td><td>${fmt(b.end)}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    async function setStatus(s) {
+      $('#msg').textContent = 'Updating…';
+      const r = await fetch('/api/events', {
+        method:'POST', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ status: s })
+      });
+      const ok = r.ok;
+      $('#msg').textContent = ok ? `Set to ${s} at ${(new Date()).toLocaleTimeString()}` : 'Failed to update.';
+    }
+
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('.st'); if (!b) return;
+      setStatus(b.dataset.s);
+    });
+    $('#load').addEventListener('click', loadSched);
+
+    (function init(){
+      $('#date').value = todayISO();
+      who().then(loadSched);
+    })();
+  </script>
+</body>
+</html>
