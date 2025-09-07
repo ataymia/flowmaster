@@ -1,136 +1,58 @@
-<!-- keep your <head> as-is, just ensure theme.css is linked -->
-<link rel="stylesheet" href="/theme.css" />
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Allstar Sign In</title>
+<style>
+:root{ --bg:#0f1115; --card:#161b22; --text:#e5e7eb; --muted:#9ca3af;
+       --brand:#c0392b; --brand-700:#a93226; --border:#2b3340; }
+*{box-sizing:border-box} html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;display:grid;place-items:center}
+.card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px}
+h1{margin:0 0 6px;font-size:22px}
+.muted{color:var(--muted);margin-bottom:14px}
+.label{font-size:12px;color:var(--muted);margin:12px 0 6px}
+.field{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0b0f13;color:var(--text)}
+.btn{width:100%;margin-top:14px;padding:10px 12px;border-radius:10px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer;font-weight:600}
+.btn:hover{background:var(--brand-700)}
+.error{display:none;margin-top:10px;color:#ffdada;background:rgba(192,57,43,.12);border:1px solid rgba(192,57,43,.35);padding:8px 10px;border-radius:10px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Allstar <span style="color:var(--brand);font-weight:800">Agent Hub</span></h1>
+    <div class="muted">Sign in with your scheduling credentials.</div>
+    <div class="label">Email</div>
+    <input id="email" class="field" type="email" placeholder="you@company.com" autocomplete="username"/>
+    <div class="label">Password</div>
+    <input id="password" class="field" type="password" placeholder="••••••••" autocomplete="current-password"/>
+    <button id="loginBtn" class="btn">Sign In</button>
+    <div id="err" class="error"></div>
+  </div>
 
-<div id="app" class="container" style="padding:32px 16px;"></div>
-
-<script type="module">
-  // ====== CONFIG ======
-  const API = '/api'; // Pages Functions prefix
-
-  // ====== tiny fetch helper ======
-  async function api(path, opts = {}) {
-    const res = await fetch(API + path, { credentials: 'include', ...opts });
-    const ct = res.headers.get('content-type') || '';
-    if (!res.ok) {
-      let msg = `HTTP ${res.status}`;
-      try { if (ct.includes('application/json')) { const j = await res.json(); msg = j.error || msg; } } catch {}
-      throw new Error(msg);
-    }
-    return ct.includes('application/json') ? res.json() : res.text();
-  }
-
-  // ====== Auth calls (renamed: whoami -> getMe) ======
-  const getMe = () => api('/whoami').catch(() => ({ authed:false }));
-  const login = (email, password) =>
-    api('/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+<script>
+const API = "/api";
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const err = document.getElementById('err'); err.style.display='none';
+  if(!email || !password){ err.textContent="Enter email and password."; err.style.display='block'; return; }
+  try{
+    const r = await fetch(API + "/login", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type":"application/json" },
       body: JSON.stringify({ email, password })
     });
-  const logout = () => api('/logout', { method: 'POST' }).catch(() => null);
-
-  // ====== News ======
-  const fetchNews = (aud) => api(`/news?aud=${encodeURIComponent(aud)}`);
-
-  // ====== UI helpers ======
-  const $ = (s, el=document) => el.querySelector(s);
-  const h = (tag, attrs={}, ...kids) => {
-    const n = document.createElement(tag);
-    for (const [k,v] of Object.entries(attrs)) {
-      if (k === 'class') n.className = v;
-      else if (k === 'style') Object.assign(n.style, v);
-      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
-      else n.setAttribute(k, v);
-    }
-    for (const k of kids.flat()) n.append(k?.nodeType ? k : document.createTextNode(k ?? ''));
-    return n;
-  };
-
-  // ====== Screens ======
-  function renderLogin() {
-    const app = $('#app'); app.innerHTML = '';
-    app.append(
-      h('div', { class:'card', style:{maxWidth:'460px', margin:'48px auto'} },
-        h('h2', {}, 'Allstar Agent Hub'),
-        h('p', { class:'muted', style:{marginTop:'4px'} }, 'Sign in with your scheduling credentials.'),
-        h('label', { class:'label', style:{marginTop:'12px'} }, 'Email'),
-        h('input', { id:'email', class:'field', placeholder:'you@allstarservicesnow.com' }),
-        h('label', { class:'label', style:{marginTop:'12px'} }, 'Password'),
-        h('input', { id:'pass', class:'field', type:'password', placeholder:'••••••••' }),
-        h('div', { id:'err', class:'muted', style:{color:'#ef4444', display:'none', marginTop:'8px'} }),
-        h('button', {
-          class:'btn btn-brand', style:{width:'100%', marginTop:'16px'},
-          onclick: async () => {
-            $('#err').style.display = 'none';
-            const email = $('#email').value.trim();
-            const pass  = $('#pass').value;
-            try {
-              await login(email, pass);
-              const me = await getMe();
-              if (!me?.authed) throw new Error('Login failed');
-              renderHub(me);
-            } catch (e) {
-              $('#err').textContent = e.message || 'Sign in failed';
-              $('#err').style.display = 'block';
-            }
-          }
-        }, 'Sign in')
-      )
-    );
+    if(!r.ok) throw new Error("Invalid email or password");
+    // after login, go to hub
+    location.href = "/hub";
+  }catch(e){
+    err.textContent = e.message || "Login failed";
+    err.style.display = 'block';
   }
-
-  function renderHub(me) {
-    const app = $('#app'); app.innerHTML = '';
-    const role = me?.role || 'AGENT';
-    const aud = role === 'ADMIN' || role === 'SUPERADMIN' ? 'ADMIN' : 'AGENT';
-
-    const header = h('div', { class:'row-between', style:{marginBottom:'16px'} },
-      h('div', { class:'title', style:{color:'var(--brand)'} }, 'Allstar Agent Hub'),
-      h('div', { class:'row', style:{gap:'8px'} },
-        h('span', { class:'muted' }, `${me.username} · ${role}`),
-        h('a', { class:'btn', href:'/adherence/' }, 'Adherence'),
-        h('a', { class:'btn', href:'/flowmaster/' }, 'Flowmaster'),
-        h('button', { class:'btn', onclick: async ()=>{ await logout(); renderLogin(); } }, 'Logout')
-      )
-    );
-
-    const newsWrap = h('div', { class:'card' },
-      h('h3', {}, 'Team News & Memos'),
-      h('div', { id:'newsList', style:{marginTop:'8px'} }, h('div', { class:'muted' }, 'Loading…'))
-    );
-
-    app.append(header, newsWrap);
-
-    // load Notion-backed news
-    fetchNews(aud).then(({ items=[] }) => {
-      const host = $('#newsList'); host.innerHTML = '';
-      if (!items.length) {
-        host.append(h('div', { class:'muted' }, 'No memos yet.'));
-        return;
-      }
-      for (const it of items) {
-        const line = h('div', { class:'card', style:{marginTop:'8px'} },
-          h('div', { class:'row-between' },
-            h('strong', {}, it.title || '(untitled)'),
-            h('span', { class:'pill', style:{display: it.pinned ? 'inline-flex' : 'none'} }, 'Pinned')
-          ),
-          it.publishedAt ? h('div', { class:'muted', style:{fontSize:'12px', marginTop:'4px'} },
-            `Published ${it.publishedAt}${it.expiresAt ? ` · Expires ${it.expiresAt}` : ''}`
-          ) : null,
-          h('div', { style:{marginTop:'8px', whiteSpace:'pre-wrap'} }, it.body || '')
-        );
-        host.append(line);
-      }
-    }).catch(err => {
-      const host = $('#newsList'); host.innerHTML = '';
-      host.append(h('div', { class:'muted', style:{color:'#ef4444'} }, `News error: ${err.message || err}`));
-    });
-  }
-
-  // ====== boot ======
-  (async () => {
-    const me = await getMe();
-    if (me?.authed) renderHub(me);
-    else renderLogin();
-  })();
+});
 </script>
+</body>
+</html>
