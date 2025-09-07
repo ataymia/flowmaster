@@ -1,51 +1,62 @@
-export const json = (data: any, status = 200, headers: Record<string,string> = {}) =>
-  new Response(JSON.stringify(data), { status, headers: { 'Content-Type':'application/json', ...headers } });
+// functions/api/_utils.ts
 
-export function parseCookies(req: Request){
-  const map: Record<string,string> = {};
-  const raw = req.headers.get('cookie') || '';
-  raw.split(/;\s*/).forEach(p=>{ const i=p.indexOf('='); if(i>0){ map[p.slice(0,i)] = decodeURIComponent(p.slice(i+1)); }});
-  return map;
+export const AUTH_BASE =
+  (globalThis as any).AUTH_BASE ||
+  // fallback so /api/debug-auth still shows the value:
+  // you can override via Cloudflare Pages > Settings > Environment variables
+  'https://allstar-auth.ataymia.workers.dev';
+
+export type Ctx = Parameters<PagesFunction>[0];
+
+/** JSON helper */
+export function json(data: any, status = 200, headers?: HeadersInit) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'content-type': 'application/json', ...(headers || {}) },
+  });
 }
 
-export function setCookie(name: string, val: string, opts: {path?:string; maxAge?:number; httpOnly?:boolean; secure?:boolean; sameSite?:'None'|'Lax'|'Strict'} = {}){
-  const path = opts.path ?? '/';
-  const httpOnly = opts.httpOnly ?? true;
-  const secure = opts.secure ?? true;
-  const same = opts.sameSite ?? 'None';
-  let c = `${name}=${val}; Path=${path}; SameSite=${same};`;
-  if(httpOnly) c+=' HttpOnly;';
-  if(secure) c+=' Secure;';
-  if(typeof opts.maxAge==='number') c+=` Max-Age=${opts.maxAge};`;
-  return c;
+/** Pass browser auth (cookies) to the Worker and proxy the response back */
+export async function proxyWithAuth(
+  ctx: Ctx,
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  const url = AUTH_BASE + path;
+
+  // Forward cookies (access_token/refresh_token clones) to the Worker
+  const inCookie = ctx.request.headers.get('cookie') || '';
+  const headers = new Headers(init.headers || {});
+  if (inCookie) headers.set('cookie', inCookie);
+
+  // If the original request was JSON, keep content-type on pass-through
+  const reqCT = ctx.request.headers.get('content-type');
+  if (reqCT && !headers.has('content-type')) headers.set('content-type', reqCT);
+
+  // Do the server-to-server fetch
+  const res = await fetch(url, {
+    method: init.method || ctx.request.method,
+    headers,
+    body: init.body,
+  });
+
+  // Copy through Set-Cookie (so refresh cycles still work)
+  const out = new Response(res.body, {
+    status: res.status,
+    headers: new Headers(res.headers),
+  });
+
+  return out;
 }
 
-export async function proxyWithAuth(env: any, req: Request, path: string, init?: RequestInit, retryOn401 = true){
-  const cookies = parseCookies(req);
-  const access = cookies['access_token'];
-  const refresh = cookies['refresh_token'];
-  const headers = new Headers(init?.headers || {});
-  if(access) headers.set('Cookie', `access_token=${access}`);
-  const r = await fetch(new URL(path, env.AUTH_BASE).toString(), { method: init?.method || req.method, headers, body: init?.body, cf: {cacheTtl: 0}});
-  if(r.status!==401 || !retryOn401 || !refresh) return r;
-
-  // try refresh
-  const r2 = await fetch(new URL('/auth/refresh', env.AUTH_BASE), { method:'POST', headers: { 'Cookie': `refresh_token=${refresh}` }});
-  if(r2.status===204){
-    const set = r2.headers.get('set-cookie'); // Worker set new access cookie
-    const outHeaders = new Headers();
-    if(set){
-      // Extract token value if present, or simply mirror cookie name=value
-      outHeaders.append('Set-Cookie', set.replace(/Domain=.*?;/i,'').replace(/Path=\/auth/,'Path=/')); // normalize path for our domain
-    }
-    // retry original
-    const h2 = new Headers(init?.headers || {});
-    const cookies2 = parseCookies(new Request('',{headers: outHeaders})); // not real, but we only pass through browser's cookie next request
-    const r3 = await fetch(new URL(path, env.AUTH_BASE).toString(), { method: init?.method || req.method, headers: h2, body: init?.body });
-    // Return with mirrored cookie if we got one
-    const resp = new Response(r3.body, { status:r3.status, headers:r3.headers });
-    if(set) resp.headers.append('Set-Cookie', set.replace(/Domain=.*?;/i,'').replace(/Path=\/auth/,'Path=/'));
-    return resp;
+/** Tiny helper – parse cookies when needed */
+export function parseCookies(request: Request): Record<string, string> {
+  const out: Record<string, string> = {};
+  const c = request.headers.get('cookie');
+  if (!c) return out;
+  for (const part of c.split(/;\s*/)) {
+    const idx = part.indexOf('=');
+    if (idx > -1) out[part.slice(0, idx)] = decodeURIComponent(part.slice(idx + 1));
   }
-  return r;
+  return out;
 }
