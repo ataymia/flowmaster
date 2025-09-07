@@ -6,39 +6,22 @@
   <title>Allstar Agent Hub — Sign in</title>
   <link rel="stylesheet" href="/theme.css">
   <style>
-    .login-wrap { min-height: 100dvh; display:grid; place-items:center; padding: 24px; }
-    .logo { height:42px; width:auto; border-radius:8px; }
+    .wrap { min-height: 100dvh; display:grid; place-items:center; padding: 24px; }
     .subtitle { color: var(--muted); }
+    .inline-banner {
+      background:#1f2937; border:1px solid var(--border);
+      color:var(--text); padding:10px 12px; border-radius:10px; display:none;
+      margin-bottom:10px;
+    }
   </style>
 </head>
 <body>
   <header class="appbar">
-    <div class="brand">Allstar Agent Hub</div>
+    <div class="brand" style="color:var(--brand)">Allstar Agent Hub</div>
   </header>
 
-  <main class="login-wrap">
-    <div class="card" style="width:min(440px, 100%);">
-      <div class="row" style="margin-bottom:12px;">
-        <div class="brand" style="color:var(--brand)">ALLSTAR</div>
-        <div class="subtitle">sign in</div>
-      </div>
-
-      <div id="err" class="error-banner" style="position:static; display:none; border-radius:8px; margin-bottom:10px;">Invalid login</div>
-
-      <label class="label">Email (or username)</label>
-      <input id="idp" class="field" placeholder="you@company.com">
-
-      <label class="label" style="margin-top:10px">Password</label>
-      <input id="pw" type="password" class="field" placeholder="••••••••">
-
-      <div class="row" style="margin-top:14px; justify-content:space-between;">
-        <button id="login" class="btn-brand btn" style="width:100%;">Sign in</button>
-      </div>
-
-      <div class="muted" style="margin-top:12px; font-size:12px;">
-        You’ll stay signed in for 7 days on this device.
-      </div>
-    </div>
+  <main class="wrap">
+    <div id="card" class="card" style="width:min(460px, 100%);"></div>
   </main>
 
   <script>
@@ -51,32 +34,95 @@
       if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
       return body;
     }
+    const whoami = ()=> jfetch('/api/whoami');
+    const logout  = ()=> jfetch('/api/logout', { method:'POST' });
 
-    async function whoami(){ return jfetch('/api/whoami'); }
+    function renderLoginForm(message){
+      const c = $('#card');
+      c.innerHTML = `
+        <div class="row" style="margin-bottom:12px;">
+          <div class="brand" style="color:var(--brand)">ALLSTAR</div>
+          <div class="subtitle">sign in</div>
+        </div>
+        <div id="msg" class="inline-banner"${message ? '' : ' style="display:none"'}>${message||''}</div>
+        <label class="label">Email (or username)</label>
+        <input id="idp" class="field" placeholder="you@company.com">
+        <label class="label" style="margin-top:10px">Password</label>
+        <input id="pw" type="password" class="field" placeholder="••••••••">
+        <div class="row" style="margin-top:14px;">
+          <button id="login" class="btn btn-brand" style="width:100%;">Sign in</button>
+        </div>
+        <div class="muted" style="margin-top:12px; font-size:12px;">
+          You’ll stay signed in for 7 days on this device.
+        </div>
+      `;
+      $('#login').addEventListener('click', doLogin);
+      document.addEventListener('keydown', onEnterOnce);
+    }
 
-    async function doLogin() {
-      $('#err').style.display='none';
-      const idp = $('#idp').value.trim();
-      const pw  = $('#pw').value;
-      if (!idp || !pw) { $('#err').textContent='Enter email/username and password'; $('#err').style.display='block'; return; }
-      try {
-        // proxy to Worker; it mirrors cookies allstar_at / allstar_rt
-        await jfetch('/api/login', { method:'POST', body: JSON.stringify(
-          idp.includes('@') ? { email:idp, password:pw } : { username:idp, password:pw }
-        )});
-        // go to hub
-        location.href = '/hub';
-      } catch (e) {
-        $('#err').textContent = 'Invalid email/username or password';
-        $('#err').style.display = 'block';
+    function renderAlreadySignedIn(me){
+      const c = $('#card');
+      c.innerHTML = `
+        <div class="row" style="margin-bottom:12px;">
+          <div class="brand" style="color:var(--brand)">ALLSTAR</div>
+          <div class="subtitle">you’re signed in</div>
+        </div>
+        <div class="inline-banner" style="display:block">Signed in as <b>${escapeHtml(me.username)}</b> (${me.role})</div>
+        <div class="row" style="margin-top:6px; gap:8px;">
+          <a class="btn btn-brand" href="/hub" style="flex:1; text-align:center;">Continue to Hub</a>
+          <button id="switch" class="btn" style="flex:1;">Sign in as different user</button>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <button id="signout" class="btn btn-danger" style="width:100%;">Sign out</button>
+        </div>
+      `;
+      $('#switch').addEventListener('click', async ()=>{
+        await logout();
+        renderLoginForm();
+        $('#idp').focus();
+      });
+      $('#signout').addEventListener('click', async ()=>{
+        await logout();
+        renderLoginForm('Signed out.');
+      });
+    }
+
+    function onEnterOnce(e){
+      if(e.key === 'Enter'){
+        document.removeEventListener('keydown', onEnterOnce);
+        doLogin();
       }
     }
 
-    $('#login').addEventListener('click', doLogin);
-    document.addEventListener('keydown', (e)=>{ if(e.key==='Enter') doLogin(); });
+    async function doLogin(){
+      const msg = (t)=>{ const m=$('#msg'); if(!m) return; m.textContent=t||''; m.style.display = t ? 'block' : 'none'; };
+      msg('');
+      const idp = $('#idp')?.value?.trim();
+      const pw  = $('#pw')?.value;
+      if (!idp || !pw) { msg('Enter email/username and password'); return; }
+      try {
+        await jfetch('/api/login', {
+          method:'POST',
+          body: JSON.stringify(idp.includes('@') ? { email:idp, password:pw } : { username:idp, password:pw })
+        });
+        location.href = '/hub';
+      } catch(e) {
+        msg('Invalid email/username or password');
+      }
+    }
 
-    // if already authed, skip
-    whoami().then(w => { if (w.authed) location.href = '/hub'; }).catch(()=>{});
+    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    // initial render: DO NOT auto-redirect; show state.
+    (async ()=>{
+      try {
+        const w = await whoami();
+        if (w.authed) renderAlreadySignedIn(w.me);
+        else renderLoginForm();
+      } catch {
+        renderLoginForm();
+      }
+    })();
   </script>
 </body>
 </html>
