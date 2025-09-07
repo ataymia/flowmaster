@@ -1,58 +1,51 @@
-// Minimal helpers shared by the API routes
+export const json = (data: any, status = 200, headers: Record<string,string> = {}) =>
+  new Response(JSON.stringify(data), { status, headers: { 'Content-Type':'application/json', ...headers } });
 
-export const AUTH_BASE = 'https://allstar-auth.ataymia.workers.dev'; // <- your Worker URL
-
-export function json(body: any, status = 200, extra?: HeadersInit) {
-  const h = new Headers({ 'content-type': 'application/json', ...(extra || {}) });
-  return new Response(JSON.stringify(body), { status, headers: h });
+export function parseCookies(req: Request){
+  const map: Record<string,string> = {};
+  const raw = req.headers.get('cookie') || '';
+  raw.split(/;\s*/).forEach(p=>{ const i=p.indexOf('='); if(i>0){ map[p.slice(0,i)] = decodeURIComponent(p.slice(i+1)); }});
+  return map;
 }
 
-export function setCookie(
-  name: string,
-  val: string,
-  opts: { maxAge?: number; path?: string; httpOnly?: boolean; secure?: boolean; sameSite?: 'None'|'Lax'|'Strict' } = {}
-) {
-  const {
-    maxAge,
-    path = '/',
-    httpOnly = true,
-    secure = true,
-    sameSite = 'None'
-  } = opts;
-  let c = `${name}=${val}; Path=${path};`;
-  if (httpOnly) c += ' HttpOnly;';
-  if (secure) c += ' Secure;';
-  if (sameSite) c += ` SameSite=${sameSite};`;
-  if (typeof maxAge === 'number') c += ` Max-Age=${maxAge};`;
+export function setCookie(name: string, val: string, opts: {path?:string; maxAge?:number; httpOnly?:boolean; secure?:boolean; sameSite?:'None'|'Lax'|'Strict'} = {}){
+  const path = opts.path ?? '/';
+  const httpOnly = opts.httpOnly ?? true;
+  const secure = opts.secure ?? true;
+  const same = opts.sameSite ?? 'None';
+  let c = `${name}=${val}; Path=${path}; SameSite=${same};`;
+  if(httpOnly) c+=' HttpOnly;';
+  if(secure) c+=' Secure;';
+  if(typeof opts.maxAge==='number') c+=` Max-Age=${opts.maxAge};`;
   return c;
 }
 
-export function clearCookie(name: string, path = '/') {
-  return `${name}=; Path=${path}; Max-Age=0; HttpOnly; Secure; SameSite=None;`;
-}
+export async function proxyWithAuth(env: any, req: Request, path: string, init?: RequestInit, retryOn401 = true){
+  const cookies = parseCookies(req);
+  const access = cookies['access_token'];
+  const refresh = cookies['refresh_token'];
+  const headers = new Headers(init?.headers || {});
+  if(access) headers.set('Cookie', `access_token=${access}`);
+  const r = await fetch(new URL(path, env.AUTH_BASE).toString(), { method: init?.method || req.method, headers, body: init?.body, cf: {cacheTtl: 0}});
+  if(r.status!==401 || !retryOn401 || !refresh) return r;
 
-// Forward a request to the auth worker, carrying over the browser cookies
-export async function upstream(path: string, req: Request, init?: RequestInit) {
-  const cookie = req.headers.get('Cookie') || '';
-  const headers: HeadersInit = { 'Cookie': cookie };
-  if (init?.headers instanceof Headers) {
-    init.headers.forEach((v, k) => (headers as any)[k] = v);
-  } else if (init?.headers) {
-    Object.assign(headers as any, init.headers);
+  // try refresh
+  const r2 = await fetch(new URL('/auth/refresh', env.AUTH_BASE), { method:'POST', headers: { 'Cookie': `refresh_token=${refresh}` }});
+  if(r2.status===204){
+    const set = r2.headers.get('set-cookie'); // Worker set new access cookie
+    const outHeaders = new Headers();
+    if(set){
+      // Extract token value if present, or simply mirror cookie name=value
+      outHeaders.append('Set-Cookie', set.replace(/Domain=.*?;/i,'').replace(/Path=\/auth/,'Path=/')); // normalize path for our domain
+    }
+    // retry original
+    const h2 = new Headers(init?.headers || {});
+    const cookies2 = parseCookies(new Request('',{headers: outHeaders})); // not real, but we only pass through browser's cookie next request
+    const r3 = await fetch(new URL(path, env.AUTH_BASE).toString(), { method: init?.method || req.method, headers: h2, body: init?.body });
+    // Return with mirrored cookie if we got one
+    const resp = new Response(r3.body, { status:r3.status, headers:r3.headers });
+    if(set) resp.headers.append('Set-Cookie', set.replace(/Domain=.*?;/i,'').replace(/Path=\/auth/,'Path=/'));
+    return resp;
   }
-  return fetch(AUTH_BASE + path, {
-    method: init?.method || 'GET',
-    headers,
-    body: init?.body
-  });
-}
-
-// Pull a cookie value out of Set-Cookie header(s)
-export function pickCookieFromSetCookie(setCookieHeader: string | string[], name: string) {
-  const all = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader].filter(Boolean);
-  for (const sc of all) {
-    const m = new RegExp(`${name}=([^;]+)`).exec(sc);
-    if (m) return m[1];
-  }
-  return '';
+  return r;
 }
