@@ -3,565 +3,731 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Allstar Adherence & Scheduling</title>
+<title>Allstar Agent Adherence</title>
+<link rel="stylesheet" href="/theme.css">
 <style>
-:root{
-  --bg:#0f1115; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af;
-  --brand:#c0392b; --brand-700:#a93226; --card:#1f2937; --border:#374151; --line:#2b3340;
-  --good:#10b981; --amber:#d97706; --yellow:#facc15; --orange:#fb923c; --purple:#8b5cf6; --blue:#3b82f6; --gray:#9ca3af; --diff:#ef4444;
-}
-*{box-sizing:border-box} html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
-a{color:inherit;text-decoration:none}
-header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:2px solid var(--brand)}
-.container{max-width:1100px;margin:0 auto;padding:16px 20px}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-h1{margin:0;font-size:22px}
-.brand{color:var(--brand);font-weight:800}
-.pill{border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px;background:#111827;margin-left:auto}
-.btn{border:1px solid var(--border);background:var(--card);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer}
-.btn.brand{background:var(--brand);border-color:var(--brand);color:#fff}
-.btn.brand:hover{background:var(--brand-700)}
-.btn.ghost{background:transparent}
-.main{padding:16px 20px}
-.grid{display:grid;gap:16px;grid-template-columns:1fr}
-@media(min-width:980px){ .grid-2{grid-template-columns:1fr 1fr} }
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
-.label{font-size:12px;color:var(--muted);margin-bottom:6px}
-.field{width:100%;padding:10px 12px;background:#0b0f13;border:1px solid var(--border);border-radius:10px;color:var(--text)}
-.table{width:100%;border-collapse:collapse;font-size:13px}
-.table th,.table td{padding:8px 10px;border-top:1px solid var(--line);text-align:left}
-.pill2{display:inline-flex;align-items:center;padding:4px 8px;border:1px solid var(--border);border-radius:999px;background:#111827;font-size:12px}
-.gridbar{height:20px;border-radius:8px;overflow:hidden;position:relative;background:#0b0f13;border:1px solid var(--line)}
-.seg{height:100%;display:inline-block}
-.seg.diff::after{content:"";position:absolute;inset:0;background:rgba(239,68,68,.33)}
-.statusDot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:6px}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
-.notice{padding:10px 12px;border-radius:10px;background:rgba(192,57,43,.1);border:1px dashed var(--brand);color:#ffdada;margin-bottom:12px}
-.tabbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.tab{padding:8px 12px;border-radius:10px;background:#0b0f13;border:1px solid var(--border);cursor:pointer}
-.tab.active{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand) inset}
-.hidden{display:none}
+  :root{
+    --bg:#0b1220;
+    --panel:#0f172a;
+    --line:#1f2a44;
+    --text:#e6edf3;
+    --muted:#9fb3c8;
+    --brand:#60a5fa;
+    --good:#22c55e;
+    --bad:#ef4444;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.35 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  a{color:var(--brand);text-decoration:none}
+  .container{max-width:1100px;margin:0 auto;padding:0 16px}
+  .header{background:var(--panel);border-bottom:1px solid var(--line)}
+  .header-inner{display:flex;gap:12px;align-items:center;padding:12px 0}
+  .title{font-weight:800}
+  .brand{color:var(--brand)}
+  .muted{color:var(--muted)}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#0b1426;color:var(--text);cursor:pointer}
+  .btn:hover{filter:brightness(.96)}
+  .btn.primary{background:#2563eb;border-color:#1e3a8a}
+  .btn.danger{background:#451a1a;border-color:#7f1d1d;color:#fecaca}
+  .btn.small{padding:6px 10px;border-radius:8px}
+  .grid{display:grid;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .tabs{display:flex;gap:8px;margin:12px 0}
+  .tab{padding:8px 12px;border-radius:12px;border:1px solid var(--line);background:#0b1426;color:var(--text);cursor:pointer}
+  .tab.active{background:#111a32}
+  .row{display:flex;align-items:center;gap:12px}
+  .row.wrap{flex-wrap:wrap}
+  .grow{flex:1}
+  .right{margin-left:auto}
+  .error-banner{display:none;background:#3b0a0a;border:1px solid #7f1d1d;color:#fecaca;padding:8px 12px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#0b1426;color:var(--muted);font-size:12px}
+
+  /* Status colors (diverse) */
+  .st-available{background:#22c55e}
+  .st-bathroom{background:#06b6d4}
+  .st-break{background:#f59e0b}
+  .st-lunch{background:#ef4444}
+  .st-training{background:#8b5cf6}
+  .st-meeting{background:#ec4899}
+  .st-offline{background:#6b7280}
+
+  /* status button style */
+  .status-btns{display:flex;flex-wrap:wrap;gap:8px}
+  .status-btn{border:1px solid var(--line);background:#0b1426;color:var(--text);cursor:pointer;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .status-btn.active{outline:2px solid var(--brand)}
+
+  .bar-wrap{position:relative;border-radius:12px;border:1px solid var(--line);background:#0b1426;overflow:hidden;height:28px}
+  .bar-layer{position:absolute;top:0;left:0;height:100%;display:flex}
+  .seg{height:100%}
+  .seg.red{background:linear-gradient(45deg,#ef4444 25%,#991b1b 25% 50%,#ef4444 50% 75%,#991b1b 75%);background-size:16px 16px;opacity:.75}
+  .now-pin{position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.7}
+
+  .mini{font-size:12px}
+  .list{display:grid;gap:8px}
+  .list-row{display:flex;gap:10px;align-items:center}
+  .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0b1426;border:1px solid var(--line);border-radius:6px;padding:2px 6px;color:var(--muted);font-size:12px}
+
+  /* Table */
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--muted);font-weight:600}
+  tr:hover td{background:#0b1426}
+
+  @media (max-width:760px){
+    .row.stack{flex-direction:column;align-items:flex-start}
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="container">
-    <div class="row">
-      <h1>Allstar <span class="brand">Adherence</span> &amp; Scheduling</h1>
-      <div id="hdrUser" class="pill">Checking sign-in…</div>
-      <button id="btnViewAsAgent" class="btn ghost hidden">👀 View as Agent</button>
-      <button id="btnLogout" class="btn">Logout</button>
+  <div id="error" class="error-banner container"></div>
+
+  <div class="header">
+    <div class="header-inner container">
+      <div class="title brand">ALLSTAR</div>
+      <div class="title">Allstar Agent Adherence</div>
+      <div id="top-meta" class="muted right">…</div>
+      <button id="viewAsAgent" class="btn small">View as Agent</button>
+      <a class="btn small" href="/hub">Back to Hub</a>
     </div>
   </div>
-</header>
 
-<main class="container main">
-  <div id="error" class="notice hidden"></div>
-
-  <!-- Agent panel -->
-  <section id="agentPanel" class="grid hidden">
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <h2 style="margin:0">Today</h2>
-        <div id="agentDate" class="pill2"></div>
-      </div>
-      <div id="agentBars" class="grid" style="gap:8px;margin-top:10px">
-        <!-- Projected / Actual bars -->
-      </div>
-      <div id="agentStats" class="row" style="margin-top:10px">
-        <div id="agentPct" style="font-weight:800;font-size:28px">100%</div>
-        <div id="agentInOut" style="color:var(--muted)">in: 0m · out: 0m</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin-top:0">Set status</h3>
-      <div id="statusBtns" class="row" style="flex-wrap:wrap"></div>
-      <div class="label" style="margin-top:12px">Recent switches</div>
-      <div id="recent" class="card" style="max-height:220px;overflow:auto"></div>
-    </div>
-  </section>
-
-  <!-- Admin panel -->
-  <section id="adminPanel" class="hidden">
-    <div class="tabbar">
-      <button class="tab active" data-tab="sched">Schedule</button>
-      <button class="tab" data-tab="live">Live Status</button>
-      <button class="tab" data-tab="hist">History</button>
-    </div>
-
-    <!-- Schedule -->
-    <div id="tab-sched">
-      <div class="card">
-        <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
-          <div><div class="label">Agent</div><select id="selUser" class="field" style="min-width:200px"></select></div>
-          <div><div class="label">Date</div><input id="selDate" class="field" type="date"/></div>
-          <div style="margin-left:auto">
-            <button id="addBlock" class="btn brand">+ Block</button>
-            <button id="saveSched" class="btn">Save to Server</button>
+  <div class="container grid" style="padding:16px 0 28px">
+    <div id="agentView" class="card" style="display:none">
+      <div class="row stack">
+        <div class="grow">
+          <h2 style="margin:0 0 6px">Today</h2>
+          <div class="muted mini" id="dateLabel"></div>
+        </div>
+        <div class="row" style="gap:16px">
+          <div>
+            <div class="muted mini">Adherence</div>
+            <div id="adhPct" style="font-weight:800;font-size:20px">--%</div>
+          </div>
+          <div>
+            <div class="muted mini">In</div>
+            <div id="adhIn" class="mini">--</div>
+          </div>
+          <div>
+            <div class="muted mini">Out</div>
+            <div id="adhOut" class="mini">--</div>
           </div>
         </div>
       </div>
 
-      <div class="grid grid-2" style="margin-top:16px">
-        <div class="card">
-          <h3 style="margin-top:0">Schedule Blocks</h3>
-          <div id="blocks"></div>
-        </div>
-        <div class="card">
-          <h3 style="margin-top:0">Daily Overview</h3>
-          <div id="schedBars" style="margin:8px 0"></div>
-          <div id="schedPct" class="muted">Adherence: 100% · in 0m / out 0m</div>
-          <div style="margin-top:8px">
-            <h4>AUX breakdown</h4>
-            <ul id="byStatus" style="margin:8px 0 0 18px"></ul>
+      <div class="grid">
+        <div>
+          <div class="row" style="margin:6px 0 6px">
+            <div class="mini pill">Projected</div>
+            <div class="right mini muted" id="schedSummary"></div>
           </div>
-          <div style="margin-top:8px">
-            <h4>Timeline (IMED)</h4>
-            <div id="imed" class="card" style="max-height:220px;overflow:auto"></div>
+          <div id="projBar" class="bar-wrap" title="Projected schedule"></div>
+        </div>
+        <div>
+          <div class="row" style="margin:6px 0 6px">
+            <div class="mini pill">Actual</div>
+            <div class="right mini muted" id="actualSummary"></div>
+          </div>
+          <div id="actualBar" class="bar-wrap" title="Actual activity"></div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <div class="grow">
+          <div class="muted mini" style="margin-bottom:8px">Set your current status</div>
+          <div id="statusBtns" class="status-btns"></div>
+        </div>
+        <div style="min-width:260px">
+          <div class="muted mini" style="margin-bottom:8px">Recent switches</div>
+          <div id="recent" class="list mini muted"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="adminView" class="card" style="display:none">
+      <div class="row wrap">
+        <div class="tabs">
+          <button data-tab="schedule" class="tab active">Schedule</button>
+          <button data-tab="live" class="tab">Live Status</button>
+          <button data-tab="history" class="tab">History</button>
+        </div>
+        <div class="right row wrap">
+          <button id="dlEvents" class="btn small">Download Events CSV</button>
+          <button id="dlSchedules" class="btn small">Download Schedules CSV</button>
+          <button id="dlAdh" class="btn small">Download Adherence CSV</button>
+        </div>
+      </div>
+
+      <!-- SCHEDULE TAB -->
+      <div id="tab-schedule" class="grid">
+        <div class="row wrap">
+          <div>
+            <div class="muted mini">Agent</div>
+            <select id="schUser" class="btn small" style="min-width:220px"></select>
+          </div>
+          <div>
+            <div class="muted mini">Date</div>
+            <input id="schDate" class="btn small" type="date">
+          </div>
+          <div class="right">
+            <button id="schSave" class="btn primary">Save to Server</button>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="muted mini">Blocks</div>
+          <div id="schBlocks" class="list"></div>
+          <div>
+            <button id="addBlock" class="btn small">Add block</button>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="muted mini">Projected vs Actual (for selected day)</div>
+          <div id="schedCompare" class="grid">
+            <div class="bar-wrap" id="schedProj"></div>
+            <div class="bar-wrap" id="schedActual"></div>
           </div>
         </div>
       </div>
 
-      <div class="card" style="margin-top:16px">
-        <button id="dle" class="btn">Download Events (month)</button>
-        <button id="dls" class="btn">Download Schedules (month)</button>
-        <button id="dla" class="btn">Download Adherence (month)</button>
+      <!-- LIVE TAB -->
+      <div id="tab-live" style="display:none">
+        <div class="muted mini" style="margin-bottom:8px">Live Agent Status — <span id="liveDate">Today</span></div>
+        <div id="liveGrid" class="grid"></div>
       </div>
-    </div>
 
-    <!-- Live Status -->
-    <div id="tab-live" class="hidden">
-      <div class="card">
-        <h3 style="margin-top:0">Team — Live Status</h3>
-        <div id="liveList" class="tableWrap"></div>
-      </div>
-    </div>
+      <!-- HISTORY TAB -->
+      <div id="tab-history" style="display:none">
+        <div class="row wrap">
+          <div>
+            <div class="muted mini">Agent</div>
+            <select id="histUser" class="btn small" style="min-width:220px"></select>
+          </div>
+          <div>
+            <div class="muted mini">From</div>
+            <input id="histFrom" class="btn small" type="date">
+          </div>
+          <div>
+            <div class="muted mini">To</div>
+            <input id="histTo" class="btn small" type="date">
+          </div>
+          <div class="right">
+            <button id="histRun" class="btn">Run</button>
+          </div>
+        </div>
 
-    <!-- History -->
-    <div id="tab-hist" class="hidden">
-      <div class="card">
-        <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
-          <div><div class="label">Agent</div><select id="histUser" class="field" style="min-width:200px"></select></div>
-          <div><div class="label">From</div><input id="histFrom" class="field" type="date"/></div>
-          <div><div class="label">To</div><input id="histTo" class="field" type="date"/></div>
-          <div><button id="histGo" class="btn">Load</button></div>
+        <div class="card" style="margin-top:14px">
+          <table>
+            <thead><tr><th>Date</th><th>Adherence %</th><th>In</th><th>Out</th></tr></thead>
+            <tbody id="histTable"></tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="muted mini" style="margin-bottom:6px">IMED-style timeline</div>
+          <div id="imed" class="list mini"></div>
         </div>
       </div>
-      <div id="histWrap" class="card" style="margin-top:16px"></div>
     </div>
-  </section>
-</main>
+  </div>
 
 <script>
-(function () {
-  var p = location.pathname;
-  if (!(p === '/hub' || p === '/adherence' || p.startsWith('/adherence/'))) return;
-
-  fetch('/api/whoami', { credentials: 'include' })
-    .then(function (r) { if (!r.ok) location.replace('/'); })
-    .catch(function () { location.replace('/'); });
-})();
-</script>
-
-<script>
-/* --- Config & helpers --- */
+/* =======================
+   CONFIG & STATUS MODEL
+   ======================= */
 const API = "/api";
 const STATUSES = [
-  { key:'available', label:'Available', color:'var(--good)'   },
-  { key:'bathroom',  label:'Bathroom',  color:'var(--amber)'  },
-  { key:'break',     label:'Break',     color:'var(--yellow)' },
-  { key:'lunch',     label:'Lunch',     color:'var(--orange)' },
-  { key:'training',  label:'Training',  color:'var(--purple)' },
-  { key:'meeting',   label:'Meeting',   color:'var(--blue)'   },
-  { key:'offline',   label:'Offline',   color:'var(--gray)'   },
+  { key:'available', label:'Available', color:'st-available' },
+  { key:'bathroom',  label:'Bathroom',  color:'st-bathroom'  },
+  { key:'break',     label:'Break',     color:'st-break'     },
+  { key:'lunch',     label:'Lunch',     color:'st-lunch'     },
+  { key:'training',  label:'Training',  color:'st-training'  },
+  { key:'meeting',   label:'Meeting',   color:'st-meeting'   },
+  { key:'offline',   label:'Offline',   color:'st-offline'   },
 ];
+const STATUS_BY_KEY = Object.fromEntries(STATUSES.map(s=>[s.key,s]));
 
-const qs = (s,el=document)=>el.querySelector(s);
-const qsa = (s,el=document)=>Array.from(el.querySelectorAll(s));
-const pad=(n)=>String(n).padStart(2,'0');
-const isoDate = (d)=>{ const x=(d instanceof Date)?d:new Date(d); return x.toISOString().slice(0,10); };
-const toHM = (m)=>`${pad(Math.floor(m/60))}:${pad(m%60)}`;
-const fmtDur = (mins)=> mins<60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60? (mins%60+'m'):''}`;
-const fmtTS = (ms)=>{ const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
-const nowUTCMinutes = (dateStr)=> Math.floor((Date.now() - Date.parse(dateStr+'T00:00:00Z'))/60000);
-const statusMeta = (k)=> STATUSES.find(s=>s.key===k) || {label:k,color:'var(--gray)'};
-const errBox = qs('#error');
+/* =======================
+   UTILITIES
+   ======================= */
+const qs=(s,e)=> (e||document).querySelector(s);
+const qsa=(s,e)=> [...(e||document).querySelectorAll(s)];
+const el=(t,a,...c)=>{const n=document.createElement(t);if(a){for(const k in a){k==='class'?n.className=a[k]:k==='style'?Object.assign(n.style,a[k]):n.setAttribute(k,a[k])}} c.flat().forEach(x=>n.appendChild(x?.nodeType?x:document.createTextNode(String(x))));return n};
+const fmtTime=(d)=> new Date(d).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const fmtHM=(mins)=>`${Math.floor(mins/60)}h ${Math.round(mins%60)}m`;
+const ymd=(d)=> new Date(d).toISOString().slice(0,10);
+const startOfDay=(d)=> {const x=new Date(d); x.setHours(0,0,0,0); return x};
+const endOfDay=(d)=> {const x=new Date(d); x.setHours(23,59,59,999); return x};
+const clamp=(v,a,b)=> Math.max(a,Math.min(b,v));
 
-function showError(msg){ errBox.textContent = '⚠ ' + msg; errBox.classList.remove('hidden'); setTimeout(()=>errBox.classList.add('hidden'), 4000); }
+function showError(m){const e=qs('#error'); e.style.display='block'; e.textContent='⚠️ '+m; console.error('[Adherence]',m)}
 
-/* --- API --- */
-const api = async (path, init={})=>{
-  const r = await fetch(API + path, { credentials:'include', ...init });
-  if (r.status===204) return null;
-  const ct = r.headers.get('content-type')||'';
-  const body = ct.includes('application/json') ? await r.json() : await r.text();
-  if (!r.ok) throw new Error((body && body.error) || (`HTTP ${r.status}`));
-  return body;
-};
-const whoami = ()=> api('/whoami').catch(()=>null);
-const logout = ()=> api('/logout',{method:'POST'}).catch(()=>{});
-const listUsers = ()=> api('/users');
-const getSchedule = (user,date)=> api('/schedules?'+new URLSearchParams({user,date}).toString());
-const saveSchedule = (user,date,blocks)=> api('/schedules',{method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({username:user, date, blocks})});
-const listEvents = (user,from,to)=> api('/events?'+new URLSearchParams({user,from,to}).toString());
-const postEvent = (status, ts)=> api('/events',{method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(ts?{status,ts}:{status})});
+/* =======================
+   API HELPERS
+   ======================= */
+async function apiGet(path){ const r=await fetch(API+path); if(!r.ok) throw new Error(`GET ${path} ${r.status}`); return r.json(); }
+async function apiPost(path,body){ const r=await fetch(API+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const j=await r.json().catch(()=>({})); if(!r.ok||j.error) throw new Error(j.error||`POST ${path} ${r.status}`); return j; }
 
-/* --- Bars (Projected vs Actual) --- */
-function buildDualBars(date, scheduleBlocks, events){
-  const wrap = document.createElement('div');
-  const have = (scheduleBlocks && scheduleBlocks.length);
-  const startMin = have ? Math.min(...scheduleBlocks.map(b=>b.start)) : 480;
-  const endMin   = have ? Math.max(...scheduleBlocks.map(b=>b.end))   : 1020;
-  const total = Math.max(1, endMin - startMin);
-  const nowMin = Math.max(startMin, Math.min(endMin, nowUTCMinutes(date)));
+async function me(){ const r=await fetch(API+'/whoami'); if(!r.ok) return null; const j=await r.json().catch(()=>null); return j?.ok?j.user:null; }
+async function listUsers(){
+  try{ const j=await apiGet('/users'); return j?.users||j||[] }
+  catch{ return [] }
+}
 
-  // schedule → segments
-  const proj = (scheduleBlocks||[]).map(b=>({ status:b.status, start:b.start, width:b.end-b.start }));
+async function getSchedule(username, date){ return apiGet(`/schedules?${new URLSearchParams({user:username,date})}`) }
+async function saveSchedule(username, date, blocks){ return apiPost('/schedules',{username,date,blocks}) }
+async function postEvent(status, ts){ return apiPost('/events', ts?{status,ts}:{status}) }
+async function listEvents(username, fromISO, toISO){
+  const p=new URLSearchParams({user:username,from:fromISO,to:toISO});
+  return apiGet('/events?'+p.toString());
+}
 
-  // events → segments, but only up to "now"; remainder is null (unfilled)
-  const segs = [];
-  let cur = events && events.length ? events[0].status : null;
-  let pts = (events||[]).map(ev=> Math.max(startMin, Math.min(nowMin, Math.floor((Number(ev.ts) - Date.parse(date+'T00:00:00Z'))/60000))));
-  let cursor = startMin;
-  for (let i=0;i<pts.length;i++){
-    const p = pts[i];
-    if (p > cursor) segs.push({ status:cur, start:cursor, width:p-cursor });
-    cursor = p; cur = events[i].status;
+/* =======================
+   ADHERENCE MATH
+   ======================= */
+/* Normalize schedule blocks to [{t0,t1,status}] where t0/t1 are ms since day start */
+function normalizeSchedule(dayDate, blocks){
+  const day0=startOfDay(dayDate).getTime();
+  return (blocks||[]).map(b=>{
+    const [h0,m0]=String(b.start||b.t0||'00:00').split(':').map(Number);
+    const [h1,m1]=String(b.end||b.t1||'00:00').split(':').map(Number);
+    const t0 = day0 + ((h0*60+m0)*60*1000);
+    const t1 = day0 + ((h1*60+m1)*60*1000);
+    return {t0,t1,status:(b.status||b.type||'available').toLowerCase()};
+  }).filter(b=>b.t1>b.t0);
+}
+
+/* Build actual segments from events for the day */
+function actualFromEvents(dayDate, events, now=new Date()){
+  const day0=startOfDay(dayDate).getTime();
+  const day1=endOfDay(dayDate).getTime();
+  const e = (events||[])
+    .filter(x=>x && x.status)
+    .map(x=> ({t:new Date(x.ts||x.time||x.createdAt||x.t).getTime(), status:String(x.status).toLowerCase()}))
+    .filter(x=>x.t>=day0 && x.t<=day1)
+    .sort((a,b)=>a.t-b.t);
+
+  const segs=[];
+  let prevT=day0;
+  let prevStatus='offline';
+  if(e.length){ prevStatus=e[0].status; prevT=e[0].t; segs.push({t0:day0,t1:e[0].t,status:'offline'}); }
+  for(let i=0;i<e.length;i++){
+    const cur=e[i];
+    if(i>0){ segs.push({t0:e[i-1].t, t1:cur.t, status:e[i-1].status}); }
   }
-  if (cursor < nowMin) segs.push({ status:cur, start:cursor, width: nowMin - cursor });
-  if (nowMin < endMin) segs.push({ status:null, start:nowMin, width: endMin - nowMin }); // future minutes blank
+  const last=e[e.length-1];
+  const tNow = clamp(now.getTime(), day0, day1);
+  if(last){
+    segs.push({t0:last.t, t1:tNow, status:last.status});
+  }else{
+    segs.push({t0:day0, t1:tNow, status:'offline'});
+  }
+  return segs.filter(s=>s.t1>s.t0);
+}
 
-  const row = (segments, compare)=>{
-    const bar = document.createElement('div'); bar.className='gridbar';
-    segments.forEach(s=>{
-      const w = (s.width/total*100) + '%';
-      const seg = document.createElement('div');
-      seg.className = 'seg';
-      seg.style.width = w;
-      seg.style.background = s.status ? statusMeta(s.status).color : 'transparent';
-      seg.style.position = 'relative';
-      if (compare && s.status){
-        const probe = s.start + Math.max(1, Math.floor(s.width/2));
-        const exp = (scheduleBlocks||[]).find(b => probe>=b.start && probe<b.end);
-        const mismatch = !!(exp && exp.status !== s.status);
-        if (mismatch){
-          const mask = document.createElement('div');
-          mask.style.position='absolute'; mask.style.inset='0'; mask.style.background='rgba(239,68,68,.33)';
-          seg.appendChild(mask);
+/* Overlap minutes by equality of status */
+function overlapMinutes(a,b){
+  const t0=Math.max(a.t0,b.t0), t1=Math.min(a.t1,b.t1);
+  return t1>t0? (t1-t0)/60000 : 0;
+}
+
+/* Compute adherence totals comparing projected vs actual */
+function computeAdherence(proj, actual){
+  let inMin=0, outMin=0, total=0;
+  for(const pa of proj){
+    for(const ac of actual){
+      const ov=overlapMinutes(pa,ac);
+      if(!ov) continue;
+      total+=ov;
+      if(pa.status===ac.status) inMin+=ov; else outMin+=ov;
+    }
+  }
+  const pct = total>0 ? (inMin/total*100) : 0;
+  return {inMin,outMin,total,pct};
+}
+
+/* =======================
+   RENDER: BARS
+   ======================= */
+function renderBar(elWrap, segments, dayDate, highlightMismatchesWith, now=new Date()){
+  elWrap.innerHTML='';
+  const day0=startOfDay(dayDate).getTime();
+  const day1=endOfDay(dayDate).getTime();
+  const total=day1-day0;
+
+  const base = el('div',{class:'bar-layer'});
+  const mis  = el('div',{class:'bar-layer'});
+
+  segments.forEach(s=>{
+    const w=((s.t1-s.t0)/total)*100;
+    const left=((s.t0-day0)/total)*100;
+    const seg=el('div',{class:'seg '+(STATUS_BY_KEY[s.status]?.color||''),style:{width:w+'%',marginLeft:left+'%'}});
+    base.appendChild(seg);
+  });
+
+  // mismatches overlay
+  if(highlightMismatchesWith){
+    const A=segments, B=highlightMismatchesWith;
+    for(const a of A) for(const b of B){
+      const t0=Math.max(a.t0,b.t0), t1=Math.min(a.t1,b.t1);
+      if(t1<=t0) continue;
+      if(a.status!==b.status){
+        const w=((t1-t0)/total)*100;
+        const left=((t0-day0)/total)*100;
+        mis.appendChild(el('div',{class:'seg red',style:{width:w+'%',marginLeft:left+'%'}}));
+      }
+    }
+  }
+
+  // now pin
+  const tNow = clamp(now.getTime(), day0, day1);
+  const leftNow=((tNow-day0)/total)*100;
+  const pin=el('div',{class:'now-pin',style:{left:leftNow+'%'}});
+
+  elWrap.append(base,mis,pin);
+}
+
+/* =======================
+   RENDER: AGENT VIEW
+   ======================= */
+function renderStatusButtons(root, current){
+  root.innerHTML='';
+  STATUSES.forEach(s=>{
+    const b=el('button',{class:'status-btn '+(current===s.key?'active':''), 'data-st':s.key},
+      el('span',{class:'dot '+s.color}), s.label
+    );
+    root.appendChild(b);
+  });
+}
+
+function renderRecent(root, events){
+  root.innerHTML='';
+  const items = (events||[]).slice(-6).reverse();
+  items.forEach(ev=>{
+    const t = new Date(ev.ts||ev.time||ev.createdAt||ev.t);
+    const st = STATUS_BY_KEY[String(ev.status).toLowerCase()]?.label || ev.status;
+    root.appendChild(
+      el('div',{class:'list-row'},
+        el('span',{class:'kbd'}, t.toLocaleTimeString()),
+        el('span',{}, st)
+      )
+    );
+  });
+}
+
+/* =======================
+   ADMIN: SCHEDULE EDITOR
+   ======================= */
+function blockRow(b,i,dayDate,onChange,onDelete){
+  const r=el('div',{class:'row wrap',style:'gap:10px'});
+  const s=el('input',{type:'time',value:b.start||'09:00',class:'btn small'});
+  const e=el('input',{type:'time',value:b.end||'17:00',class:'btn small'});
+  const sel=el('select',{class:'btn small'},
+    ...STATUSES.map(st=> el('option',{value:st.key,selected:(b.status===st.key)}, st.label))
+  );
+  const del=el('button',{class:'btn small danger'},'Delete');
+  [s,e,sel].forEach(x=> x.addEventListener('change',()=>onChange(i,{start:s.value,end:e.value,status:sel.value})));
+  del.onclick=()=>onDelete(i);
+  r.append(el('span',{class:'pill'},'#'+(i+1)), s, e, sel, del);
+  return r;
+}
+
+/* =======================
+   CSV DOWNLOADS (client side)
+   ======================= */
+function toCSV(rows){
+  return rows.map(r=>r.map(v=>{
+    if(v==null) return '';
+    const s=String(v).replace(/"/g,'""');
+    return /[",\n]/.test(s) ? `"${s}"` : s;
+  }).join(',')).join('\n');
+}
+function saveCSV(filename, csv){
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+
+/* =======================
+   BOOTSTRAP
+   ======================= */
+(async function main(){
+  const user = await me();
+  if(!user){ location.replace('/'); return; }
+  qs('#top-meta').textContent = `${user.username} · ${user.role}`;
+  qs('#dateLabel').textContent = new Date().toLocaleDateString();
+
+  // Role toggle + View-as-agent
+  const isAdmin = /ADMIN/i.test(user.role||'');
+  let forceAgentView = false;
+  const toggleView = ()=>{
+    const agentOn = !isAdmin || forceAgentView;
+    qs('#agentView').style.display = agentOn ? '' : 'none';
+    qs('#adminView').style.display = (!agentOn) ? '' : 'none';
+    qs('#viewAsAgent').textContent = agentOn ? 'View Admin' : 'View as Agent';
+  };
+  qs('#viewAsAgent').onclick = ()=>{ if(isAdmin){ forceAgentView = !forceAgentView; toggleView(); } };
+  toggleView();
+
+  /* ===== Agent view state ===== */
+  const day = new Date();
+  const dayISO = ymd(day);
+  let schedule = [];
+  let events = [];
+  let actualSegs = [];
+  let projSegs = [];
+  let currentStatus = 'offline';
+
+  // Load schedule/events for agent
+  async function loadAgentData(){
+    try{
+      const sch = await getSchedule(user.username, dayISO).catch(()=>({blocks:[]}));
+      schedule = normalizeSchedule(day, sch.blocks||sch||[]);
+      projSegs = schedule;
+    }catch(e){ showError('Failed to load schedule'); }
+
+    try{
+      const from = startOfDay(day).toISOString();
+      const to = endOfDay(day).toISOString();
+      const ev = await listEvents(user.username, from, to).catch(()=>({events:[]}));
+      events = ev.events || ev || [];
+      actualSegs = actualFromEvents(day, events, new Date());
+      const last = events[events.length-1];
+      currentStatus = (last?.status||'offline').toLowerCase();
+    }catch(e){ showError('Failed to load events'); }
+  }
+
+  function updateAgentUI(){
+    // render bars
+    actualSegs = actualFromEvents(day, events, new Date());
+    renderBar(qs('#projBar'), projSegs, day, null, new Date());
+    renderBar(qs('#actualBar'), actualSegs, day, projSegs, new Date());
+
+    // adherence numbers
+    const {inMin,outMin,pct} = computeAdherence(projSegs, actualSegs);
+    qs('#adhPct').textContent = `${pct.toFixed(1)}%`;
+    qs('#adhIn').textContent = fmtHM(inMin);
+    qs('#adhOut').textContent = fmtHM(outMin);
+
+    // summaries
+    const projTotal = projSegs.reduce((s,x)=>s+(x.t1-x.t0),0)/60000;
+    const actTotal  = actualSegs.reduce((s,x)=>s+(x.t1-x.t0),0)/60000;
+    qs('#schedSummary').textContent = `Projected: ${fmtHM(projTotal)}`;
+    qs('#actualSummary').textContent = `Actual: ${fmtHM(actTotal)}`;
+
+    // status buttons + recent
+    renderStatusButtons(qs('#statusBtns'), currentStatus);
+    renderRecent(qs('#recent'), events);
+  }
+
+  async function pushStatus(st){
+    try{
+      await postEvent(st);
+      // keep local echo
+      events.push({ts:new Date().toISOString(), status:st});
+      currentStatus = st;
+      updateAgentUI();
+    }catch(e){ showError('Failed to post status'); }
+  }
+
+  // Wire buttons
+  qs('#statusBtns').addEventListener('click', (ev)=>{
+    const b = ev.target.closest('[data-st]'); if(!b) return;
+    pushStatus(b.getAttribute('data-st'));
+  });
+
+  // Initial load + realtime ticker
+  await loadAgentData();
+  updateAgentUI();
+  setInterval(updateAgentUI, 1000);
+
+  /* ===== Admin view (if applicable) ===== */
+  if(isAdmin && !forceAgentView){
+    const tabs = qsa('.tab'); const views = {schedule:qs('#tab-schedule'), live:qs('#tab-live'), history:qs('#tab-history')};
+    let agents = await listUsers().catch(()=>[]);
+    if(!Array.isArray(agents)||!agents.length) agents=[{username:user.username, role:user.role}];
+    const agentNames = agents.map(u=>u.username);
+
+    // Populate selects
+    const selUser = qs('#schUser'), histUser = qs('#histUser');
+    selUser.innerHTML = agentNames.map(n=>`<option>${n}</option>`).join('');
+    histUser.innerHTML = selUser.innerHTML;
+    qs('#schDate').value = dayISO;
+    qs('#histFrom').value = ymd(new Date(day.getFullYear(), day.getMonth(), 1));
+    qs('#histTo').value   = ymd(new Date(day.getFullYear(), day.getMonth()+1, 0));
+    qs('#liveDate').textContent = new Date().toLocaleDateString();
+
+    function switchTab(name){
+      tabs.forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+      Object.keys(views).forEach(k=> views[k].style.display = (k===name?'':'none'));
+    }
+    tabs.forEach(t=> t.onclick=()=>switchTab(t.dataset.tab));
+
+    /* --- Schedule editor --- */
+    let editBlocks = [];
+
+    async function loadScheduleEditor(){
+      const u=selUser.value, d=qs('#schDate').value;
+      const sch = await getSchedule(u,d).catch(()=>({blocks:[]}));
+      editBlocks = (sch.blocks||sch||[]).map(b=>({start:b.start||'09:00', end:b.end||'17:00', status:(b.status||'available').toLowerCase()}));
+      drawBlocks();
+      await compareDay(u,d);
+    }
+
+    function drawBlocks(){
+      const host=qs('#schBlocks'); host.innerHTML='';
+      editBlocks.forEach((b,i)=>{
+        host.appendChild(
+          blockRow(b,i,day,(idx,val)=>{ editBlocks[idx]=val; }, (idx)=>{ editBlocks.splice(idx,1); drawBlocks(); })
+        );
+      });
+    }
+    qs('#addBlock').onclick=()=>{ editBlocks.push({start:'09:00',end:'10:00',status:'available'}); drawBlocks(); };
+
+    qs('#schSave').onclick=async ()=>{
+      try{
+        await saveSchedule(selUser.value, qs('#schDate').value, editBlocks);
+        await compareDay(selUser.value, qs('#schDate').value);
+      }catch(e){ showError('Save failed: '+e.message); }
+    };
+
+    async function compareDay(username, dISO){
+      const proj = normalizeSchedule(new Date(dISO), editBlocks);
+      const from = startOfDay(new Date(dISO)).toISOString();
+      const to = endOfDay(new Date(dISO)).toISOString();
+      const ev = await listEvents(username, from, to).catch(()=>({events:[]}));
+      const actSegs = actualFromEvents(new Date(dISO), ev.events||ev||[], endOfDay(new Date(dISO)));
+      renderBar(qs('#schedProj'), proj, new Date(dISO), null, endOfDay(new Date(dISO)));
+      renderBar(qs('#schedActual'), actSegs, new Date(dISO), proj, endOfDay(new Date(dISO)));
+    }
+
+    selUser.onchange=loadScheduleEditor;
+    qs('#schDate').onchange=loadScheduleEditor;
+    await loadScheduleEditor();
+
+    /* --- Live status --- */
+    async function paintLive(){
+      const host=qs('#liveGrid'); host.innerHTML='';
+      const todayFrom = startOfDay(new Date()).toISOString();
+      const todayTo   = endOfDay(new Date()).toISOString();
+      for(const uname of agentNames){
+        let evs=[];
+        try{ const r=await listEvents(uname,todayFrom,todayTo); evs=r.events||r||[] }catch{}
+        const last=evs[evs.length-1];
+        const since = last ? Math.max(0, (Date.now()-new Date(last.ts||last.time||last.createdAt).getTime())/60000) : 0;
+        const label = STATUS_BY_KEY[String(last?.status||'offline').toLowerCase()]?.label || (last?.status||'Offline');
+
+        const row = el('div',{class:'card'},
+          el('div',{class:'row wrap'},
+            el('div',{}, el('strong',{}, uname)),
+            el('div',{class:'pill'}, label),
+            el('div',{class:'muted mini'}, since?`for ${fmtHM(since)}`:'')
+          )
+        );
+        host.appendChild(row);
+      }
+    }
+    await paintLive();
+    setInterval(paintLive, 15000);
+
+    /* --- History --- */
+    async function runHistory(){
+      const uname=histUser.value;
+      const fromD=new Date(qs('#histFrom').value);
+      const toD=new Date(qs('#histTo').value);
+      const tbody=qs('#histTable'); tbody.innerHTML='';
+
+      const rows=[];
+      for(let d=new Date(fromD); d<=toD; d.setDate(d.getDate()+1)){
+        const dISO=ymd(d);
+        let sch = await getSchedule(uname, dISO).catch(()=>({blocks:[]}));
+        const proj=normalizeSchedule(new Date(d), sch.blocks||sch||[]);
+
+        const ev = await listEvents(uname, startOfDay(d).toISOString(), endOfDay(d).toISOString()).catch(()=>({events:[]}));
+        const act=actualFromEvents(new Date(d), ev.events||ev||[], endOfDay(d));
+
+        const a=computeAdherence(proj,act);
+        rows.push({date:dISO, pct:a.pct, in:a.inMin, out:a.outMin});
+        const tr=el('tr',{}, el('td',{}, dISO), el('td',{}, a.pct.toFixed(1)+'%'), el('td',{}, fmtHM(a.inMin)), el('td',{}, fmtHM(a.outMin)));
+        tbody.appendChild(tr);
+      }
+
+      // IMED
+      const histDay = endOfDay(new Date(qs('#histTo').value));
+      const histEv = await listEvents(uname, startOfDay(histDay).toISOString(), histDay.toISOString()).catch(()=>({events:[]}));
+      const lines = (histEv.events||histEv||[]).map((e,i,arr)=>{
+        const t=new Date(e.ts||e.time||e.createdAt);
+        const next=arr[i+1]? new Date(arr[i+1].ts||arr[i+1].time||arr[i+1].createdAt): null;
+        const dur = next ? Math.max(0,(next-t)/60000) : 0;
+        const label = STATUS_BY_KEY[String(e.status).toLowerCase()]?.label || e.status;
+        return `${t.toLocaleTimeString()}  ${label}${dur?`  ${Math.round(dur)}m`:''}`;
+      });
+      const imed=qs('#imed'); imed.innerHTML='';
+      lines.forEach(s=> imed.appendChild(el('div',{}, s)));
+
+      return rows;
+    }
+    qs('#histRun').onclick=runHistory;
+
+    /* --- CSV buttons (month scope) --- */
+    async function monthSpan(){
+      const n=new Date(); const from=new Date(n.getFullYear(),n.getMonth(),1);
+      const to=new Date(n.getFullYear(),n.getMonth()+1,0,23,59,59,999);
+      return {from, to, fromISO:from.toISOString(), toISO:to.toISOString()};
+    }
+
+    qs('#dlEvents').onclick = async ()=>{
+      const {fromISO,toISO}=await monthSpan();
+      const all=[];
+      for(const u of agentNames){
+        let rows=[];
+        try{
+          const r=await listEvents(u,fromISO,toISO); const evs=r.events||r||[];
+          rows = evs.map(e=>[u, e.status, e.ts||e.time||e.createdAt]);
+        }catch{}
+        all.push(...rows);
+      }
+      saveCSV(`events_${ymd(new Date())}.csv`, toCSV([['user','status','timestamp'], ...all]));
+    };
+
+    qs('#dlSchedules').onclick = async ()=>{
+      const {from,to}=await monthSpan();
+      const all=[];
+      for(const u of agentNames){
+        for(let d=new Date(from); d<=to; d.setDate(d.getDate()+1)){
+          try{
+            const sch=await getSchedule(u, ymd(d)); const blocks=(sch.blocks||sch||[]);
+            blocks.forEach(b=> all.push([u, ymd(d), b.start, b.end, b.status]));
+          }catch{}
         }
       }
-      bar.appendChild(seg);
-    });
-    return bar;
-  };
+      saveCSV(`schedules_${ymd(new Date())}.csv`, toCSV([['user','date','start','end','status'], ...all]));
+    };
 
-  const projRow = document.createElement('div');
-  projRow.innerHTML = `<div class="label" style="margin:0 0 4px 2px">Projected</div>`;
-  projRow.appendChild(row(proj,false));
+    qs('#dlAdh').onclick = async ()=>{
+      const {from,to}=await monthSpan();
+      const all=[['user','date','pct','in_min','out_min']];
+      for(const u of agentNames){
+        for(let d=new Date(from); d<=to; d.setDate(d.getDate()+1)){
+          try{
+            const sch=await getSchedule(u, ymd(d)).catch(()=>({blocks:[]}));
+            const proj=normalizeSchedule(new Date(d),(sch.blocks||sch||[]));
+            const ev=await listEvents(u,startOfDay(d).toISOString(),endOfDay(d).toISOString()).catch(()=>({events:[]}));
+            const act=actualFromEvents(new Date(d), ev.events||ev||[], endOfDay(d));
+            const a=computeAdherence(proj,act);
+            all.push([u, ymd(d), a.pct.toFixed(2), Math.round(a.inMin), Math.round(a.outMin)]);
+          }catch{}
+        }
+      }
+      saveCSV(`adherence_${ymd(new Date())}.csv`, toCSV(all));
+    };
 
-  const actRow = document.createElement('div');
-  actRow.style.marginTop='6px';
-  actRow.innerHTML = `<div class="label" style="margin:0 0 4px 2px">Actual</div>`;
-  actRow.appendChild(row(segs,true));
-
-  wrap.appendChild(projRow);
-  wrap.appendChild(actRow);
-  return wrap;
-}
-
-/* --- Adherence math --- */
-function calcAdherence(date, blocks, events){
-  if(!blocks || !blocks.length) return { pct:100, inMin:0, outMin:0, lines:[], byStatus:{} };
-  const dayStart = Date.parse(date+'T00:00:00Z');
-  const startMin = Math.min(...blocks.map(b=>b.start));
-  const endMin   = Math.max(...blocks.map(b=>b.end));
-  const nowMin   = Math.min(endMin, Math.max(startMin, nowUTCMinutes(date)));
-
-  let idx=0, cur = events && events.length ? events[0].status : null, curStart = startMin;
-  const lines=[], byStatus={};
-  const pushLine=(st, sM, eM)=>{
-    const dur = Math.max(0, eM - sM);
-    if (!dur) return;
-    const startTS = dayStart + sM*60000;
-    if (st){
-      lines.push(`${fmtTS(startTS)} ${statusMeta(st).label} ${fmtDur(dur)}`);
-      byStatus[st] = (byStatus[st]||0) + dur;
-    }
-  };
-  for(let m=startMin; m<=nowMin; m++){
-    const ms = dayStart + m*60000;
-    if (idx+1 < (events||[]).length && Number(events[idx+1].ts) <= ms){
-      pushLine(cur, curStart, m);
-      idx++; cur = events[idx].status; curStart = m;
-    }
+    // default tab
+    switchTab('schedule');
   }
-  pushLine(cur, curStart, nowMin);
-
-  // adherence
-  let inMin=0, outMin=0; idx=0; cur = events && events.length ? events[0].status : null;
-  for(let m=startMin; m<nowMin; m++){
-    const ms = dayStart + m*60000;
-    while(idx+1 < (events||[]).length && Number(events[idx+1].ts) <= ms){ idx++; cur = events[idx].status; }
-    const exp = (blocks||[]).find(b=> m>=b.start && m<b.end);
-    if(!exp) continue;
-    if(!cur) outMin++; else if(cur === exp.status) inMin++; else outMin++;
-  }
-  const total = inMin + outMin;
-  const pct = total ? (inMin/total*100) : 100;
-  return { pct, inMin, outMin, lines, byStatus };
-}
-
-/* --- App state --- */
-const STATE = { me:null, timers:[] };
-const clearTimers = ()=>{ STATE.timers.forEach(id=>clearInterval(id)); STATE.timers=[]; };
-
-/* --- Boot --- */
-(async function init(){
-  const me = await whoami();
-  if (!me || !me.username){ location.href="/"; return; }
-  STATE.me = me;
-  qs('#hdrUser').textContent = `${me.username} · ${me.role}`;
-  qs('#btnLogout').onclick = async()=>{ await logout(); location.href="/"; };
-
-  // Admin can "View as Agent"
-  if (me.role !== 'AGENT'){
-    qs('#btnViewAsAgent').classList.remove('hidden');
-    qs('#btnViewAsAgent').onclick = ()=>{ showAgent(me.username); };
-  }
-
-  if (me.role === 'AGENT') showAgent(me.username);
-  else showAdmin();
 })();
-
-/* --- Agent view --- */
-function showAgent(username){
-  clearTimers();
-  qs('#adminPanel').classList.add('hidden');
-  qs('#agentPanel').classList.remove('hidden');
-
-  const date = isoDate(new Date());
-  qs('#agentDate').textContent = date;
-
-  const statusWrap = qs('#statusBtns'); statusWrap.innerHTML='';
-  STATUSES.forEach(s=>{
-    const b = document.createElement('button');
-    b.className = 'btn';
-    b.style.color = '#fff'; b.style.background = s.color; b.style.borderColor='transparent';
-    b.textContent = s.label;
-    b.onclick = async ()=>{ try{ await postEvent(s.key); }catch{}; refresh(); };
-    statusWrap.appendChild(b);
-  });
-
-  const agentBars = qs('#agentBars');
-  const agentPct  = qs('#agentPct');
-  const agentIO   = qs('#agentInOut');
-  const recent    = qs('#recent');
-
-  const SCHEDULE = { blocks:[] };
-  const EVENTS   = { list:[] };
-
-  async function refresh(){
-    try{
-      const s = await getSchedule(username, date);
-      SCHEDULE.blocks = (s && s.blocks) || [];
-      const ev = await listEvents(username, date, date);
-      EVENTS.list = Array.isArray(ev) ? ev : [];
-      redraw();
-    }catch(e){ /* ignore to keep UI alive */ }
-  }
-  function redraw(){
-    agentBars.innerHTML='';
-    agentBars.appendChild(buildDualBars(date, SCHEDULE.blocks, EVENTS.list));
-    const d = calcAdherence(date, SCHEDULE.blocks, EVENTS.list);
-    agentPct.textContent = Math.round(d.pct) + '%';
-    agentIO.textContent  = `in: ${fmtDur(d.inMin)} · out: ${fmtDur(d.outMin)}`;
-
-    recent.innerHTML='';
-    const last = EVENTS.list.slice(-10).reverse();
-    last.forEach(ev=>{
-      const row = document.createElement('div');
-      row.style.cssText='display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:6px 0';
-      row.innerHTML = `<div><span class="statusDot" style="background:${statusMeta(ev.status).color}"></span>${statusMeta(ev.status).label}</div><div class="muted">${fmtTS(ev.ts)}</div>`;
-      recent.appendChild(row);
-    });
-  }
-
-  refresh();
-  STATE.timers.push(setInterval(redraw, 1000));
-  STATE.timers.push(setInterval(refresh, 15000));
-}
-
-/* --- Admin view --- */
-function showAdmin(){
-  clearTimers();
-  qs('#agentPanel').classList.add('hidden');
-  qs('#adminPanel').classList.remove('hidden');
-
-  // tabs
-  qsa('.tab').forEach(t=> t.onclick = ()=>{
-    qsa('.tab').forEach(x=>x.classList.remove('active'));
-    t.classList.add('active');
-    ['sched','live','hist'].forEach(id=>{
-      qs('#tab-'+id).classList.toggle('hidden', t.dataset.tab!==id);
-    });
-  });
-
-  // SCHEDULE tab
-  const selUser = qs('#selUser');
-  const selDate = qs('#selDate');
-  selDate.value = isoDate(new Date());
-  const blocksHost = qs('#blocks');
-  const schedBars  = qs('#schedBars');
-  const schedPct   = qs('#schedPct');
-  const byStatus   = qs('#byStatus');
-  const imed       = qs('#imed');
-
-  const S = { users:[], blocks:[], events:[] };
-
-  async function loadUsers(){
-    try{
-      S.users = await listUsers() || [];
-      selUser.innerHTML = '<option value="">Pick a user</option>' + S.users.map(u=>`<option value="${u.username}">${u.username} · ${u.role}</option>`).join('');
-    }catch(e){ showError('Failed to load users'); }
-  }
-  async function loadDay(){
-    if (!selUser.value) return;
-    try{
-      const s = await getSchedule(selUser.value, selDate.value);
-      S.blocks = (s && s.blocks) || [];
-      const ev = await listEvents(selUser.value, selDate.value, selDate.value);
-      S.events = Array.isArray(ev) ? ev : [];
-      renderBlocks();
-      renderDay();
-      setMonthDL();
-    }catch(e){ showError('Failed to load day'); }
-  }
-  function renderBlocks(){
-    blocksHost.innerHTML='';
-    S.blocks.forEach((b,i)=>{
-      const row = document.createElement('div'); row.className='row'; row.style.marginBottom='8px';
-      row.innerHTML = `
-        <select class="field" style="max-width:160px">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===b.status?'selected':''}>${s.label}</option>`).join('')}</select>
-        <input type="time" class="field" style="max-width:140px" value="${toHM(b.start)}"/> to
-        <input type="time" class="field" style="max-width:140px" value="${toHM(b.end)}"/>
-        <button class="btn">Remove</button>
-      `;
-      const [sel,st,en,btn] = qsa('select,input,input,button', row);
-      sel.onchange = e=>{ b.status = e.target.value; renderDay(); };
-      st.onchange  = e=>{ const h=+e.target.value.slice(0,2), m=+e.target.value.slice(3,5); b.start=h*60+m; renderDay(); };
-      en.onchange  = e=>{ const h=+e.target.value.slice(0,2), m=+e.target.value.slice(3,5); b.end=h*60+m; renderDay(); };
-      btn.onclick  = ()=>{ S.blocks.splice(i,1); renderBlocks(); renderDay(); };
-      blocksHost.appendChild(row);
-    });
-  }
-  function renderDay(){
-    schedBars.innerHTML='';
-    schedBars.appendChild(buildDualBars(selDate.value, S.blocks, S.events));
-    const d = calcAdherence(selDate.value, S.blocks, S.events);
-    schedPct.textContent = `Adherence: ${Math.round(d.pct)}% · in ${fmtDur(d.inMin)} / out ${fmtDur(d.outMin)}`;
-    byStatus.innerHTML = Object.keys(d.byStatus).map(k=>`<li>${statusMeta(k).label}: ${fmtDur(d.byStatus[k])}</li>`).join('') || '<li class="muted">No data</li>';
-    imed.innerHTML = (d.lines.length ? d.lines : ['No events']).map(t=>`<div style="border-top:1px solid var(--line);padding:6px 0">${t}</div>`).join('');
-  }
-  function setMonthDL(){
-    const dt = new Date(selDate.value+'T00:00:00Z');
-    const y  = dt.getUTCFullYear();
-    const m  = String(dt.getUTCMonth()+1).padStart(2,'0');
-    const monthStart = `${y}-${m}-01`;
-    const monthEnd   = new Date(Date.UTC(y, parseInt(m), 0)).toISOString().slice(0,10);
-    const dl = (path,name)=> fetch(API+path,{credentials:'include'}).then(r=>r.blob()).then(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); });
-    qs('#dle').onclick = ()=> dl(`/export/events?from=${monthStart}&to=${monthEnd}`      , `events_${y}${m}.csv`);
-    qs('#dls').onclick = ()=> dl(`/export/schedules?from=${monthStart}&to=${monthEnd}`   , `schedules_${y}${m}.csv`);
-    qs('#dla').onclick = ()=> dl(`/export/adherence?from=${monthStart}&to=${monthEnd}`   , `adherence_${y}${m}.csv`);
-  }
-  qs('#addBlock').onclick = ()=>{ S.blocks.push({ status:'available', start:480, end:540 }); renderBlocks(); renderDay(); };
-  qs('#saveSched').onclick = async ()=>{
-    if (!selUser.value) return showError('Pick a user first');
-    try{ await saveSchedule(selUser.value, selDate.value, S.blocks); showError('Saved'); }
-    catch(e){ showError('Save failed: ' + (e.message||e)); }
-  };
-  selUser.onchange = loadDay;
-  selDate.onchange = loadDay;
-
-  // LIVE tab
-  const liveWrap = qs('#liveList');
-  async function refreshLive(){
-    try{
-      const users = await listUsers() || [];
-      const today = isoDate(new Date());
-      const rows = await Promise.all(users.map(async u=>{
-        const ev = await listEvents(u.username, today, today);
-        const s  = await getSchedule(u.username, today);
-        const blocks = s && s.blocks || [];
-        const d = calcAdherence(today, blocks, Array.isArray(ev)?ev:[]);
-        const last = Array.isArray(ev)&&ev.length? ev[ev.length-1].status : '—';
-        return { user:u.username, role:u.role, pct:Math.round(d.pct), last, blocks, ev: Array.isArray(ev)?ev:[] };
-      }));
-      liveWrap.innerHTML = `
-        <table class="table">
-          <thead><tr><th>Agent</th><th>Role</th><th>Now</th><th>Today %</th></tr></thead>
-          <tbody>
-            ${rows.map(r=>`
-              <tr>
-                <td>${r.user}</td>
-                <td>${r.role}</td>
-                <td><span class="statusDot" style="background:${statusMeta(r.last).color}"></span>${statusMeta(r.last).label}</td>
-                <td>${r.pct}%</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
-    }catch(e){ /* noop */ }
-  }
-
-  // HISTORY tab
-  const histUser = qs('#histUser');
-  const histFrom = qs('#histFrom');
-  const histTo   = qs('#histTo');
-  const histWrap = qs('#histWrap');
-
-  async function initHistory(){
-    const users = await listUsers() || [];
-    histUser.innerHTML = users.map(u=>`<option value="${u.username}">${u.username} · ${u.role}</option>`).join('');
-    const today = isoDate(new Date());
-    histFrom.value = today; histTo.value = today;
-  }
-  async function loadHistory(){
-    histWrap.innerHTML = '';
-    const u = histUser.value; const from = histFrom.value; const to = histTo.value;
-    if(!u || !from || !to) return;
-    const days = [];
-    for (let d=new Date(from+'T00:00:00Z'); d<=new Date(to+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+1)){
-      days.push(d.toISOString().slice(0,10));
-    }
-    for (const day of days){
-      const s = await getSchedule(u, day);
-      const ev = await listEvents(u, day, day);
-      const blocks = s && s.blocks || [];
-      const events = Array.isArray(ev)?ev:[];
-      const d = calcAdherence(day, blocks, events);
-      const card = document.createElement('div'); card.className='card'; card.style.marginBottom='12px';
-      const header = document.createElement('div'); header.className='row'; header.innerHTML = `<strong>${u}</strong><span class="pill2">${day}</span><span class="pill2">Adh: ${Math.round(d.pct)}%</span>`;
-      const bars = buildDualBars(day, blocks, events);
-      const lines = (d.lines.length? d.lines:['No events']).map(t=>`<div style="border-top:1px solid var(--line);padding:6px 0">${t}</div>`).join('');
-      card.appendChild(header); card.appendChild(bars);
-      const aux = document.createElement('div'); aux.style.marginTop='8px'; aux.innerHTML = `<div class="label">AUX breakdown</div>${Object.keys(d.byStatus).map(k=>`${statusMeta(k).label}: ${fmtDur(d.byStatus[k])}`).join(' · ') || '<span class="muted">N/A</span>'}`;
-      card.appendChild(aux);
-      const tl = document.createElement('div'); tl.style.marginTop='8px'; tl.className='card'; tl.style.maxHeight='180px'; tl.style.overflow='auto'; tl.innerHTML = lines;
-      card.appendChild(tl);
-      histWrap.appendChild(card);
-    }
-  }
-
-  // wire up
-  loadUsers().then(loadDay);
-  initHistory();
-  qs('#histGo').onclick = loadHistory;
-  refreshLive();
-  STATE.timers.push(setInterval(refreshLive, 15000));
-}
 </script>
 </body>
 </html>
