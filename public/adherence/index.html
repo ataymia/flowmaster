@@ -160,11 +160,7 @@ h1{margin:0;font-size:22px}
   if (!(p === '/hub' || p === '/adherence' || p.startsWith('/adherence/'))) return;
 
   fetch('/api/whoami', { credentials: 'include' })
-    .then(function (r) {
-      if (r.ok) return;
-      // Not signed in — go to the sign-in page
-      location.replace('/');
-    })
+    .then(function (r) { if (!r.ok) location.replace('/'); })
     .catch(function () { location.replace('/'); });
 })();
 </script>
