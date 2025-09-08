@@ -1,3 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Allstar Sign In</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{display:grid;place-items:center;min-height:100vh;background:#0b1220;color:#e6edf3;font:14px/1.4 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  .card{background:#0f172a;border:1px solid #1f2a44;border-radius:16px;padding:20px;width:420px;max-width:92%}
+  h1{margin:0 0 12px;font-weight:800;color:#60a5fa}
+  label{font-size:12px;color:#9fb3c8;margin:6px 0 4px;display:block}
+  input{width:100%;padding:10px;border-radius:10px;border:1px solid #1f2a44;background:#0b1426;color:#e6edf3}
+  .btn{width:100%;margin-top:14px;padding:10px;border-radius:10px;border:1px solid transparent;background:#2563eb;color:#fff;cursor:pointer}
+  .btn:hover{filter:brightness(.96)}
+  .err{color:#fecaca;margin-bottom:6px;min-height:18px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Allstar Agent Hub</h1>
+    <div class="muted">Please sign in</div>
+    <div id="msg" class="err"></div>
+    <label>Username</label>
+    <input id="u" placeholder="username or email">
+    <label>Password</label>
+    <input id="p" type="password" placeholder="password">
+    <button id="go" class="btn">Enter Hub</button>
+  </div>
+
 <script>
 (() => {
   const $ = (s) => document.querySelector(s);
@@ -65,3 +95,6 @@
   });
 })();
 </script>
+
+</body>
+</html>
