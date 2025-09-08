@@ -1,31 +1,31 @@
 // functions/_middleware.ts
-// Do NOT gate pages here. Never redirect based on cookies.
-// Only pass through and add a few safe headers.
+// Never redirect here. Only pass through and add safe headers.
 
 export const onRequest: PagesFunction = async ({ request, next }) => {
   const url = new URL(request.url);
 
-  // Just render the requested asset/route
+  // Let the requested page/asset render.
   const res = await next();
 
-  // Clone so we can tweak headers
+  // Clone to modify headers.
   const out = new Response(res.body, res);
 
-  // Make sure different cookie states don't get cached together
-  out.headers.set('Vary', 'Cookie');
+  // Split caches by cookie (auth vs anon).
+  out.headers.set("Vary", "Cookie");
 
-  // Prevent CDN/browser from caching HTML shells (avoids sticky 302s forever)
-  const path = url.pathname;
+  // Ensure shells aren't cached; avoids sticky redirect loops in caches.
+  const p = url.pathname;
   const isHtmlShell =
-    path === '/' ||
-    path === '/hub' ||
-    path.startsWith('/adherence') ||
-    (!path.includes('.') && !path.startsWith('/api/'));
-  if (isHtmlShell) out.headers.set('Cache-Control', 'no-store');
+    p === "/" ||
+    p === "/hub" ||
+    p.startsWith("/adherence") ||
+    (!p.includes(".") && !p.startsWith("/api/"));
 
-  // Basic security hardening (optional)
-  out.headers.set('X-Frame-Options', 'SAMEORIGIN');
-  out.headers.set('X-Content-Type-Options', 'nosniff');
+  if (isHtmlShell) out.headers.set("Cache-Control", "no-store");
+
+  // Small hardening
+  out.headers.set("X-Frame-Options", "SAMEORIGIN");
+  out.headers.set("X-Content-Type-Options", "nosniff");
 
   return out;
 };
