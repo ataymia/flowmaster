@@ -1,9 +1,9 @@
-// GET /hub  → serve /public/hub.html with 200 (no redirects)
+// Serve /public/hub.html with 200. No redirects.
 export const onRequestGet: PagesFunction = async (ctx) => {
-  const req = new Request(new URL("/hub.html", ctx.request.url), ctx.request);
-  const asset = await ctx.env.ASSETS.fetch(req);
-  const res = new Response(asset.body, asset);
-  res.headers.set("Cache-Control", "no-store");
-  res.headers.append("Vary", "Cookie");
-  return res;
+  const url = new URL("/hub.html", ctx.request.url);
+  const res = await ctx.env.ASSETS.fetch(new Request(url, ctx.request));
+  const out = new Response(res.body, res);
+  out.headers.set("Cache-Control", "no-store");
+  out.headers.append("Vary", "Cookie");
+  return out;
 };
