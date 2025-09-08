@@ -27,3 +27,11 @@ export const onRequest: PagesFunction = async (ctx) => {
 
   return ctx.next();
 };
+if (
+  pathname === '/hub' ||
+  pathname === '/hub.html' ||
+  pathname.startsWith('/adherence') ||
+  pathname.startsWith('/flowmaster')
+) {
+  // check cookies …
+}
