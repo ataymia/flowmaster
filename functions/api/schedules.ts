@@ -1,6 +1,3 @@
-// functions/api/schedules.ts
-import { proxyWithAuth, Env } from "./_utils";
-
-export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
-  return proxyWithAuth(request, env, "/schedules");
-};
+import { Env, proxyWithAuth } from "./_utils";
+export const onRequest: PagesFunction<Env> = async (ctx) =>
+  proxyWithAuth(ctx.request, ctx.env, "/schedules");
