@@ -44,6 +44,21 @@
   </div>
 
 <script>
+(async () => {
+  try {
+    const r = await fetch('/api/whoami', { credentials: 'include' });
+    if (!r.ok) return location.replace('/');
+    const j = await r.json().catch(() => null);
+    if (!j || !j.ok) location.replace('/');
+    // else: user is allowed – continue rendering the hub
+    window.__me = j.user;
+  } catch {
+    location.replace('/');
+  }
+})();
+</script>
+
+<script>
 function el(tag, attrs={}, ...kids){ const n=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>{ k==='class' ? n.className=v : n.setAttribute(k,v) }); kids.flat().forEach(k=> n.appendChild(typeof k==='string'?document.createTextNode(k):k)); return n; }
 async function whoami(){ const r=await fetch('/api/whoami'); if(!r.ok) return null; const j=await r.json().catch(()=>null); return j&&j.ok?j.user:null; }
 async function news(aud){ const r=await fetch('/api/news?aud='+encodeURIComponent(aud||'all')); const j=await r.json().catch(()=>({items:[]})); return j.items||[]; }
