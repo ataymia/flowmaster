@@ -1,117 +1,74 @@
-// functions/api/news.ts
-// Fetch announcements from Notion "Team Billboard" without throwing.
-// Expects NOTION_SECRET and NOTION_DATABASE_ID in **Pages** environment.
+import { Env, json, ensureAccess } from "./_utils";
 
-type Env = {
-  NOTION_SECRET: string;
-  NOTION_DATABASE_ID: string;
-};
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
+function propText(p: any) {
+  return Array.isArray(p?.rich_text) ? p.rich_text.map((r: any) => r.plain_text).join("") : "";
 }
-
-function safePlain(arr: any[] | undefined): string {
-  return Array.isArray(arr) ? arr.map((t: any) => t?.plain_text || "").join("") : "";
+function propTitle(p: any) {
+  return Array.isArray(p?.title) ? p.title.map((r: any) => r.plain_text).join("") : "";
+}
+function propDate(p: any, key: string) {
+  const v = p?.[key]?.date?.start || null;
+  return v ? new Date(v) : null;
+}
+function propSelect(p: any, key: string) {
+  return p?.[key]?.select?.name || null;
+}
+function propCheckbox(p: any, key: string) {
+  return Boolean(p?.[key]?.checkbox);
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  try {
-    const { NOTION_SECRET, NOTION_DATABASE_ID } = env;
-    if (!NOTION_SECRET || !NOTION_DATABASE_ID) {
-      return json({ error: "Notion env not set" }, 500);
-    }
+  const guard = await ensureAccess(request);
+  if (guard) return guard;
 
-    const url = new URL(request.url);
-    const audParam = (url.searchParams.get("aud") || "all").toLowerCase(); // all | agent(s) | admin(s)
-
-    // Build audience filter: allow "all" or the matching group.
-    const audFilter =
-      audParam.startsWith("admin")
-        ? [
-            { property: "Audience", select: { equals: "all" } },
-            { property: "Audience", select: { equals: "admins" } },
-          ]
-        : audParam.startsWith("agent")
-        ? [
-            { property: "Audience", select: { equals: "all" } },
-            { property: "Audience", select: { equals: "agents" } },
-          ]
-        : [{ property: "Audience", select: { equals: "all" } }];
-
-    const nowIso = new Date().toISOString();
-
-    const body = {
-      filter: {
-        and: [
-          // PublishedAt <= now
-          { property: "PublishedAt", date: { on_or_before: nowIso } },
-          // ExpiresAt empty OR >= now
-          {
-            or: [
-              { property: "ExpiresAt", date: { is_empty: true } },
-              { property: "ExpiresAt", date: { on_or_after: nowIso } },
-            ],
-          },
-          // Audience matches
-          { or: audFilter },
-        ],
-      },
-      // Pinned first, then newest first
-      sorts: [
-        { property: "Pinned", direction: "descending" },
-        { property: "PublishedAt", direction: "descending" },
-      ],
-      page_size: 50,
-    };
-
-    const r = await fetch(
-      `https://api.notion.com/v1/databases/${NOTION_DATABASE_ID}/query`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${NOTION_SECRET}`,
-          "notion-version": "2022-06-28",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(body),
-      }
-    );
-
-    if (!r.ok) {
-      const text = await r.text().catch(() => "");
-      // Return 200 with a marker so your UI doesn't break.
-      return json({
-        items: [],
-        note: "notion_error",
-        status: r.status,
-        detail: text,
-      });
-    }
-
-    const data: any = await r.json();
-    const results = Array.isArray(data?.results) ? data.results : [];
-
-    const items = results.map((p: any) => {
-      const props = p?.properties || {};
-      return {
-        id: p?.id,
-        title: props?.Title?.title?.[0]?.plain_text || "",
-        body: safePlain(props?.Body?.rich_text),
-        publishedAt: props?.PublishedAt?.date?.start || null,
-        expiresAt: props?.ExpiresAt?.date?.start || null,
-        pinned: !!props?.Pinned?.checkbox,
-        audience: props?.Audience?.select?.name || "all",
-        url: p?.url || null,
-      };
-    });
-
-    return json({ items });
-  } catch (e: any) {
-    // Never 502 from an exception; respond cleanly.
-    return json({ items: [], error: "server_error", detail: String(e?.message || e) });
+  if (!env.NOTION_SECRET || !env.NOTION_DATABASE_ID) {
+    return json({ items: [], note: "notion_error", status: 500, detail: "NOTION env missing" }, { status: 500 });
   }
+
+  const url = new URL(request.url);
+  const aud = (url.searchParams.get("aud") || "all").toLowerCase();
+
+  const q = await fetch(`https://api.notion.com/v1/databases/${env.NOTION_DATABASE_ID}/query`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.NOTION_SECRET}`,
+      "Notion-Version": "2022-06-28",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ page_size: 50, sorts: [{ timestamp: "last_edited_time", direction: "descending" }] }),
+  });
+
+  if (!q.ok) {
+    const detail = await q.text();
+    return json({ items: [], note: "notion_error", status: q.status, detail }, { status: 500 });
+  }
+
+  const data = await q.json();
+  const now = Date.now();
+
+  const items = (data.results || [])
+    .filter((r: any) => r.object === "page" && r.properties)
+    .map((r: any) => {
+      const p = r.properties;
+      return {
+        id: r.id,
+        title: propTitle(p?.Title || p?.Title__ || p?.title || p?.Name),
+        body: propText(p?.Body || p?.Text),
+        publishAt: propDate(p, "PublishedAt") || propDate(p, "Date") || null,
+        expiresAt: propDate(p, "ExpiresAt") || propDate(p, "Date 1") || null,
+        pinned: propCheckbox(p, "Pinned"),
+        audience: (propSelect(p, "Audience") || propSelect(p, "Select") || "all").toLowerCase(),
+        url: r.url,
+      };
+    })
+    .filter((x: any) => x.title)
+    .filter((x: any) => x.audience === "all" || x.audience === aud)
+    .filter((x: any) => {
+      const start = x.publishAt ? x.publishAt.getTime() : 0;
+      const end = x.expiresAt ? x.expiresAt.getTime() : (now + 1);
+      return now >= start && now <= end;
+    })
+    .sort((a: any, b: any) => Number(b.pinned) - Number(a.pinned));
+
+  return json({ items });
 };
