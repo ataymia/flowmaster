@@ -1,18 +1,9 @@
 // functions/flowmaster.ts
-function hasAuthCookie(req: Request) {
-  const c = req.headers.get('cookie') || '';
-  return /\b(access_token|refresh_token)=/.test(c);
-}
-
-export const onRequestGet: PagesFunction = async ({ request }) => {
-  const url = new URL(request.url);
-
-  if (!hasAuthCookie(request)) {
-    url.pathname = '/';
-    url.search = '';
-    return Response.redirect(url.toString(), 302);
-  }
-
-  const fileUrl = new URL('/flowmaster/index.html', request.url);
-  return fetch(fileUrl.toString(), request);
+export const onRequestGet: PagesFunction = async (ctx) => {
+  const url = new URL("/flowmaster/index.html", ctx.request.url);
+  const res = await ctx.env.ASSETS.fetch(new Request(url, ctx.request));
+  const out = new Response(res.body, res);
+  out.headers.set("Cache-Control", "no-store");
+  out.headers.append("Vary", "Cookie");
+  return out;
 };
