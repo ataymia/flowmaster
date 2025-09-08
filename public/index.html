@@ -4,7 +4,6 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Allstar Sign In</title>
-  <link rel="stylesheet" href="/theme.css"/>
   <style>
     body{margin:0;background:#0b1220;color:#e5eefc;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
     .wrap{max-width:420px;margin:12vh auto;padding:20px;border:1px solid #1f2a44;border-radius:14px;background:#0f1830}
@@ -42,26 +41,42 @@ async function whoami(){
   try{
     const r = await fetch('/api/whoami', { credentials:'include' });
     return r.ok ? r.json() : null;
-  }catch{ return null; }
+  }catch{return null;}
 }
-async function login(username,password){
+async function login(u,p){
   const r = await fetch('/api/login', {
     method:'POST',
-    headers:{'Content-Type':'application/json'},
+    headers:{'content-type':'application/json'},
     credentials:'include',
-    body:JSON.stringify({ username, password })
+    body:JSON.stringify({ username:u, password:p })
   });
   if(!r.ok) throw new Error('Login failed');
 }
+async function refresh() {
+  // Important: call /auth/refresh so the browser sends refresh_token (Path=/auth)
+  return fetch('/auth/refresh', { method:'POST', credentials:'include' });
+}
+
+async function tryEstablishSession() {
+  // Step 1: check
+  let me = await whoami();
+  if (me) return me;
+  // Step 2: do a same-origin refresh (uses refresh_token cookie)
+  const r = await refresh();
+  if (r.status !== 204) return null;
+  // Step 3: re-check
+  return await whoami();
+}
 
 (async function init(){
-  const me = await whoami();
-  if (me){
-    $('#state').textContent = `${me.username} · ${me.role}`;
+  const me0 = await tryEstablishSession();
+  if (me0) {
+    $('#state').textContent = `${me0.username} · ${me0.role}`;
     $('#ok').style.display='block';
     location.assign('/hub');
     return;
   }
+
   $('#state').textContent = 'Please sign in';
   $('#form').style.display='block';
 
@@ -69,8 +84,8 @@ async function login(username,password){
     $('#err').style.display='none';
     try{
       await login($('#u').value.trim(), $('#p').value);
-      const me2 = await whoami();
-      if(!me2) throw new Error('Session not established');
+      const me1 = await tryEstablishSession();
+      if (!me1) throw new Error('Session not established');
       $('#ok').style.display='block';
       location.assign('/hub');
     }catch(e){
