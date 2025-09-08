@@ -51,6 +51,14 @@
   </div>
 </div>
 
+<script>
+(function () {
+  fetch('/api/whoami', { credentials: 'include' })
+    .then(function (r) { if (r.ok) location.replace('/hub'); })
+    .catch(function () {});
+})();
+</script>
+
 <script type="module">
 const E = id => document.getElementById(id);
 const show = (el, on=true)=>{ el.style.display = on?'block':'none'; };
