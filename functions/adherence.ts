@@ -1,18 +1,9 @@
-// functions/adherence.ts
-function hasAuthCookie(req: Request) {
-  const c = req.headers.get('cookie') || '';
-  return /\b(access_token|refresh_token)=/.test(c);
-}
-
-export const onRequestGet: PagesFunction = async ({ request }) => {
-  const url = new URL(request.url);
-
-  if (!hasAuthCookie(request)) {
-    url.pathname = '/';
-    url.search = '';
-    return Response.redirect(url.toString(), 302);
-  }
-
-  const fileUrl = new URL('/adherence/index.html', request.url);
-  return fetch(fileUrl.toString(), request);
+// GET /adherence → serve /public/adherence/index.html with 200 (no redirects)
+export const onRequestGet: PagesFunction = async (ctx) => {
+  const req = new Request(new URL("/adherence/index.html", ctx.request.url), ctx.request);
+  const asset = await ctx.env.ASSETS.fetch(req);
+  const res = new Response(asset.body, asset);
+  res.headers.set("Cache-Control", "no-store");
+  res.headers.append("Vary", "Cookie");
+  return res;
 };
