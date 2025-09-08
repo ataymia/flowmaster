@@ -78,7 +78,7 @@ async function checkAuthed() {
 // NOTE: we DO NOT auto-redirect. We just reveal the "Enter Hub" button.
 checkAuthed();
 
-E('go-hub').onclick = ()=> location.href = '/hub';
+E('go-hub').onclick = ()=> location.href = '/hub.html';
 E('btn-logout').onclick = async ()=> {
   try { await j('/api/logout', {method:'POST'}); } catch {}
   location.reload();
