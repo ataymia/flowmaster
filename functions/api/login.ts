@@ -1,24 +1,41 @@
 // functions/api/login.ts
-import { json, upstream, pickCookieFromSetCookie, Env } from "./_utils";
+// Proxies login to AUTH_BASE and forwards Set-Cookie so cookies land on Pages domain.
+export const onRequestPost: PagesFunction = async ({ request, env }) => {
+  if (!env.AUTH_BASE) {
+    return new Response(JSON.stringify({ error: "AUTH_BASE not configured" }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }
 
-export const onRequestPost: PagesFunction<Env> = async (ctx) => {
-  const { request, env } = ctx;
-  const r = await upstream(env, "/auth/login", {
+  const upstream = await fetch(`${env.AUTH_BASE}/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: await request.text(),
+    credentials: "include",
+    redirect: "manual",
   });
 
-  const body = await r.text();
-  const h = new Headers();
-  const set = r.headers.get("set-cookie");
-  if (set) {
-    // When the Worker sends multiple cookies, Cloudflare folds them with comma.
-    // Split safely on comma followed by space + token name startswith something=
-    // Simpler: just pass through as-is; browsers can parse combined header from CF.
-    h.append("set-cookie", set);
-  }
-  h.set("content-type", r.headers.get("content-type") || "application/json");
+  // Proxy body & status
+  const out = new Response(upstream.body, {
+    status: upstream.status,
+    headers: { "content-type": upstream.headers.get("content-type") || "application/json" },
+  });
 
-  return new Response(body, { status: r.status, headers: h });
+  // Copy ALL Set-Cookie headers to staragentdash.work
+  const getSetCookie = (upstream.headers as any).getSetCookie?.();
+  if (Array.isArray(getSetCookie)) {
+    for (const v of getSetCookie) out.headers.append("Set-Cookie", v);
+  } else {
+    const sc = upstream.headers.get("set-cookie");
+    if (sc) out.headers.append("Set-Cookie", sc);
+  }
+
+  // Make it explicit for credentialed XHR
+  out.headers.set("Vary", "Cookie");
+  return out;
 };
+
+// Optional: block other verbs
+export const onRequestGet: PagesFunction = async () =>
+  new Response("Method Not Allowed", { status: 405 });
