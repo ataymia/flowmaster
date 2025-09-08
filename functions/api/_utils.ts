@@ -80,7 +80,7 @@ export function forwardSetCookies(
   outHeaders: Headers,
   defaults: { accessMaxAge?: number; refreshMaxAge?: number } = {}
 ) {
-  // Cloudflare’s runtime supports headers.getSetCookie()
+  // Cloudflare runtime may expose getSetCookie()
   let setCookies: string[] = [];
   const anyHeaders = upstreamResp.headers as any;
   if (typeof anyHeaders.getSetCookie === 'function') {
@@ -110,13 +110,13 @@ export function forwardSetCookies(
       }
     }
 
-    // Apply sensible defaults if upstream omitted Max-Age (optional)
+    // Optional defaults
     if (maxAge === undefined) {
       if (name === 'access_token' && defaults.accessMaxAge) maxAge = defaults.accessMaxAge;
       if (name === 'refresh_token' && defaults.refreshMaxAge) maxAge = defaults.refreshMaxAge;
     }
 
-    // Re-set cookie for our domain (no Domain attribute)
+    // Re-set cookie for our domain
     setCookie(outHeaders, name, value, {
       httpOnly: true,
       secure: true,
@@ -133,6 +133,17 @@ export function getAccessFromRequest(req: Request) {
 }
 export function getRefreshFromRequest(req: Request) {
   return parseCookies(req).get('refresh_token') ?? null;
+}
+
+/**
+ * ensureAccess:
+ * - Returns { ok:true, token } if access_token exists on the request
+ * - Otherwise returns { ok:false, response: 401 JSON }
+ */
+export function ensureAccess(req: Request) {
+  const token = getAccessFromRequest(req);
+  if (!token) return { ok: false as const, response: json({ error: 'unauthorized' }, 401) };
+  return { ok: true as const, token };
 }
 
 /* ------------ Upstream convenience ------------ */
