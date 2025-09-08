@@ -1,29 +1,30 @@
 // functions/api/whoami.ts
-import { json, upstream, Env } from "./_utils";
+import { json, parseCookies } from './_utils';
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const cookie = request.headers.get("cookie") || "";
-  // try /me
-  let r = await upstream(env, "/me", { headers: { cookie } });
+export const onRequestGet: PagesFunction = async ({ request, env }) => {
+  // Minimal gating: require an access cookie
+  const cookies = parseCookies(request);
+  const access = cookies['access_token'];
+  if (!access) return json({ error: 'UNAUTHORIZED' }, 401);
 
-  // if unauthorized and we have a refresh cookie, try refresh then /me again
-  if (r.status === 401 && /refresh_token=/.test(cookie)) {
-    const ref = await upstream(env, "/auth/refresh", { method: "POST", headers: { cookie } });
-    const h = new Headers();
-    const set = ref.headers.get("set-cookie");
-    if (set) h.append("set-cookie", set);
+  // If you have an upstream auth worker, verify there:
+  if (env.AUTH_BASE) {
+    const me = await fetch(`${env.AUTH_BASE}/me`, {
+      method: 'GET',
+      headers: { cookie: request.headers.get('cookie') || '' },
+      redirect: 'manual',
+    });
 
-    // Try /me again
-    r = await upstream(env, "/me", { headers: { cookie: set ? set.split(";")[0] : cookie } });
+    if (!me.ok) return json({ error: 'UNAUTHORIZED' }, 401);
 
-    // Pass any new cookies back
-    const body = await r.text();
-    h.set("content-type", r.headers.get("content-type") || "application/json");
-    return new Response(body, { status: r.status, headers: h });
+    // Forward JSON body from upstream /me
+    const body = await me.text();
+    const resp = new Response(body, { status: 200, headers: { 'content-type': 'application/json' } });
+    resp.headers.set('Vary', 'Cookie');
+    return resp;
   }
 
-  const body = await r.text();
-  const h = new Headers();
-  h.set("content-type", r.headers.get("content-type") || "application/json");
-  return new Response(body, { status: r.status, headers: h });
+  // Fallback: return a simple identity; keeps the hub working even if you
+  // prefer not to proxy to AUTH_BASE.
+  return json({ username: 'current', role: 'AGENT' }, 200);
 };
