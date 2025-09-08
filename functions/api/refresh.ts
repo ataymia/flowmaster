@@ -1,18 +1,17 @@
-// functions/api/refresh.ts
-import { json, upstream, pickCookieFromSetCookie, Env } from "./_utils";
-
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const cookie = request.headers.get("cookie") || "";
-  const r = await upstream(env, "/auth/refresh", {
+export const onRequestPost: PagesFunction<{ AUTH_BASE: string }> = async ({
+  request,
+  env,
+}) => {
+  const authUrl = new URL("/refresh", env.AUTH_BASE);
+  const upstream = await fetch(authUrl.toString(), {
     method: "POST",
-    headers: { cookie },
+    headers: { "content-type": "application/json" },
+    body: await request.text().catch(() => null),
+    redirect: "manual",
   });
-
-  const h = new Headers();
-  const set = r.headers.get("set-cookie");
-  if (set) h.append("set-cookie", set);
-
-  const body = await r.text();
-  h.set("content-type", r.headers.get("content-type") || "application/json");
-  return new Response(body, { status: r.status, headers: h });
+  const res = new Response(upstream.body, upstream);
+  const origin = new URL(request.url).origin;
+  res.headers.set("Access-Control-Allow-Origin", origin);
+  res.headers.set("Access-Control-Allow-Credentials", "true");
+  return res;
 };
