@@ -1,141 +1,72 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Allstar Agent Hub</title>
-<style>
-  :root{--brand:#e11d48;--ink:#0b1220;--panel:#0f172a;--muted:#8aa3c2;--line:rgba(255,255,255,.1)}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--ink);color:#e5efff;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  .bar{position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);background:rgba(11,18,32,.8);border-bottom:1px solid var(--line)}
-  .bar-in{max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:center;padding:10px 16px}
-  .brand{font-weight:800;letter-spacing:.3px;color:var(--brand)}
-  .sp{flex:1}
-  .btn{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#0b1220;color:#e5efff;cursor:pointer}
-  .btn:hover{filter:brightness(.95)}
-  .pill{padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
-  .grid{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:2fr 1fr}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
-  .title{font-weight:800;margin-bottom:8px}
-  .muted{color:var(--muted)}
-  .news{display:flex;flex-direction:column;gap:10px}
-  .news-item{border-top:1px solid var(--line);padding-top:10px}
-  .tabs{display:flex;gap:8px;flex-wrap:wrap}
-  .tab{padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:#0b1220;color:#e5efff;text-decoration:none}
-  .tab:hover{filter:brightness(.95)}
-  @media (max-width:900px){ .grid{grid-template-columns:1fr} }
-</style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Allstar Agent Hub</title>
+  <link rel="stylesheet" href="/theme.css"/>
+  <style>
+    body{margin:0;background:#0b1220;color:#e5eefc;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .bar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#0f1830;border-bottom:1px solid #1f2a44}
+    .title{font-weight:800;color:#7dc1ff}
+    .btn{padding:8px 12px;border-radius:10px;border:1px solid #1f2a44;background:#142044;color:#e5eefc;cursor:pointer}
+    .btn.primary{background:#2563eb;border-color:#2563eb;color:#fff}
+    .wrap{max-width:1000px;margin:24px auto;padding:0 16px}
+    .muted{color:#9fb3d2}
+    .card{border:1px solid #1f2a44;border-radius:14px;background:#0f1830;padding:16px}
+    .bad{color:#ff9aa2}
+  </style>
 </head>
 <body>
   <div class="bar">
-    <div class="bar-in">
-      <div class="brand">Allstar Agent Hub</div>
-      <div id="user" class="pill">…</div>
-      <div class="sp"></div>
-      <a class="tab" href="/adherence/">Schedule & Adherence</a>
-      <a class="tab" href="/flowmaster/">Flowmaster</a>
-      <button id="logout" class="btn">Logout</button>
-    </div>
+    <div class="title">Allstar Agent Hub</div>
+    <div id="user" class="muted" style="margin-left:auto">checking…</div>
+    <button id="logout" class="btn">Logout</button>
   </div>
 
-  <div class="grid">
-    <div class="card">
-      <div class="title">Team News & Memos</div>
-      <div id="news" class="news">
-        <div class="muted">Loading news…</div>
-      </div>
+  <div class="wrap">
+    <div id="notAuthed" class="card" style="display:none">
+      <div class="bad">You’re not signed in.</div>
+      <div class="muted">Use the Sign In page to start a session.</div>
+      <div style="margin-top:10px"><a class="btn" href="/">Go to Sign In</a></div>
     </div>
-    <div class="card">
-      <div class="title">Shortcuts</div>
-      <div class="tabs">
-        <a class="tab" href="/adherence/">Open Schedule & Adherence</a>
-        <a class="tab" href="/flowmaster/">Open Flowmaster</a>
+
+    <div id="hub" style="display:none" class="card">
+      <h3>Welcome!</h3>
+      <p class="muted">Your tools:</p>
+      <div class="row" style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn primary" href="/adherence">Adherence</a>
+        <a class="btn" href="/flowmaster/">Flowmaster</a>
       </div>
-      <div class="muted" style="margin-top:10px">If any page asks you to log in again, just return here and use Logout → Sign in.</div>
     </div>
   </div>
 
 <script>
-(function () {
-  var p = location.pathname;
-  if (!(p === '/hub' || p === '/adherence' || p.startsWith('/adherence/'))) return;
+const S = (sel)=>document.querySelector(sel);
 
-  fetch('/api/whoami', { credentials: 'include' })
-    .then(function (r) { if (!r.ok) location.replace('/'); })
-    .catch(function () { location.replace('/'); });
+async function me(){
+  try{
+    const r = await fetch('/api/whoami', { credentials:'include' });
+    if (!r.ok) return null;
+    return await r.json();
+  }catch{return null;}
+}
+async function doLogout(){
+  try{ await fetch('/api/logout',{method:'POST',credentials:'include'}); }catch{}
+  location.assign('/');
+}
+
+(async function init(){
+  const m = await me();
+  if (!m) {
+    S('#user').textContent = 'not signed in';
+    S('#notAuthed').style.display='block';
+  } else {
+    S('#user').textContent = `${m.username} · ${m.role}`;
+    S('#hub').style.display='block';
+  }
+  S('#logout').onclick = doLogout;
 })();
-</script>
-
-<script>
-(function () {
-  // Only gate hub/adherence; everything else just loads.
-  var p = location.pathname;
-  if (!(p === '/hub' || p === '/adherence' || p.startsWith('/adherence/'))) return;
-
-  fetch('/api/whoami', { credentials: 'include' })
-    .then(function (r) { if (!r.ok) location.replace('/'); })
-    .catch(function () { location.replace('/'); });
-})();
-</script>
-
-<script type="module">
-const U = (id)=>document.getElementById(id);
-const setUser = (t)=> U('user').textContent = t;
-const setNews = (html)=> { const box = U('news'); box.innerHTML=''; box.appendChild(html); };
-
-async function j(url, opts={}) {
-  const r = await fetch(url, { credentials:'include', ...opts });
-  const ct = r.headers.get('content-type')||'';
-  const b = ct.includes('json') ? await r.json() : await r.text();
-  if (!r.ok) throw new Error(typeof b==='string'?b:(b.error||('HTTP '+r.status)));
-  return b;
-}
-
-async function who() {
-  try {
-    const me = await j('/api/whoami');
-    if (!me || !me.username) throw new Error('not authed');
-    setUser(`${me.username} · ${me.role}`);
-    return me;
-  } catch {
-    // single redirect (no loop)
-    location.href = '/';
-    throw new Error('redir');
-  }
-}
-
-function renderNewsItems(items=[]) {
-  const wrap = document.createElement('div');
-  if (!items.length) {
-    const p = document.createElement('div'); p.className='muted'; p.textContent='No news yet.'; wrap.appendChild(p);
-    return wrap;
-  }
-  items.forEach(it=>{
-    const d = document.createElement('div'); d.className='news-item';
-    const h = document.createElement('div'); h.className='title'; h.textContent = it.title || '(Untitled)';
-    const b = document.createElement('div'); b.className='muted'; b.textContent = it.body || '';
-    d.appendChild(h); d.appendChild(b); wrap.appendChild(d);
-  });
-  return wrap;
-}
-
-async function loadNews(backoff=2000) {
-  try {
-    const items = (await j('/api/news?aud=AGENT')).items || [];
-    setNews(renderNewsItems(items));
-  } catch (e) {
-    const m = document.createElement('div'); m.className='muted';
-    m.textContent = 'News unavailable right now. Retrying…';
-    setNews(m);
-    setTimeout(()=>loadNews(Math.min(backoff*1.7, 30000)), backoff);
-  }
-}
-
-U('logout').onclick = async ()=> { try { await j('/api/logout',{method:'POST'}); } catch{} location.href='/'; };
-
-await who();       // single auth check
-loadNews();        // no reload loops; gentle retry
 </script>
 </body>
 </html>
