@@ -1,141 +1,142 @@
-// Shared helpers for Pages Functions
+// functions/api/_utils.ts
 
-export type Env = {
-  AUTH_BASE: string;               // e.g. https://allstar-auth.<your>.workers.dev
-  NOTION_SECRET?: string;
-  NOTION_DB_BILLBOARD?: string;
-  NOTION_PROP_TITLE?: string;
-  NOTION_PROP_BODY?: string;
-  NOTION_PROP_PUBLISH?: string;
-  NOTION_PROP_EXPIRES?: string;
-  NOTION_PROP_PINNED?: string;
-  NOTION_PROP_AUDIENCE?: string;
-};
+// ----- cookie & misc config -----
+const ACCESS_NAME = 'access_token';
+const REFRESH_NAME = 'refresh_token';
+const COOKIE_SECURE = true;        // your custom domain is HTTPS
+const COOKIE_SAMESITE: 'Lax' | 'Strict' | 'None' = 'Lax';
 
-export function json(data: any, status = 200, headers?: HeadersInit) {
-  const h = new Headers({ 'Content-Type': 'application/json' });
-  if (headers) new Headers(headers).forEach((v, k) => h.set(k, v));
-  return new Response(JSON.stringify(data), { status, headers: h });
+// ----- tiny JSON helper -----
+export function json(
+  obj: unknown,
+  status = 200,
+  extraHeaders: Record<string, string> = {}
+): Response {
+  const h = new Headers({
+    'Content-Type': 'application/json',
+    ...extraHeaders,
+  });
+  return new Response(JSON.stringify(obj), { status, headers: h });
 }
 
-type CookieOpts = {
-  path?: string;
-  domain?: string;
-  httpOnly?: boolean;
-  secure?: boolean;
-  sameSite?: 'Lax' | 'Strict' | 'None';
-  maxAge?: number;   // seconds
-  expires?: Date;
-};
-
+// ----- cookie helpers -----
 export function setCookie(
   name: string,
-  value: string,
+  val: string,
   {
-    path = '/',
-    domain,
-    httpOnly = true,
-    secure = true,
-    sameSite = 'None',
     maxAge,
-    expires,
-  }: CookieOpts = {}
-) {
-  const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`];
-  if (domain) parts.push(`Domain=${domain}`);
+    path = '/',
+    httpOnly = true,
+    secure = COOKIE_SECURE,
+    sameSite = COOKIE_SAMESITE,
+  }: {
+    maxAge?: number;
+    path?: string;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: 'Lax' | 'Strict' | 'None';
+  } = {}
+): string {
+  const parts = [`${name}=${val}`];
+  if (path) parts.push(`Path=${path}`);
   if (httpOnly) parts.push('HttpOnly');
   if (secure) parts.push('Secure');
   if (sameSite) parts.push(`SameSite=${sameSite}`);
-  if (typeof maxAge === 'number') parts.push(`Max-Age=${Math.max(0, maxAge)}`);
-  if (expires instanceof Date) parts.push(`Expires=${expires.toUTCString()}`);
+  if (typeof maxAge === 'number') parts.push(`Max-Age=${maxAge}`);
   return parts.join('; ');
 }
 
-export function clearCookie(name: string, path = '/') {
-  return setCookie(name, '', { path, maxAge: 0, expires: new Date(0) });
-}
-
-export function parseCookies(request: Request) {
-  const header = request.headers.get('cookie') || '';
-  const out: Record<string, string> = {};
-  header.split(/; */).forEach((kv) => {
-    if (!kv) return;
-    const i = kv.indexOf('=');
-    const k = decodeURIComponent(kv.slice(0, i).trim());
-    const v = decodeURIComponent(kv.slice(i + 1).trim());
-    out[k] = v;
+export function parseCookies(req: Request): Map<string, string> {
+  const out = new Map<string, string>();
+  const raw = req.headers.get('cookie') || '';
+  raw.split(';').forEach((p) => {
+    const i = p.indexOf('=');
+    if (i > -1) {
+      const k = p.slice(0, i).trim();
+      const v = p.slice(i + 1).trim();
+      if (k) out.set(k, v);
+    }
   });
   return out;
 }
 
+/** Find a cookie by name inside a Set-Cookie header list and return its value only. */
 export function pickCookieFromSetCookie(
-  res: Response,
+  setCookies: string[] | null,
   name: string
 ): string | null {
-  const all = res.headers.get('set-cookie');
-  if (!all) return null;
-  const cookies = Array.isArray(all) ? all : [all];
-  for (const c of cookies) {
-    if (c.toLowerCase().startsWith(`${name.toLowerCase()}=`)) return c;
+  if (!setCookies || !setCookies.length) return null;
+  for (const sc of setCookies) {
+    const i = sc.indexOf(';');
+    const first = i === -1 ? sc : sc.slice(0, i);
+    const eq = first.indexOf('=');
+    if (eq > -1) {
+      const k = first.slice(0, eq).trim();
+      const v = first.slice(eq + 1).trim();
+      if (k === name) return v;
+    }
   }
   return null;
 }
 
-export async function upstream(
-  env: Env,
-  path: string,
-  init?: RequestInit
-): Promise<Response> {
-  const url = new URL(path, env.AUTH_BASE).toString();
-  return fetch(url, init);
+// ----- base URL for the Auth worker -----
+export function authBase(env: any): string {
+  // Keep your default here if NOT set in Pages env vars
+  return (env && env.AUTH_BASE) || 'https://allstar-auth.ataymia.workers.dev';
 }
 
-/**
- * Ensure we have a usable access token; if we can refresh, do it and
- * return Set-Cookie headers we need to mirror on our domain.
- */
-export async function ensureAccess(
-  request: Request,
-  env: Env
-): Promise<{ access?: string; set: string[] }> {
-  const c = parseCookies(request);
-  let access = c['access_token'];
-  const refresh = c['refresh_token'];
-  const set: string[] = [];
+// ----- low-level fetch to the Auth worker -----
+export async function upstream(
+  env: any,
+  path: string,
+  init: RequestInit = {},
+  cookieHeader?: string
+): Promise<Response> {
+  const url = new URL(path, authBase(env));
+  const h = new Headers(init.headers || {});
+  if (cookieHeader) h.set('Cookie', cookieHeader);
+  return fetch(url.toString(), { ...init, headers: h });
+}
 
-  if (!access && refresh) {
-    const res = await upstream(env, '/auth/refresh', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${refresh}` },
-    });
+// ----- proxy with auth cookies (NEW) -----
+// Forwards the incoming request to the Auth worker, attaching the access/refresh cookies.
+// It streams the upstream response back to the client.
+export async function proxyWithAuth(
+  req: Request,
+  env: any,
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  // Build cookie header limited to tokens we actually need
+  const cookies = parseCookies(req);
+  const parts: string[] = [];
+  const a = cookies.get(ACCESS_NAME);
+  const r = cookies.get(REFRESH_NAME);
+  if (a) parts.push(`${ACCESS_NAME}=${a}`);
+  if (r) parts.push(`${REFRESH_NAME}=${r}`);
+  const cookieHeader = parts.join('; ');
 
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      if (data.access) {
-        access = data.access;
-        set.push(
-          setCookie('access_token', data.access, {
-            path: '/',
-            sameSite: 'None',
-            secure: true,
-            httpOnly: true,
-            maxAge: 60 * 15,
-          })
-        );
-      }
-      if (data.refresh) {
-        set.push(
-          setCookie('refresh_token', data.refresh, {
-            path: '/api',
-            sameSite: 'None',
-            secure: true,
-            httpOnly: true,
-            maxAge: 60 * 60 * 24 * 7,
-          })
-        );
-      }
-    }
+  // Prepare method/body/headers pass-through
+  const method = init.method || req.method;
+  const headers = new Headers(init.headers || {});
+  // copy content-type from original if needed
+  if (!headers.has('Content-Type')) {
+    const ct = req.headers.get('Content-Type');
+    if (ct) headers.set('Content-Type', ct);
   }
 
-  return { access, set };
+  const body =
+    method === 'GET' || method === 'HEAD'
+      ? undefined
+      : init.body ?? (await req.clone().arrayBuffer());
+
+  const res = await upstream(env, path, { method, headers, body }, cookieHeader);
+
+  // Stream back response; also forward any useful headers (including JSON, caching, etc.)
+  const outHeaders = new Headers(res.headers);
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: outHeaders,
+  });
 }
