@@ -97,7 +97,7 @@ E('btn').onclick = async () => {
       body: JSON.stringify({ email: u.includes('@')?u:'', username: u.includes('@')?'':u, password: p })
     });
     // login succeeded; send to hub (no looping here)
-    location.href = '/hub';
+    location.href = '/hub.html';
   } catch (e) {
     err(e.message || 'Sign in failed.');
   }
