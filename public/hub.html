@@ -27,14 +27,14 @@
   <div class="wrap">
     <div id="notAuthed" class="card" style="display:none">
       <div class="bad">You’re not signed in.</div>
-      <div class="muted">Use the Sign In page to start a session.</div>
+      <div class="muted">Go to Sign In to start a session.</div>
       <div style="margin-top:10px"><a class="btn" href="/">Go to Sign In</a></div>
     </div>
 
     <div id="hub" style="display:none" class="card">
       <h3>Welcome!</h3>
       <p class="muted">Your tools:</p>
-      <div class="row" style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
         <a class="btn primary" href="/adherence">Adherence</a>
         <a class="btn" href="/flowmaster/">Flowmaster</a>
       </div>
@@ -42,30 +42,29 @@
   </div>
 
 <script>
-const S = (sel)=>document.querySelector(sel);
+const $ = s => document.querySelector(s);
 
 async function me(){
   try{
     const r = await fetch('/api/whoami', { credentials:'include' });
-    if (!r.ok) return null;
-    return await r.json();
-  }catch{return null;}
+    return r.ok ? r.json() : null;
+  }catch{ return null; }
 }
-async function doLogout(){
-  try{ await fetch('/api/logout',{method:'POST',credentials:'include'}); }catch{}
+async function logout(){
+  try{ await fetch('/api/logout',{method:'POST',credentials:'include'});}catch{}
   location.assign('/');
 }
 
 (async function init(){
   const m = await me();
   if (!m) {
-    S('#user').textContent = 'not signed in';
-    S('#notAuthed').style.display='block';
+    $('#user').textContent = 'not signed in';
+    $('#notAuthed').style.display='block';
   } else {
-    S('#user').textContent = `${m.username} · ${m.role}`;
-    S('#hub').style.display='block';
+    $('#user').textContent = `${m.username} · ${m.role}`;
+    $('#hub').style.display='block';
   }
-  S('#logout').onclick = doLogout;
+  $('#logout').onclick = logout;
 })();
 </script>
 </body>
