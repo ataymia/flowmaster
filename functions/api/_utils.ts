@@ -1,14 +1,13 @@
-// functions/api/_utils.ts
-
 // ===== Cookie/config =====
 export const ACCESS_NAME = 'access_token';
 export const REFRESH_NAME = 'refresh_token';
-const COOKIE_SECURE = true; // custom domain is https
+const COOKIE_SECURE = true;
 const COOKIE_SAMESITE: 'Lax' | 'Strict' | 'None' = 'Lax';
 
 export type Env = {
-  AUTH_BASE?: string; // Auth worker base URL
-  // (add other bindings here if you later want strict typing)
+  AUTH_BASE?: string;
+  NOTION_SECRET?: string;
+  NOTION_DATABASE_ID?: string;
 };
 
 // ===== Small JSON helper =====
@@ -53,24 +52,18 @@ export function parseCookies(req: Request): Map<string, string> {
   const raw = req.headers.get('cookie') || '';
   raw.split(';').forEach((p) => {
     const i = p.indexOf('=');
-    if (i > -1) {
-      const k = p.slice(0, i).trim();
-      const v = p.slice(i + 1).trim();
-      if (k) out.set(k, v);
-    }
+    if (i > -1) out.set(p.slice(0, i).trim(), p.slice(i + 1).trim());
   });
   return out;
 }
 
-/** Find a cookie by name inside a Set-Cookie header list and return its value only. */
 export function pickCookieFromSetCookie(
   setCookies: string[] | null,
   name: string
 ): string | null {
   if (!setCookies || !setCookies.length) return null;
   for (const sc of setCookies) {
-    const i = sc.indexOf(';');
-    const first = i === -1 ? sc : sc.slice(0, i);
+    const first = (sc.split(';', 1)[0] || '');
     const eq = first.indexOf('=');
     if (eq > -1) {
       const k = first.slice(0, eq).trim();
@@ -81,12 +74,10 @@ export function pickCookieFromSetCookie(
   return null;
 }
 
-// ===== Base URL for the Auth worker =====
 export function authBase(env: Env): string {
   return env.AUTH_BASE || 'https://allstar-auth.ataymia.workers.dev';
 }
 
-// ===== Low-level fetch to the Auth worker =====
 export async function upstream(
   env: Env,
   path: string,
@@ -99,23 +90,19 @@ export async function upstream(
   return fetch(url.toString(), { ...init, headers: h });
 }
 
-// ===== ensureAccess (NEW) =====
-// Builds a cookie header containing access/refresh. If access is missing but
-// refresh exists, it hits /auth/refresh and returns upstream Set-Cookie headers
-// so the caller can forward them to the browser.
+// ===== ensureAccess =====
 export async function ensureAccess(
   req: Request,
   env: Env
 ): Promise<{
   ok: boolean;
-  cookieHeader: string;        // cookies to send upstream
-  setCookie?: string[];        // Set-Cookie headers to forward to client
+  cookieHeader: string;
+  setCookie?: string[];
 }> {
   const cookies = parseCookies(req);
   let access = cookies.get(ACCESS_NAME) || '';
   let refresh = cookies.get(REFRESH_NAME) || '';
 
-  // If no access but there is refresh, try to refresh
   if (!access && refresh) {
     const res = await upstream(
       env,
@@ -124,13 +111,11 @@ export async function ensureAccess(
       `${REFRESH_NAME}=${refresh}`
     );
 
-    // Collect all Set-Cookie headers from upstream
     const setCookie: string[] = [];
     res.headers.forEach((v, k) => {
       if (k.toLowerCase() === 'set-cookie') setCookie.push(v);
     });
 
-    // Attempt to pick tokens from Set-Cookie
     const newAccess = pickCookieFromSetCookie(setCookie, ACCESS_NAME);
     const newRefresh = pickCookieFromSetCookie(setCookie, REFRESH_NAME);
     if (newAccess) access = newAccess;
@@ -138,30 +123,26 @@ export async function ensureAccess(
 
     if (res.ok && access) {
       const cookieHeader = [
-        access ? `${ACCESS_NAME}=${access}` : '',
+        `${ACCESS_NAME}=${access}`,
         refresh ? `${REFRESH_NAME}=${refresh}` : '',
       ]
         .filter(Boolean)
         .join('; ');
       return { ok: true, cookieHeader, setCookie };
     }
-
-    // Refresh failed
     return { ok: false, cookieHeader: '', setCookie };
   }
 
-  // Already have access (or neither, which means not authed)
   const cookieHeader = [
     access ? `${ACCESS_NAME}=${access}` : '',
     refresh ? `${REFRESH_NAME}=${refresh}` : '',
   ]
     .filter(Boolean)
     .join('; ');
-
   return { ok: !!access, cookieHeader };
 }
 
-// ===== proxyWithAuth (kept) =====
+// ===== proxyWithAuth (for simple pass-throughs) =====
 export async function proxyWithAuth(
   req: Request,
   env: Env,
