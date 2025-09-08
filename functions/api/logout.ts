@@ -1,15 +1,22 @@
 // functions/api/logout.ts
-import { json, upstream, Env } from "./_utils";
+// Clears cookies on the Pages domain and (optionally) tells upstream to revoke.
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const cookie = request.headers.get("cookie") || "";
-  const r = await upstream(env, "/auth/logout", {
-    method: "POST",
-    headers: { cookie },
-  });
+function clear(name: string) {
+  // Expire immediately, wide path.
+  return `${name}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+}
 
+export const onRequestPost: PagesFunction = async ({ env }) => {
   const h = new Headers();
-  const set = r.headers.get("set-cookie");
-  if (set) h.append("set-cookie", set);
-  return json({ ok: true }, 200, h);
+  h.append("Set-Cookie", clear("access_token"));
+  h.append("Set-Cookie", clear("refresh_token"));
+
+  // Optionally notify upstream (don't care if it fails)
+  if (env.AUTH_BASE) {
+    fetch(`${env.AUTH_BASE}/logout`, { method: "POST" }).catch(() => {});
+  }
+
+  return new Response(null, { status: 204, headers: h });
 };
+
+export const onRequestGet: PagesFunction = onRequestPost;
