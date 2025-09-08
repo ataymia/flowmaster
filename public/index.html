@@ -1,115 +1,92 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Allstar Agent Hub — Sign in</title>
+  <title>Allstar Sign In</title>
+  <link rel="stylesheet" href="/theme.css"/>
   <style>
-    :root{--brand:#e11d48;--ink:#0b1220;--panel:#0f172a;--muted:#8aa3c2;--ok:#16a34a;--btn:#2563eb}
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--ink);color:#e5efff;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    .wrap{min-height:100dvh;display:grid;place-items:center;padding:24px}
-    .card{width:100%;max-width:420px;background:var(--panel);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,10,30,.35)}
-    .title{font-weight:800;font-size:20px;margin-bottom:14px;color:var(--brand)}
-    .muted{color:var(--muted)}
-    .field{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b1220;color:#e5efff}
-    .btn{width:100%;padding:10px 12px;border-radius:10px;border:0;background:var(--btn);color:#fff;cursor:pointer}
-    .btn:hover{filter:brightness(.95)}
-    .row{display:flex;gap:10px;align-items:center}
-    .note{margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.06)}
-    .ok{color:#bbf7d0}
-    .err{color:#fecaca}
-    .links{display:flex;gap:8px;margin-top:10px}
-    .ghost{background:transparent;border:1px solid rgba(255,255,255,.15)}
+    body{margin:0;background:#0b1220;color:#e5eefc;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{max-width:420px;margin:12vh auto;padding:20px;border:1px solid #1f2a44;border-radius:14px;background:#0f1830}
+    .title{font-weight:800;font-size:20px;margin-bottom:12px;color:#7dc1ff}
+    .muted{color:#9fb3d2}
+    .row{display:flex;gap:8px;align-items:center}
+    .field{width:100%;padding:10px;border-radius:10px;border:1px solid #233358;background:#0b1530;color:#e5eefc}
+    .btn{width:100%;padding:10px;border-radius:10px;border:0;background:#2563eb;color:#fff;cursor:pointer}
+    .btn:hover{filter:brightness(.97)}
+    .err{color:#ff9aa2;display:none;margin-bottom:8px}
+    .ok{display:none;color:#9fe29f;margin-top:8px}
+    .link{color:#7dc1ff;text-decoration:underline;cursor:pointer}
   </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
+  <div class="wrap">
     <div class="title">Allstar Agent Hub</div>
-    <div class="muted" style="margin-bottom:8px">Sign in with your scheduling credentials.</div>
+    <div id="state" class="muted">Checking session…</div>
+    <div id="err" class="err"></div>
 
-    <div id="authed-note" class="note" style="display:none">
-      <span class="ok">You’re already signed in.</span>
-      <div class="links">
-        <button id="go-hub" class="btn">Enter Hub</button>
-        <button id="btn-logout" class="btn ghost">Sign out</button>
-      </div>
+    <div id="form" style="display:none">
+      <label class="muted">Username</label>
+      <input id="u" class="field" autocomplete="username"/>
+
+      <label class="muted" style="margin-top:8px;display:block">Password</label>
+      <input id="p" class="field" type="password" autocomplete="current-password"/>
+
+      <button id="login" class="btn" style="margin-top:12px">Enter Hub</button>
     </div>
 
-    <div id="err" class="note err" style="display:none"></div>
-
-    <label class="muted">Email or Username</label>
-    <input id="u" class="field" autocomplete="username" placeholder="your.email@company.com"/>
-
-    <div style="height:8px"></div>
-    <label class="muted">Password</label>
-    <input id="p" class="field" type="password" autocomplete="current-password" placeholder="••••••••"/>
-
-    <div style="height:12px"></div>
-    <button id="btn" class="btn">Sign in</button>
+    <div id="ok" class="ok">Signed in. Opening Hub…</div>
   </div>
-</div>
 
 <script>
-(function () {
-  fetch('/api/whoami', { credentials: 'include' })
-    .then(function (r) { if (r.ok) location.replace('/hub'); })
-    .catch(function () {});
-})();
-</script>
+const S = (sel)=>document.querySelector(sel);
 
-<script type="module">
-const E = id => document.getElementById(id);
-const show = (el, on=true)=>{ el.style.display = on?'block':'none'; };
-const err = (msg)=>{ E('err').textContent = msg; show(E('err'), true); };
-
-async function j(url, opts={}) {
-  const r = await fetch(url, { credentials:'include', ...opts });
-  const ct = r.headers.get('content-type')||'';
-  const b = ct.includes('json') ? await r.json() : await r.text();
-  if(!r.ok) throw new Error(typeof b==='string'?b:(b.error||('HTTP '+r.status)));
-  return b;
+async function whoami() {
+  try {
+    const r = await fetch('/api/whoami', { credentials:'include' });
+    if (r.ok) return await r.json();
+    return null;
+  } catch { return null; }
+}
+async function doLogin(u, p) {
+  const r = await fetch('/api/login', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body:JSON.stringify({ username:u, password:p })
+  });
+  if (!r.ok) throw new Error('Login failed');
+  return r.json();
 }
 
-async function checkAuthed() {
-  try {
-    const me = await j('/api/whoami');
-    if (me && me.username) {
-      show(E('authed-note'), true);
-      return true;
-    }
-  } catch {}
-  return false;
-}
-
-// NOTE: we DO NOT auto-redirect. We just reveal the "Enter Hub" button.
-checkAuthed();
-
-E('go-hub').onclick = ()=> location.href = '/hub';
-E('btn-logout').onclick = async ()=> {
-  try { await j('/api/logout', {method:'POST'}); } catch {}
-  location.reload();
-};
-
-E('btn').onclick = async () => {
-  show(E('err'), false);
-  const u = E('u').value.trim();
-  const p = E('p').value;
-  if (!u || !p) return err('Enter your email/username and password.');
-
-  try {
-    await j('/api/login', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email: u.includes('@')?u:'', username: u.includes('@')?'':u, password: p })
-    });
-    // login succeeded; send to hub (no looping here)
-    location.href = '/hub';
-  } catch (e) {
-    err(e.message || 'Sign in failed.');
+(async function init(){
+  const me = await whoami();
+  if (me) {
+    S('#state').textContent = `${me.username} · ${me.role}`;
+    S('#ok').style.display='block';
+    // only now, go to /hub
+    location.assign('/hub');
+    return;
   }
-};
+  S('#state').textContent = 'Please sign in';
+  S('#form').style.display='block';
+
+  S('#login').onclick = async ()=>{
+    S('#err').style.display='none';
+    const u = S('#u').value.trim();
+    const p = S('#p').value;
+    try {
+      await doLogin(u,p);
+      const me2 = await whoami();
+      if (!me2) throw new Error('Session not established');
+      S('#ok').style.display='block';
+      location.assign('/hub');
+    } catch (e){
+      S('#err').textContent = e.message || 'Login failed';
+      S('#err').style.display='block';
+    }
+  };
+})();
 </script>
 </body>
 </html>
