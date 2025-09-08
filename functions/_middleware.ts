@@ -1,51 +1,38 @@
 // functions/_middleware.ts
-// Gate app routes by presence of the access/refresh cookie.
-// Never auto-redirect / (login). Only protect the app pages.
+// Protect app sections; never redirect the login page (/).
 
 const GATED_PREFIXES = ['/hub', '/adherence', '/flowmaster'];
 
 function hasTokenCookie(req: Request) {
   const c = req.headers.get('cookie') || '';
-  // accept either cookie; access_token is the normal case,
-  // but allow refresh_token so the page JS can refresh on load.
+  // Accept either cookie; access_token is normal, refresh_token lets the page refresh on load
   return /(?:^|;\s*)(access_token|refresh_token)=/.test(c);
 }
 
-function isGatedPath(pathname: string) {
+function isGated(pathname: string) {
   return GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
-export const onRequest = [
-  async (ctx: any) => {
-    const url = new URL(ctx.request.url);
+export const onRequest: PagesFunction[] = [
+  async ({ request, next }) => {
+    const url = new URL(request.url);
     const { pathname } = url;
 
-    // 1) Don’t touch API routes.
-    if (pathname.startsWith('/api/')) {
-      // Add minimal CORS for your own origin + worker preview
-      const res = await ctx.next();
-      const h = new Headers(res.headers);
-      // same-origin requests don’t need CORS, but this is harmless
-      h.set('Vary', 'Origin');
-      return new Response(res.body, { status: res.status, headers: h });
-    }
+    // Don’t interfere with APIs
+    if (pathname.startsWith('/api/')) return next();
 
-    // 2) LOGIN page must NEVER redirect anywhere (prevents loops)
-    if (pathname === '/' || pathname === '/index.html') {
-      return ctx.next();
-    }
+    // Login page must never redirect (prevents loop)
+    if (pathname === '/' || pathname === '/index.html') return next();
 
-    // 3) Protect app surfaces
-    if (isGatedPath(pathname)) {
-      if (!hasTokenCookie(ctx.request)) {
-        // not signed in → go to login
+    // Only protect the app surfaces
+    if (isGated(pathname)) {
+      if (!hasTokenCookie(request)) {
         return Response.redirect(new URL('/', url), 302);
       }
-      // signed in → allow through
-      return ctx.next();
+      // user has a token → allow through
+      return next();
     }
 
-    // 4) Everything else just passes through
-    return ctx.next();
+    return next();
   },
 ];
