@@ -43,28 +43,27 @@
 
 <script>
 const $ = s => document.querySelector(s);
-
-async function me(){
-  try{
-    const r = await fetch('/api/whoami', { credentials:'include' });
-    return r.ok ? r.json() : null;
-  }catch{ return null; }
+async function me(){ try{ const r=await fetch('/api/whoami',{credentials:'include'}); return r.ok? r.json():null;}catch{return null;} }
+async function refresh(){ return fetch('/auth/refresh',{method:'POST',credentials:'include'}); }
+async function ensureSession(){
+  let m = await me();
+  if (m) return m;
+  const r = await refresh();
+  if (r.status !== 204) return null;
+  return await me();
 }
-async function logout(){
-  try{ await fetch('/api/logout',{method:'POST',credentials:'include'});}catch{}
-  location.assign('/');
-}
+async function logout(){ try{ await fetch('/api/logout',{method:'POST',credentials:'include'});}catch{} location.assign('/'); }
 
 (async function init(){
-  const m = await me();
+  const m = await ensureSession();
   if (!m) {
     $('#user').textContent = 'not signed in';
-    $('#notAuthed').style.display='block';
+    document.getElementById('notAuthed').style.display='block';
   } else {
     $('#user').textContent = `${m.username} · ${m.role}`;
-    $('#hub').style.display='block';
+    document.getElementById('hub').style.display='block';
   }
-  $('#logout').onclick = logout;
+  document.getElementById('logout').onclick = logout;
 })();
 </script>
 </body>
