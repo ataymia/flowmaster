@@ -1,21 +1,10 @@
-// functions/api/refresh.ts
-import { copySetCookies } from './_utils';
+import { Env, json, forwardSetCookies, upstream } from "./_utils";
 
-export const onRequestPost: PagesFunction<{ AUTH_BASE: string }> = async ({ request, env }) => {
-  if (!env.AUTH_BASE) return new Response('{"error":"AUTH_BASE not configured"}', { status: 500, headers: { 'content-type': 'application/json' } });
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const up = await upstream(request, env, "/auth/refresh", { method: "GET" });
+  const headers = new Headers();
+  forwardSetCookies(up, headers);
 
-  const upstream = await fetch(new URL('/auth/refresh', env.AUTH_BASE).toString(), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    // we don't need a body; but read text() so the stream isn't reused later
-    body: await request.text().catch(() => null),
-    redirect: 'manual',
-  });
-
-  const res = new Response(upstream.body, { status: upstream.status, headers: { 'content-type': upstream.headers.get('content-type') || 'application/json', 'Vary': 'Cookie' } });
-  copySetCookies(upstream.headers, res.headers);
-  const origin = new URL(request.url).origin;
-  res.headers.set('Access-Control-Allow-Origin', origin);
-  res.headers.set('Access-Control-Allow-Credentials', 'true');
-  return res;
+  if (!up.ok) return json({ ok: false }, { status: up.status, headers });
+  return json({ ok: true }, { headers });
 };
