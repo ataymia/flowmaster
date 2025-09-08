@@ -1,59 +1,67 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Allstar Sign In</title>
-<link rel="stylesheet" href="/theme.css">
-<style>
-  body{display:grid;place-items:center;min-height:100vh;background:#0b1220;color:#e6edf3;font:14px/1.4 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
-  .card{background:#0f172a;border:1px solid #1f2a44;border-radius:16px;padding:20px;width:420px;max-width:92%}
-  h1{margin:0 0 12px;font-weight:800;color:#60a5fa}
-  label{font-size:12px;color:#9fb3c8;margin:6px 0 4px;display:block}
-  input{width:100%;padding:10px;border-radius:10px;border:1px solid #1f2a44;background:#0b1426;color:#e6edf3}
-  .btn{width:100%;margin-top:14px;padding:10px;border-radius:10px;border:1px solid transparent;background:#2563eb;color:#fff;cursor:pointer}
-  .btn:hover{filter:brightness(.96)}
-  .err{color:#fecaca;margin-bottom:6px;min-height:18px}
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>Allstar Agent Hub</h1>
-    <div class="muted">Please sign in</div>
-    <div id="msg" class="err"></div>
-    <label>Username</label>
-    <input id="u" placeholder="username or email">
-    <label>Password</label>
-    <input id="p" type="password" placeholder="password">
-    <button id="go" class="btn">Enter Hub</button>
-  </div>
-
 <script>
-async function whoami(){ const r=await fetch('/api/whoami'); if(!r.ok) return null; const j=await r.json().catch(()=>null); return j&&j.ok?j.user:null; }
-async function refresh(){ const r=await fetch('/api/refresh'); return r.ok; }
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const msg = $('#msg');
+  const btn = $('#go');
+  const u   = $('#u');
+  const p   = $('#p');
 
-(async()=>{
-  // if session is already valid, bounce to /hub
-  const me = await whoami();
-  if(me){ location.assign('/hub'); return; }
+  async function hasSession() {
+    try {
+      const r = await fetch('/api/whoami', { credentials: 'include' });
+      if (!r.ok) return false;
+      const j = await r.json().catch(() => null);
+      if (j && j.ok) {
+        msg.textContent = `Signed in as ${j.user?.username || 'user'} — taking you to the Hub…`;
+        // client-side redirect avoids any server redirect loops
+        setTimeout(() => location.replace('/hub'), 50);
+        return true;
+      }
+    } catch {}
+    return false;
+  }
 
-  const msg = document.querySelector('#msg');
-  document.querySelector('#go').onclick = async ()=>{
-    msg.textContent='';
-    const username=document.querySelector('#u').value.trim();
-    const password=document.querySelector('#p').value;
-    if(!username||!password){ msg.textContent='Enter username & password'; return; }
-    const res = await fetch('/api/login', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,password})});
-    const j = await res.json().catch(()=>({}));
-    if(!res.ok || !j.ok){
-      msg.textContent = j.error || 'Sign in failed';
-      return;
-    }
-    // ensure access cookie is present; if not yet, hit refresh once
-    const ok = await refresh().catch(()=>false);
-    location.assign('/hub');
-  };
+  // if a session already exists, go straight to hub
+  hasSession().then((inHub) => {
+    if (inHub) return;
+
+    // normal login flow
+    btn.addEventListener('click', async () => {
+      const username = (u.value || '').trim();
+      const password = p.value || '';
+      if (!username || !password) {
+        msg.textContent = 'Please enter username and password.';
+        return;
+      }
+      msg.textContent = 'Signing in…';
+      try {
+        const r = await fetch('/api/login', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && !j.error) {
+          // success — go to hub
+          location.assign('/hub');
+        } else {
+          msg.textContent = j.error || 'Sign-in failed.';
+        }
+      } catch (e) {
+        msg.textContent = 'Network error.';
+      }
+    });
+
+    // press Enter in the password box
+    p.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') btn.click();
+    });
+
+    // “Enter Hub” should still work if a background tab refreshed whoami
+    btn.addEventListener('auxclick', async () => {
+      if (await hasSession()) return;
+    });
+  });
 })();
 </script>
-</body>
-</html>
