@@ -1,80 +1,24 @@
-import {
-  json,
-  upstream,
-  setCookie,
-  pickCookieFromSetCookie,
-  ACCESS_NAME,
-  REFRESH_NAME,
-  Env,
-} from './_utils';
+// functions/api/login.ts
+import { json, upstream, pickCookieFromSetCookie, Env } from "./_utils";
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  // Call the Auth Worker /auth/login with the same JSON body
-  const upstreamRes = await upstream(env, '/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+export const onRequestPost: PagesFunction<Env> = async (ctx) => {
+  const { request, env } = ctx;
+  const r = await upstream(env, "/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: await request.text(),
   });
 
-  const raw = await upstreamRes.text();
-  let data: any = {};
-  try { data = JSON.parse(raw); } catch { data = {}; }
-
-  // Try to get tokens from JSON body first (our worker returns them),
-  // and fall back to parsing upstream Set-Cookie if needed.
-  const setCookies: string[] = [];
-  upstreamRes.headers.forEach((v, k) => {
-    if (k.toLowerCase() === 'set-cookie') setCookies.push(v);
-  });
-
-  let access = data.access as string | undefined;
-  let refresh = data.refresh as string | undefined;
-  if (!access)  access  = pickCookieFromSetCookie(setCookies, ACCESS_NAME) || undefined;
-  if (!refresh) refresh = pickCookieFromSetCookie(setCookies, REFRESH_NAME) || undefined;
-
-  // On the Pages domain set cookies with the RIGHT paths:
-  // - access_token -> Path=/          (used by everything)
-  // - refresh_token -> Path=/api      (only our API needs it)
-  const h = new Headers({ 'Content-Type': 'application/json' });
-  if (access) {
-    h.append('Set-Cookie',
-      setCookie(ACCESS_NAME, access, {
-        path: '/',
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-        maxAge: 60 * 15, // 15 min
-      })
-    );
+  const body = await r.text();
+  const h = new Headers();
+  const set = r.headers.get("set-cookie");
+  if (set) {
+    // When the Worker sends multiple cookies, Cloudflare folds them with comma.
+    // Split safely on comma followed by space + token name startswith something=
+    // Simpler: just pass through as-is; browsers can parse combined header from CF.
+    h.append("set-cookie", set);
   }
-  if (refresh) {
-    h.append('Set-Cookie',
-      setCookie(REFRESH_NAME, refresh, {
-        path: '/api',
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-      })
-    );
-  }
+  h.set("content-type", r.headers.get("content-type") || "application/json");
 
-  if (!upstreamRes.ok) {
-    // Forward error payload but still set any cookies we built (in case access arrived)
-    return new Response(raw || JSON.stringify({ ok: false }), {
-      status: upstreamRes.status,
-      headers: h,
-    });
-  }
-
-  // Minimal success body for the client
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      username: data.username,
-      role: data.role,
-      mustChangePassword: !!data.mustChangePassword,
-    }),
-    { status: 200, headers: h }
-  );
+  return new Response(body, { status: r.status, headers: h });
 };
