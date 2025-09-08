@@ -1,85 +1,141 @@
-// functions/api/_utils.ts
+// Shared helpers for Pages Functions
 
-// Utilities shared by Pages Functions
-// - json(): JSON Response helper
-// - setCookie(): build a Set-Cookie string for this host
-// - proxyWithAuth(): fetch to upstream AUTH worker carrying cookies through
+export type Env = {
+  AUTH_BASE: string;               // e.g. https://allstar-auth.<your>.workers.dev
+  NOTION_SECRET?: string;
+  NOTION_DB_BILLBOARD?: string;
+  NOTION_PROP_TITLE?: string;
+  NOTION_PROP_BODY?: string;
+  NOTION_PROP_PUBLISH?: string;
+  NOTION_PROP_EXPIRES?: string;
+  NOTION_PROP_PINNED?: string;
+  NOTION_PROP_AUDIENCE?: string;
+};
 
-// Tell Pages where your Auth Worker lives (Settings → Environment variables → AUTH_BASE)
-const getAuthBase = (env: Record<string, string> | undefined) =>
-  (env?.AUTH_BASE || '').replace(/\/+$/, '');
-
-export function json(data: any, status = 200, extra?: HeadersInit) {
-  const h = new Headers({ 'content-type': 'application/json; charset=utf-8' });
-  if (extra) {
-    for (const [k, v] of new Headers(extra).entries()) h.append(k, v);
-  }
+export function json(data: any, status = 200, headers?: HeadersInit) {
+  const h = new Headers({ 'Content-Type': 'application/json' });
+  if (headers) new Headers(headers).forEach((v, k) => h.set(k, v));
   return new Response(JSON.stringify(data), { status, headers: h });
 }
 
 type CookieOpts = {
-  maxAge?: number;
   path?: string;
+  domain?: string;
   httpOnly?: boolean;
   secure?: boolean;
   sameSite?: 'Lax' | 'Strict' | 'None';
+  maxAge?: number;   // seconds
+  expires?: Date;
 };
 
-/** Build a Set-Cookie string for the current host (no Domain= so it sticks to Pages host) */
-export function setCookie(name: string, value: string, opts: CookieOpts = {}) {
-  const {
-    maxAge,
+export function setCookie(
+  name: string,
+  value: string,
+  {
     path = '/',
+    domain,
     httpOnly = true,
     secure = true,
     sameSite = 'None',
-  } = opts;
-
-  let c = `${name}=${value}; Path=${path}; SameSite=${sameSite};`;
-  if (httpOnly) c += ' HttpOnly;';
-  if (secure) c += ' Secure;';
-  if (typeof maxAge === 'number') c += ` Max-Age=${maxAge};`;
-  return c;
+    maxAge,
+    expires,
+  }: CookieOpts = {}
+) {
+  const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`];
+  if (domain) parts.push(`Domain=${domain}`);
+  if (httpOnly) parts.push('HttpOnly');
+  if (secure) parts.push('Secure');
+  if (sameSite) parts.push(`SameSite=${sameSite}`);
+  if (typeof maxAge === 'number') parts.push(`Max-Age=${Math.max(0, maxAge)}`);
+  if (expires instanceof Date) parts.push(`Expires=${expires.toUTCString()}`);
+  return parts.join('; ');
 }
 
-/** Pull Cookie header off the incoming request */
-function incomingCookie(req: Request) {
-  return req.headers.get('cookie') || '';
+export function clearCookie(name: string, path = '/') {
+  return setCookie(name, '', { path, maxAge: 0, expires: new Date(0) });
+}
+
+export function parseCookies(request: Request) {
+  const header = request.headers.get('cookie') || '';
+  const out: Record<string, string> = {};
+  header.split(/; */).forEach((kv) => {
+    if (!kv) return;
+    const i = kv.indexOf('=');
+    const k = decodeURIComponent(kv.slice(0, i).trim());
+    const v = decodeURIComponent(kv.slice(i + 1).trim());
+    out[k] = v;
+  });
+  return out;
+}
+
+export function pickCookieFromSetCookie(
+  res: Response,
+  name: string
+): string | null {
+  const all = res.headers.get('set-cookie');
+  if (!all) return null;
+  const cookies = Array.isArray(all) ? all : [all];
+  for (const c of cookies) {
+    if (c.toLowerCase().startsWith(`${name.toLowerCase()}=`)) return c;
+  }
+  return null;
+}
+
+export async function upstream(
+  env: Env,
+  path: string,
+  init?: RequestInit
+): Promise<Response> {
+  const url = new URL(path, env.AUTH_BASE).toString();
+  return fetch(url, init);
 }
 
 /**
- * Proxy a request to the upstream Auth Worker while passing through cookies.
- * This returns the upstream body/headers, but **from Pages** so Set-Cookie attaches to your Pages domain.
+ * Ensure we have a usable access token; if we can refresh, do it and
+ * return Set-Cookie headers we need to mirror on our domain.
  */
-export async function proxyWithAuth(
-  ctx: EventContext<any, any, any>,
-  path: string,
-  init?: RequestInit
-) {
-  const AUTH_BASE = getAuthBase(ctx.env);
-  if (!AUTH_BASE) {
-    return json({ error: 'AUTH_BASE not set' }, 500);
+export async function ensureAccess(
+  request: Request,
+  env: Env
+): Promise<{ access?: string; set: string[] }> {
+  const c = parseCookies(request);
+  let access = c['access_token'];
+  const refresh = c['refresh_token'];
+  const set: string[] = [];
+
+  if (!access && refresh) {
+    const res = await upstream(env, '/auth/refresh', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${refresh}` },
+    });
+
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.access) {
+        access = data.access;
+        set.push(
+          setCookie('access_token', data.access, {
+            path: '/',
+            sameSite: 'None',
+            secure: true,
+            httpOnly: true,
+            maxAge: 60 * 15,
+          })
+        );
+      }
+      if (data.refresh) {
+        set.push(
+          setCookie('refresh_token', data.refresh, {
+            path: '/api',
+            sameSite: 'None',
+            secure: true,
+            httpOnly: true,
+            maxAge: 60 * 60 * 24 * 7,
+          })
+        );
+      }
+    }
   }
 
-  const url = AUTH_BASE + path;
-
-  // carry through cookies to upstream (so /me, /auth/refresh, etc. work)
-  const headers = new Headers(init?.headers || {});
-  if (!headers.has('cookie')) {
-    const ck = incomingCookie(ctx.request);
-    if (ck) headers.set('cookie', ck);
-  }
-
-  // default credentials are not needed here since this is server-to-server
-  const res = await fetch(url, {
-    method: init?.method || ctx.request.method,
-    headers,
-    body: init?.body,
-    redirect: 'manual',
-  });
-
-  // Return same status/body + headers (including Set-Cookie). Because this response
-  // originates from Pages, the browser will attach cookies to your Pages host.
-  const outHeaders = new Headers(res.headers);
-  return new Response(res.body, { status: res.status, headers: outHeaders });
+  return { access, set };
 }
