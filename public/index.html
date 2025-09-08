@@ -10,13 +10,10 @@
     .wrap{max-width:420px;margin:12vh auto;padding:20px;border:1px solid #1f2a44;border-radius:14px;background:#0f1830}
     .title{font-weight:800;font-size:20px;margin-bottom:12px;color:#7dc1ff}
     .muted{color:#9fb3d2}
-    .row{display:flex;gap:8px;align-items:center}
     .field{width:100%;padding:10px;border-radius:10px;border:1px solid #233358;background:#0b1530;color:#e5eefc}
-    .btn{width:100%;padding:10px;border-radius:10px;border:0;background:#2563eb;color:#fff;cursor:pointer}
-    .btn:hover{filter:brightness(.97)}
-    .err{color:#ff9aa2;display:none;margin-bottom:8px}
+    .btn{width:100%;padding:10px;border-radius:10px;border:0;background:#2563eb;color:#fff;cursor:pointer;margin-top:12px}
+    .err{color:#ff9aa2;display:none;margin-top:8px}
     .ok{display:none;color:#9fe29f;margin-top:8px}
-    .link{color:#7dc1ff;text-decoration:underline;cursor:pointer}
   </style>
 </head>
 <body>
@@ -32,58 +29,53 @@
       <label class="muted" style="margin-top:8px;display:block">Password</label>
       <input id="p" class="field" type="password" autocomplete="current-password"/>
 
-      <button id="login" class="btn" style="margin-top:12px">Enter Hub</button>
+      <button id="login" class="btn">Enter Hub</button>
     </div>
 
     <div id="ok" class="ok">Signed in. Opening Hub…</div>
   </div>
 
 <script>
-const S = (sel)=>document.querySelector(sel);
+const $ = s => document.querySelector(s);
 
-async function whoami() {
-  try {
+async function whoami(){
+  try{
     const r = await fetch('/api/whoami', { credentials:'include' });
-    if (r.ok) return await r.json();
-    return null;
-  } catch { return null; }
+    return r.ok ? r.json() : null;
+  }catch{ return null; }
 }
-async function doLogin(u, p) {
+async function login(username,password){
   const r = await fetch('/api/login', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     credentials:'include',
-    body:JSON.stringify({ username:u, password:p })
+    body:JSON.stringify({ username, password })
   });
-  if (!r.ok) throw new Error('Login failed');
-  return r.json();
+  if(!r.ok) throw new Error('Login failed');
 }
 
 (async function init(){
   const me = await whoami();
-  if (me) {
-    S('#state').textContent = `${me.username} · ${me.role}`;
-    S('#ok').style.display='block';
-    // only now, go to /hub
+  if (me){
+    $('#state').textContent = `${me.username} · ${me.role}`;
+    $('#ok').style.display='block';
     location.assign('/hub');
     return;
   }
-  S('#state').textContent = 'Please sign in';
-  S('#form').style.display='block';
+  $('#state').textContent = 'Please sign in';
+  $('#form').style.display='block';
 
-  S('#login').onclick = async ()=>{
-    S('#err').style.display='none';
-    const u = S('#u').value.trim();
-    const p = S('#p').value;
-    try {
-      await doLogin(u,p);
+  $('#login').onclick = async ()=>{
+    $('#err').style.display='none';
+    try{
+      await login($('#u').value.trim(), $('#p').value);
       const me2 = await whoami();
-      if (!me2) throw new Error('Session not established');
-      S('#ok').style.display='block';
+      if(!me2) throw new Error('Session not established');
+      $('#ok').style.display='block';
       location.assign('/hub');
-    } catch (e){
-      S('#err').textContent = e.message || 'Login failed';
-      S('#err').style.display='block';
+    }catch(e){
+      $('#err').textContent = e.message || 'Login failed';
+      $('#err').style.display='block';
     }
   };
 })();
