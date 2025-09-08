@@ -56,6 +56,18 @@
     </div>
   </div>
 
+<script>
+(function () {
+  // Only gate hub/adherence; everything else just loads.
+  var p = location.pathname;
+  if (!(p === '/hub' || p === '/adherence' || p.startsWith('/adherence/'))) return;
+
+  fetch('/api/whoami', { credentials: 'include' })
+    .then(function (r) { if (!r.ok) location.replace('/'); })
+    .catch(function () { location.replace('/'); });
+})();
+</script>
+
 <script type="module">
 const U = (id)=>document.getElementById(id);
 const setUser = (t)=> U('user').textContent = t;
