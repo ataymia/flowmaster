@@ -1,18 +1,17 @@
-// functions/api/logout.ts
-function clearCookie(name: string) {
-  return `${name}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
-}
-
-export const onRequestPost: PagesFunction = async ({ env }) => {
-  const h = new Headers();
-  h.append('Set-Cookie', clearCookie('access_token'));
-  h.append('Set-Cookie', clearCookie('refresh_token'));
-
-  // Optionally tell upstream
-  if (env.AUTH_BASE) {
-    fetch(`${env.AUTH_BASE}/auth/logout`, { method: 'POST' }).catch(() => {});
-  }
-  return new Response(null, { status: 204, headers: h });
+export const onRequestPost: PagesFunction<{ AUTH_BASE: string }> = async ({
+  request,
+  env,
+}) => {
+  const authUrl = new URL("/logout", env.AUTH_BASE);
+  const upstream = await fetch(authUrl.toString(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: await request.text().catch(() => null),
+    redirect: "manual",
+  });
+  const res = new Response(upstream.body, upstream);
+  const origin = new URL(request.url).origin;
+  res.headers.set("Access-Control-Allow-Origin", origin);
+  res.headers.set("Access-Control-Allow-Credentials", "true");
+  return res;
 };
-
-export const onRequestGet: PagesFunction = onRequestPost;
