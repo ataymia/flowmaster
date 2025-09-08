@@ -1,25 +1,27 @@
 // functions/api/_utils.ts
 
-// ----- cookie & misc config -----
-const ACCESS_NAME = 'access_token';
-const REFRESH_NAME = 'refresh_token';
-const COOKIE_SECURE = true;        // your custom domain is HTTPS
+// ===== Cookie/config =====
+export const ACCESS_NAME = 'access_token';
+export const REFRESH_NAME = 'refresh_token';
+const COOKIE_SECURE = true; // custom domain is https
 const COOKIE_SAMESITE: 'Lax' | 'Strict' | 'None' = 'Lax';
 
-// ----- tiny JSON helper -----
+export type Env = {
+  AUTH_BASE?: string; // Auth worker base URL
+  // (add other bindings here if you later want strict typing)
+};
+
+// ===== Small JSON helper =====
 export function json(
   obj: unknown,
   status = 200,
   extraHeaders: Record<string, string> = {}
 ): Response {
-  const h = new Headers({
-    'Content-Type': 'application/json',
-    ...extraHeaders,
-  });
+  const h = new Headers({ 'Content-Type': 'application/json', ...extraHeaders });
   return new Response(JSON.stringify(obj), { status, headers: h });
 }
 
-// ----- cookie helpers -----
+// ===== Cookie helpers =====
 export function setCookie(
   name: string,
   val: string,
@@ -79,15 +81,14 @@ export function pickCookieFromSetCookie(
   return null;
 }
 
-// ----- base URL for the Auth worker -----
-export function authBase(env: any): string {
-  // Keep your default here if NOT set in Pages env vars
-  return (env && env.AUTH_BASE) || 'https://allstar-auth.ataymia.workers.dev';
+// ===== Base URL for the Auth worker =====
+export function authBase(env: Env): string {
+  return env.AUTH_BASE || 'https://allstar-auth.ataymia.workers.dev';
 }
 
-// ----- low-level fetch to the Auth worker -----
+// ===== Low-level fetch to the Auth worker =====
 export async function upstream(
-  env: any,
+  env: Env,
   path: string,
   init: RequestInit = {},
   cookieHeader?: string
@@ -98,16 +99,75 @@ export async function upstream(
   return fetch(url.toString(), { ...init, headers: h });
 }
 
-// ----- proxy with auth cookies (NEW) -----
-// Forwards the incoming request to the Auth worker, attaching the access/refresh cookies.
-// It streams the upstream response back to the client.
+// ===== ensureAccess (NEW) =====
+// Builds a cookie header containing access/refresh. If access is missing but
+// refresh exists, it hits /auth/refresh and returns upstream Set-Cookie headers
+// so the caller can forward them to the browser.
+export async function ensureAccess(
+  req: Request,
+  env: Env
+): Promise<{
+  ok: boolean;
+  cookieHeader: string;        // cookies to send upstream
+  setCookie?: string[];        // Set-Cookie headers to forward to client
+}> {
+  const cookies = parseCookies(req);
+  let access = cookies.get(ACCESS_NAME) || '';
+  let refresh = cookies.get(REFRESH_NAME) || '';
+
+  // If no access but there is refresh, try to refresh
+  if (!access && refresh) {
+    const res = await upstream(
+      env,
+      '/auth/refresh',
+      { method: 'POST' },
+      `${REFRESH_NAME}=${refresh}`
+    );
+
+    // Collect all Set-Cookie headers from upstream
+    const setCookie: string[] = [];
+    res.headers.forEach((v, k) => {
+      if (k.toLowerCase() === 'set-cookie') setCookie.push(v);
+    });
+
+    // Attempt to pick tokens from Set-Cookie
+    const newAccess = pickCookieFromSetCookie(setCookie, ACCESS_NAME);
+    const newRefresh = pickCookieFromSetCookie(setCookie, REFRESH_NAME);
+    if (newAccess) access = newAccess;
+    if (newRefresh) refresh = newRefresh;
+
+    if (res.ok && access) {
+      const cookieHeader = [
+        access ? `${ACCESS_NAME}=${access}` : '',
+        refresh ? `${REFRESH_NAME}=${refresh}` : '',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      return { ok: true, cookieHeader, setCookie };
+    }
+
+    // Refresh failed
+    return { ok: false, cookieHeader: '', setCookie };
+  }
+
+  // Already have access (or neither, which means not authed)
+  const cookieHeader = [
+    access ? `${ACCESS_NAME}=${access}` : '',
+    refresh ? `${REFRESH_NAME}=${refresh}` : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+
+  return { ok: !!access, cookieHeader };
+}
+
+// ===== proxyWithAuth (kept) =====
 export async function proxyWithAuth(
   req: Request,
-  env: any,
+  env: Env,
   path: string,
   init: RequestInit = {}
 ): Promise<Response> {
-  // Build cookie header limited to tokens we actually need
   const cookies = parseCookies(req);
   const parts: string[] = [];
   const a = cookies.get(ACCESS_NAME);
@@ -116,27 +176,21 @@ export async function proxyWithAuth(
   if (r) parts.push(`${REFRESH_NAME}=${r}`);
   const cookieHeader = parts.join('; ');
 
-  // Prepare method/body/headers pass-through
   const method = init.method || req.method;
   const headers = new Headers(init.headers || {});
-  // copy content-type from original if needed
   if (!headers.has('Content-Type')) {
     const ct = req.headers.get('Content-Type');
     if (ct) headers.set('Content-Type', ct);
   }
-
   const body =
     method === 'GET' || method === 'HEAD'
       ? undefined
       : init.body ?? (await req.clone().arrayBuffer());
 
   const res = await upstream(env, path, { method, headers, body }, cookieHeader);
-
-  // Stream back response; also forward any useful headers (including JSON, caching, etc.)
-  const outHeaders = new Headers(res.headers);
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,
-    headers: outHeaders,
+    headers: new Headers(res.headers),
   });
 }
