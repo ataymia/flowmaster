@@ -1,69 +1,70 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Allstar Agent Hub</title>
-  <link rel="stylesheet" href="/theme.css"/>
-  <style>
-    body{margin:0;background:#0b1220;color:#e5eefc;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
-    .bar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#0f1830;border-bottom:1px solid #1f2a44}
-    .title{font-weight:800;color:#7dc1ff}
-    .btn{padding:8px 12px;border-radius:10px;border:1px solid #1f2a44;background:#142044;color:#e5eefc;cursor:pointer}
-    .btn.primary{background:#2563eb;border-color:#2563eb;color:#fff}
-    .wrap{max-width:1000px;margin:24px auto;padding:0 16px}
-    .muted{color:#9fb3d2}
-    .card{border:1px solid #1f2a44;border-radius:14px;background:#0f1830;padding:16px}
-    .bad{color:#ff9aa2}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Allstar Agent Hub</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{background:#0b1220;color:#e6edf3;font:14px/1.45 ui-sans-serif,system-ui}
+  .header{display:flex;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid #1f2a44;background:#0f172a;position:sticky;top:0}
+  .title{font-weight:800;color:#60a5fa}
+  .muted{color:#9fb3c8}
+  .wrap{max-width:1000px;margin:18px auto;padding:0 16px}
+  .tabs a{display:inline-block;margin-right:8px;padding:8px 12px;border-radius:10px;border:1px solid #1f2a44;background:#0b1426;color:#e6edf3;text-decoration:none}
+  .tabs a:hover{background:#0f172a}
+  .card{background:#0f172a;border:1px solid #1f2a44;border-radius:16px;padding:16px;margin-top:16px}
+  .row{display:flex;justify-content:space-between;align-items:center}
+  .btn{padding:8px 12px;border-radius:10px;border:1px solid #1f2a44;background:#0b1426;color:#e6edf3;cursor:pointer}
+  .btn:hover{filter:brightness(.95)}
+  .red{color:#fecaca}
+</style>
 </head>
 <body>
-  <div class="bar">
+  <div class="header">
     <div class="title">Allstar Agent Hub</div>
-    <div id="user" class="muted" style="margin-left:auto">checking…</div>
-    <button id="logout" class="btn">Logout</button>
+    <div style="margin-left:auto" class="muted" id="who">Loading…</div>
+    <button class="btn" id="out">Logout</button>
   </div>
 
   <div class="wrap">
-    <div id="notAuthed" class="card" style="display:none">
-      <div class="bad">You’re not signed in.</div>
-      <div class="muted">Go to Sign In to start a session.</div>
-      <div style="margin-top:10px"><a class="btn" href="/">Go to Sign In</a></div>
+    <div class="tabs">
+      <a href="/hub">Hub</a>
+      <a href="/adherence/">Adherence</a>
+      <a href="/flowmaster/">Flowmaster</a>
     </div>
 
-    <div id="hub" style="display:none" class="card">
-      <h3>Welcome!</h3>
-      <p class="muted">Your tools:</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <a class="btn primary" href="/adherence">Adherence</a>
-        <a class="btn" href="/flowmaster/">Flowmaster</a>
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0">Team Billboard</h2>
+        <div class="muted" id="date"></div>
       </div>
+      <div id="feed" class="muted">Loading…</div>
     </div>
   </div>
 
 <script>
-const $ = s => document.querySelector(s);
-async function me(){ try{ const r=await fetch('/api/whoami',{credentials:'include'}); return r.ok? r.json():null;}catch{return null;} }
-async function refresh(){ return fetch('/auth/refresh',{method:'POST',credentials:'include'}); }
-async function ensureSession(){
-  let m = await me();
-  if (m) return m;
-  const r = await refresh();
-  if (r.status !== 204) return null;
-  return await me();
-}
-async function logout(){ try{ await fetch('/api/logout',{method:'POST',credentials:'include'});}catch{} location.assign('/'); }
+function el(tag, attrs={}, ...kids){ const n=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>{ k==='class' ? n.className=v : n.setAttribute(k,v) }); kids.flat().forEach(k=> n.appendChild(typeof k==='string'?document.createTextNode(k):k)); return n; }
+async function whoami(){ const r=await fetch('/api/whoami'); if(!r.ok) return null; const j=await r.json().catch(()=>null); return j&&j.ok?j.user:null; }
+async function news(aud){ const r=await fetch('/api/news?aud='+encodeURIComponent(aud||'all')); const j=await r.json().catch(()=>({items:[]})); return j.items||[]; }
 
-(async function init(){
-  const m = await ensureSession();
-  if (!m) {
-    $('#user').textContent = 'not signed in';
-    document.getElementById('notAuthed').style.display='block';
-  } else {
-    $('#user').textContent = `${m.username} · ${m.role}`;
-    document.getElementById('hub').style.display='block';
-  }
-  document.getElementById('logout').onclick = logout;
+(async ()=>{
+  const me = await whoami();
+  if(!me){ location.replace('/'); return; }
+  document.querySelector('#who').textContent = `${me.username||'user'} · ${me.role||''}`.trim();
+  document.querySelector('#out').onclick = async ()=>{ await fetch('/api/logout',{method:'POST'}); location.replace('/'); };
+
+  document.querySelector('#date').textContent = new Date().toLocaleDateString();
+  const items = await news('AGENT');
+  const host = document.querySelector('#feed'); host.innerHTML='';
+  if(!items.length){ host.textContent='No announcements.'; return; }
+  items.forEach(x=>{
+    const row = el('div',{class:'card',style:'margin:12px 0;padding:12px;background:#0b1426;border-color:#1f2a44'},
+      el('div',{}, el('strong',{}, x.title||'Untitled')),
+      el('div',{class:'muted',style:'margin-top:6px'}, x.body||'')
+    );
+    host.appendChild(row);
+  });
 })();
 </script>
 </body>
