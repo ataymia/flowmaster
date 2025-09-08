@@ -1,10 +1,2 @@
-# Hub & Login
-/hub         /hub.html        200
-/login       /index.html      200
-
-# Adherence & Schedule (folder index)
-/adherence   /adherence/      200
-/schedule    /adherence/      200
-
-# Flowmaster (folder index)
-/flowmaster  /flowmaster/     200
+/hub        /hub.html                   200
+/adherence  /adherence/index.html      200
