@@ -1,37 +1,51 @@
-// Light gate: protect app pages from anonymous access
+// functions/_middleware.ts
+// Protects app routes without causing loops or runtime errors.
+
 import { parseCookies } from './api/_utils';
 
-const PUBLIC_PATHS = new Set([
-  '/',                 // login
-  '/favicon.ico',
-  '/theme.css',
+const PUBLIC_PATHS = new Set<string>([
+  '/', '/index.html', '/favicon.ico', '/robots.txt', '/manifest.json'
 ]);
-const PUBLIC_API_PREFIXES = ['/api/login', '/api/refresh', '/api/logout', '/api/debug', '/api/notion-check', '/api/debug-auth', '/api/debug-news'];
+
+const PUBLIC_API_PREFIXES = [
+  '/api/login',
+  '/api/logout',
+  '/api/refresh',
+  '/api/whoami',
+  '/api/news',
+];
+
+const PROTECTED_PREFIXES = [
+  '/hub',        // covers /hub and /hub.html if you redirect to it
+  '/hub.html',   // direct file
+  '/adherence',  // /adherence and /adherence/
+  '/flowmaster', // /flowmaster and /flowmaster/
+];
 
 export const onRequest: PagesFunction = async (ctx) => {
-  const url = new URL(ctx.request.url);
+  const { request, next } = ctx;
+  const url = new URL(request.url);
   const { pathname } = url;
 
-  // Static public
-  if (PUBLIC_PATHS.has(pathname) || PUBLIC_API_PREFIXES.some(p => pathname.startsWith(p))) {
-    return ctx.next();
+  // Allow public static pages and assets
+  if (PUBLIC_PATHS.has(pathname)) return next();
+
+  // Allow public API endpoints
+  if (PUBLIC_API_PREFIXES.some(p => pathname.startsWith(p))) return next();
+
+  // Only guard protected areas
+  const needsAuth = PROTECTED_PREFIXES.some(p =>
+    pathname === p || pathname.startsWith(p)
+  );
+  if (!needsAuth) return next();
+
+  // Check for auth cookies
+  const c = parseCookies(request);
+  const hasAccess = !!c.get('access_token') || !!c.get('refresh_token');
+  if (!hasAccess) {
+    url.pathname = '/index.html';
+    return Response.redirect(url.toString(), 302);
   }
 
-  // Protect hub/adherence (and anything under /adherence)
-  if (pathname === '/hub' || pathname.startsWith('/adherence')) {
-    const c = parseCookies(ctx.request);
-    if (!c['access_token'] && !c['refresh_token']) {
-      return Response.redirect(`${url.origin}/`, 302);
-    }
-  }
-
-  return ctx.next();
+  return next();
 };
-if (
-  pathname === '/hub' ||
-  pathname === '/hub.html' ||
-  pathname.startsWith('/adherence') ||
-  pathname.startsWith('/flowmaster')
-) {
-  // check cookies …
-}
