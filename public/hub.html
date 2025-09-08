@@ -5,89 +5,114 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Allstar Agent Hub</title>
 <style>
-:root{ --bg:#0f1115; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af;
-       --brand:#c0392b; --brand-700:#a93226; --card:#1f2937; --border:#374151; }
-*{box-sizing:border-box} html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
-a{color:inherit;text-decoration:none}
-header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:2px solid var(--brand)}
-.container{max-width:1100px;margin:0 auto;padding:18px 20px}
-.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-h1{margin:0;font-size:24px}
-.brand{color:var(--brand);font-weight:800}
-.pill{border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px;background:#111827;margin-left:auto}
-.btn{border:1px solid var(--border);background:var(--card);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer}
-.btn.brand{background:var(--brand);border-color:var(--brand);color:#fff}
-.btn.brand:hover{background:var(--brand-700)}
-.notice{margin:16px 0;padding:12px;border:1px dashed var(--brand);border-radius:12px;background:rgba(192,57,43,.08);color:#ffdada;display:none}
-.grid{display:grid;gap:16px;grid-template-columns:repeat(1,minmax(0,1fr))}
-@media(min-width:760px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
-.cardLink{display:block;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;transition:transform .12s ease, border-color .12s ease}
-.cardLink:hover{transform:translateY(-2px);border-color:var(--brand)}
-.cardLink h3{margin:0 0 6px;font-size:18px}
-.cardLink p{margin:0;color:var(--muted)}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;margin-left:8px;background:rgba(192,57,43,.18);color:#ffdada;border:1px solid rgba(192,57,43,.35);}
+  :root{--brand:#e11d48;--ink:#0b1220;--panel:#0f172a;--muted:#8aa3c2;--line:rgba(255,255,255,.1)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:#e5efff;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  .bar{position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);background:rgba(11,18,32,.8);border-bottom:1px solid var(--line)}
+  .bar-in{max-width:1100px;margin:0 auto;display:flex;gap:12px;align-items:center;padding:10px 16px}
+  .brand{font-weight:800;letter-spacing:.3px;color:var(--brand)}
+  .sp{flex:1}
+  .btn{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#0b1220;color:#e5efff;cursor:pointer}
+  .btn:hover{filter:brightness(.95)}
+  .pill{padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .grid{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:2fr 1fr}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .title{font-weight:800;margin-bottom:8px}
+  .muted{color:var(--muted)}
+  .news{display:flex;flex-direction:column;gap:10px}
+  .news-item{border-top:1px solid var(--line);padding-top:10px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tab{padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:#0b1220;color:#e5efff;text-decoration:none}
+  .tab:hover{filter:brightness(.95)}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
-<header>
-  <div class="container">
-    <div class="row">
-      <h1>Allstar <span class="brand">Agent Hub</span></h1>
-      <div id="hdrUser" class="pill">Checking sign-in…</div>
-      <button id="btnLogout" class="btn">Logout</button>
+  <div class="bar">
+    <div class="bar-in">
+      <div class="brand">Allstar Agent Hub</div>
+      <div id="user" class="pill">…</div>
+      <div class="sp"></div>
+      <a class="tab" href="/adherence/">Schedule & Adherence</a>
+      <a class="tab" href="/flowmaster/">Flowmaster</a>
+      <button id="logout" class="btn">Logout</button>
     </div>
   </div>
-</header>
 
-<main class="container">
-  <div id="news" class="notice"></div>
   <div class="grid">
-    <a class="cardLink" href="/flowmaster">
-      <h3>📞 FlowMaster <span class="badge">Scripts + Rebuttals</span></h3>
-      <p>Call flows, rebuttals, SMS helper, and tools in one place.</p>
-    </a>
-    <a class="cardLink" href="/schedule">
-      <h3>📅 Adherence &amp; Scheduling <span class="badge">Live % + Editor</span></h3>
-      <p>Agents set live status; Admins edit schedules, view status &amp; history, export CSV.</p>
-    </a>
-    <a class="cardLink" href="/hub">
-      <h3>📰 Team Billboard</h3>
-      <p>Company memos auto-pulled from Notion.</p>
-    </a>
-    <a class="cardLink" href="https://www.notion.so/" target="_blank" rel="noopener">
-      <h3>✍️ Manage News in Notion</h3>
-      <p>Admins update the Team Billboard in Notion; the Hub auto-refreshes.</p>
-    </a>
+    <div class="card">
+      <div class="title">Team News & Memos</div>
+      <div id="news" class="news">
+        <div class="muted">Loading news…</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="title">Shortcuts</div>
+      <div class="tabs">
+        <a class="tab" href="/adherence/">Open Schedule & Adherence</a>
+        <a class="tab" href="/flowmaster/">Open Flowmaster</a>
+      </div>
+      <div class="muted" style="margin-top:10px">If any page asks you to log in again, just return here and use Logout → Sign in.</div>
+    </div>
   </div>
-</main>
 
-<script>
-const API = "/api";
-async function whoami(){
-  try{ const r=await fetch(API+"/whoami",{credentials:"include"}); if(!r.ok) return null; return await r.json(); }catch{return null;}
+<script type="module">
+const U = (id)=>document.getElementById(id);
+const setUser = (t)=> U('user').textContent = t;
+const setNews = (html)=> { const box = U('news'); box.innerHTML=''; box.appendChild(html); };
+
+async function j(url, opts={}) {
+  const r = await fetch(url, { credentials:'include', ...opts });
+  const ct = r.headers.get('content-type')||'';
+  const b = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) throw new Error(typeof b==='string'?b:(b.error||('HTTP '+r.status)));
+  return b;
 }
-async function logout(){ try{ await fetch(API+"/logout",{method:"POST",credentials:"include"}); }catch{} location.href="/"; }
 
-document.getElementById('btnLogout').addEventListener('click', logout);
+async function who() {
+  try {
+    const me = await j('/api/whoami');
+    if (!me || !me.username) throw new Error('not authed');
+    setUser(`${me.username} · ${me.role}`);
+    return me;
+  } catch {
+    // single redirect (no loop)
+    location.href = '/';
+    throw new Error('redir');
+  }
+}
 
-(async ()=>{
-  const me = await whoami();
-  const hdr = document.getElementById('hdrUser');
-  if(!me || !me.username){ location.href="/"; return; }
-  hdr.textContent = `${me.username} · ${me.role}`;
+function renderNewsItems(items=[]) {
+  const wrap = document.createElement('div');
+  if (!items.length) {
+    const p = document.createElement('div'); p.className='muted'; p.textContent='No news yet.'; wrap.appendChild(p);
+    return wrap;
+  }
+  items.forEach(it=>{
+    const d = document.createElement('div'); d.className='news-item';
+    const h = document.createElement('div'); h.className='title'; h.textContent = it.title || '(Untitled)';
+    const b = document.createElement('div'); b.className='muted'; b.textContent = it.body || '';
+    d.appendChild(h); d.appendChild(b); wrap.appendChild(d);
+  });
+  return wrap;
+}
 
-  try{
-    const r = await fetch(API + "/billboard", { credentials:"include" });
-    const j = r.ok ? await r.json() : { items: [] };
-    if (j.items && j.items.length){
-      const it = j.items[0];
-      const news = document.getElementById('news');
-      news.style.display = 'block';
-      news.innerHTML = `<strong>Latest:</strong> ${it.title}${it.text ? " — " + it.text : ""}`;
-    }
-  }catch{}
-})();
+async function loadNews(backoff=2000) {
+  try {
+    const items = (await j('/api/news?aud=AGENT')).items || [];
+    setNews(renderNewsItems(items));
+  } catch (e) {
+    const m = document.createElement('div'); m.className='muted';
+    m.textContent = 'News unavailable right now. Retrying…';
+    setNews(m);
+    setTimeout(()=>loadNews(Math.min(backoff*1.7, 30000)), backoff);
+  }
+}
+
+U('logout').onclick = async ()=> { try { await j('/api/logout',{method:'POST'}); } catch{} location.href='/'; };
+
+await who();       // single auth check
+loadNews();        // no reload loops; gentle retry
 </script>
 </body>
 </html>
