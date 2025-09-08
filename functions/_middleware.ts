@@ -1,27 +1,8 @@
-import { hasSession } from "./api/_utils";
-
-export const onRequest: PagesFunction = async (ctx) => {
-  const { request, next } = ctx;
-  const url = new URL(request.url);
-  const p = url.pathname;
-
-  // Always let APIs and static assets pass
-  if (p.startsWith("/api/") || p.startsWith("/assets/")) {
-    return next();
-  }
-
-  const loggedIn = hasSession(request);
-  const needsAuth = p.startsWith("/hub") || p.startsWith("/adherence") || p.startsWith("/flowmaster");
-
-  // If at root and logged in, go to hub
-  if ((p === "/" || p === "/index.html") && loggedIn) {
-    return Response.redirect(new URL("/hub", url).toString(), 302);
-  }
-
-  // If trying to view protected pages unauthenticated, go to sign-in
-  if (needsAuth && !loggedIn) {
-    return Response.redirect(new URL("/", url).toString(), 302);
-  }
-
-  return next();
+// functions/_middleware.ts (safe pass-through)
+export const onRequest = async (ctx: any) => {
+  const url = new URL(ctx.request.url);
+  // Never touch API
+  if (url.pathname.startsWith('/api/')) return ctx.next();
+  // No edge redirects for HTML; pages handle it client-side
+  return ctx.next();
 };
