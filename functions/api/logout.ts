@@ -1,7 +1,15 @@
-import { upstream, Env } from './_utils';
+// functions/api/logout.ts
+import { json, upstream, Env } from "./_utils";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const res = await upstream(env, '/auth/logout', { method: 'POST' }, request.headers.get('cookie') || '');
-  // Just forward what upstream sends (Set-Cookie clearing)
-  return new Response(res.body, { status: res.status, headers: new Headers(res.headers) });
+  const cookie = request.headers.get("cookie") || "";
+  const r = await upstream(env, "/auth/logout", {
+    method: "POST",
+    headers: { cookie },
+  });
+
+  const h = new Headers();
+  const set = r.headers.get("set-cookie");
+  if (set) h.append("set-cookie", set);
+  return json({ ok: true }, 200, h);
 };
