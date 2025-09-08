@@ -1,97 +1,57 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Allstar Sign In</title>
-  <style>
-    body{margin:0;background:#0b1220;color:#e5eefc;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
-    .wrap{max-width:420px;margin:12vh auto;padding:20px;border:1px solid #1f2a44;border-radius:14px;background:#0f1830}
-    .title{font-weight:800;font-size:20px;margin-bottom:12px;color:#7dc1ff}
-    .muted{color:#9fb3d2}
-    .field{width:100%;padding:10px;border-radius:10px;border:1px solid #233358;background:#0b1530;color:#e5eefc}
-    .btn{width:100%;padding:10px;border-radius:10px;border:0;background:#2563eb;color:#fff;cursor:pointer;margin-top:12px}
-    .err{color:#ff9aa2;display:none;margin-top:8px}
-    .ok{display:none;color:#9fe29f;margin-top:8px}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Allstar Sign In</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{display:grid;place-items:center;min-height:100vh;background:#0b1220;color:#e6edf3;font:14px/1.4 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  .card{background:#0f172a;border:1px solid #1f2a44;border-radius:16px;padding:20px;width:420px;max-width:92%}
+  h1{margin:0 0 12px;font-weight:800;color:#60a5fa}
+  label{font-size:12px;color:#9fb3c8;margin:6px 0 4px;display:block}
+  input{width:100%;padding:10px;border-radius:10px;border:1px solid #1f2a44;background:#0b1426;color:#e6edf3}
+  .btn{width:100%;margin-top:14px;padding:10px;border-radius:10px;border:1px solid transparent;background:#2563eb;color:#fff;cursor:pointer}
+  .btn:hover{filter:brightness(.96)}
+  .err{color:#fecaca;margin-bottom:6px;min-height:18px}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="title">Allstar Agent Hub</div>
-    <div id="state" class="muted">Checking session…</div>
-    <div id="err" class="err"></div>
-
-    <div id="form" style="display:none">
-      <label class="muted">Username</label>
-      <input id="u" class="field" autocomplete="username"/>
-
-      <label class="muted" style="margin-top:8px;display:block">Password</label>
-      <input id="p" class="field" type="password" autocomplete="current-password"/>
-
-      <button id="login" class="btn">Enter Hub</button>
-    </div>
-
-    <div id="ok" class="ok">Signed in. Opening Hub…</div>
+  <div class="card">
+    <h1>Allstar Agent Hub</h1>
+    <div class="muted">Please sign in</div>
+    <div id="msg" class="err"></div>
+    <label>Username</label>
+    <input id="u" placeholder="username or email">
+    <label>Password</label>
+    <input id="p" type="password" placeholder="password">
+    <button id="go" class="btn">Enter Hub</button>
   </div>
 
 <script>
-const $ = s => document.querySelector(s);
+async function whoami(){ const r=await fetch('/api/whoami'); if(!r.ok) return null; const j=await r.json().catch(()=>null); return j&&j.ok?j.user:null; }
+async function refresh(){ const r=await fetch('/api/refresh'); return r.ok; }
 
-async function whoami(){
-  try{
-    const r = await fetch('/api/whoami', { credentials:'include' });
-    return r.ok ? r.json() : null;
-  }catch{return null;}
-}
-async function login(u,p){
-  const r = await fetch('/api/login', {
-    method:'POST',
-    headers:{'content-type':'application/json'},
-    credentials:'include',
-    body:JSON.stringify({ username:u, password:p })
-  });
-  if(!r.ok) throw new Error('Login failed');
-}
-async function refresh() {
-  // Important: call /auth/refresh so the browser sends refresh_token (Path=/auth)
-  return fetch('/auth/refresh', { method:'POST', credentials:'include' });
-}
+(async()=>{
+  // if session is already valid, bounce to /hub
+  const me = await whoami();
+  if(me){ location.assign('/hub'); return; }
 
-async function tryEstablishSession() {
-  // Step 1: check
-  let me = await whoami();
-  if (me) return me;
-  // Step 2: do a same-origin refresh (uses refresh_token cookie)
-  const r = await refresh();
-  if (r.status !== 204) return null;
-  // Step 3: re-check
-  return await whoami();
-}
-
-(async function init(){
-  const me0 = await tryEstablishSession();
-  if (me0) {
-    $('#state').textContent = `${me0.username} · ${me0.role}`;
-    $('#ok').style.display='block';
-    location.assign('/hub');
-    return;
-  }
-
-  $('#state').textContent = 'Please sign in';
-  $('#form').style.display='block';
-
-  $('#login').onclick = async ()=>{
-    $('#err').style.display='none';
-    try{
-      await login($('#u').value.trim(), $('#p').value);
-      const me1 = await tryEstablishSession();
-      if (!me1) throw new Error('Session not established');
-      $('#ok').style.display='block';
-      location.assign('/hub');
-    }catch(e){
-      $('#err').textContent = e.message || 'Login failed';
-      $('#err').style.display='block';
+  const msg = document.querySelector('#msg');
+  document.querySelector('#go').onclick = async ()=>{
+    msg.textContent='';
+    const username=document.querySelector('#u').value.trim();
+    const password=document.querySelector('#p').value;
+    if(!username||!password){ msg.textContent='Enter username & password'; return; }
+    const res = await fetch('/api/login', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,password})});
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok || !j.ok){
+      msg.textContent = j.error || 'Sign in failed';
+      return;
     }
+    // ensure access cookie is present; if not yet, hit refresh once
+    const ok = await refresh().catch(()=>false);
+    location.assign('/hub');
   };
 })();
 </script>
