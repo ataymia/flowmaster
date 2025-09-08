@@ -1,7 +1,6 @@
 import { json, Env } from './_utils';
 
 function normalizeDbId(id: string) {
-  // accept both hyphenated and 32-char raw
   const raw = id.replace(/-/g, '');
   if (raw.length !== 32) return id;
   return `${raw.slice(0,8)}-${raw.slice(8,12)}-${raw.slice(12,16)}-${raw.slice(16,20)}-${raw.slice(20)}`;
@@ -15,17 +14,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const dbId = normalizeDbId(env.NOTION_DB_BILLBOARD);
   const audQ = (new URL(request.url).searchParams.get('aud') || 'all').toLowerCase();
 
-  // property name candidates – will auto-detect what exists
+  // 🔧 includes "PublishedAt" now
   const props = {
-    title: [env.NOTION_PROP_TITLE, 'Title'].filter(Boolean) as string[],
-    body:  [env.NOTION_PROP_BODY, 'Body', 'Text'].filter(Boolean) as string[],
-    publish: [env.NOTION_PROP_PUBLISH, 'PublishAt', 'Date'].filter(Boolean) as string[],
-    expires: [env.NOTION_PROP_EXPIRES, 'ExpiresAt', 'Date 1'].filter(Boolean) as string[],
-    pinned:  [env.NOTION_PROP_PINNED, 'Pinned', 'Checkbox'].filter(Boolean) as string[],
-    audience:[env.NOTION_PROP_AUDIENCE, 'Audience', 'Select', 'Select 1', 'Select 2'].filter(Boolean) as string[],
+    title:    [env.NOTION_PROP_TITLE,     'Title'     ].filter(Boolean) as string[],
+    body:     [env.NOTION_PROP_BODY,      'Body','Text'].filter(Boolean) as string[],
+    publish:  [env.NOTION_PROP_PUBLISH,   'PublishedAt','PublishAt','Date'].filter(Boolean) as string[],
+    expires:  [env.NOTION_PROP_EXPIRES,   'ExpiresAt','Date 1'].filter(Boolean) as string[],
+    pinned:   [env.NOTION_PROP_PINNED,    'Pinned','Checkbox'].filter(Boolean) as string[],
+    audience: [env.NOTION_PROP_AUDIENCE,  'Audience','Select','Select 1','Select 2'].filter(Boolean) as string[],
   };
 
-  // Fetch DB schema so we can map property names dynamically
   const db = await fetch(`https://api.notion.com/v1/databases/${dbId}`, {
     headers: {
       Authorization: `Bearer ${env.NOTION_SECRET}`,
@@ -40,33 +38,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const schema = await db.json();
   const have = new Set(Object.keys(schema.properties || {}));
-
-  function pick(cands: string[]) {
-    for (const n of cands) if (have.has(n)) return n;
-    return undefined;
-  }
+  const pick = (c: string[]) => c.find(n => have.has(n));
 
   const P = {
-    title: pick(props.title)!,
-    body: pick(props.body),
+    title:   pick(props.title)!,
+    body:    pick(props.body),
     publish: pick(props.publish),
     expires: pick(props.expires),
-    pinned: pick(props.pinned),
-    audience: pick(props.audience),
+    pinned:  pick(props.pinned),
+    audience:pick(props.audience),
   };
 
-  // Build filter: publish <= now (if exists), not expired, and audience matches
   const nowIso = new Date().toISOString();
   const and: any[] = [];
-
-  if (P.publish) {
-    and.push({ property: P.publish, date: { on_or_before: nowIso } });
-  }
-  if (P.expires) {
-    and.push({ property: P.expires, date: { on_or_after: nowIso } });
-  }
+  if (P.publish) and.push({ property: P.publish, date: { on_or_before: nowIso } });
+  if (P.expires) and.push({ property: P.expires, date: { on_or_after: nowIso } });
   if (P.audience) {
-    // show when audience = 'all' or equals requested
     and.push({
       or: [
         { property: P.audience, select: { equals: 'all' } },
@@ -75,12 +62,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     });
   }
 
-  const queryBody: any = {
-    page_size: 20,
-    filter: and.length ? { and } : undefined,
-    sorts: P.publish ? [{ property: P.publish, direction: 'descending' }] : undefined,
-  };
-
   const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
     method: 'POST',
     headers: {
@@ -88,7 +69,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       'Notion-Version': '2022-06-28',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(queryBody),
+    body: JSON.stringify({
+      page_size: 20,
+      filter: and.length ? { and } : undefined,
+      sorts: P.publish ? [{ property: P.publish, direction: 'descending' }] : undefined,
+    }),
   });
 
   if (!res.ok) {
@@ -98,41 +83,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const out = await res.json();
   const items = (out.results || []).map((r: any) => {
-    function getText(prop?: string) {
-      if (!prop) return '';
-      const rt = r.properties?.[prop]?.rich_text || [];
-      return rt.map((x: any) => x.plain_text).join('').trim();
-    }
-    function getTitle(prop?: string) {
-      const tt = r.properties?.[prop || 'Title']?.title || [];
-      return tt.map((x: any) => x.plain_text).join('').trim();
-    }
-    function getDate(prop?: string) {
-      const d = r.properties?.[prop || 'Date']?.date?.start;
-      return d || null;
-    }
-    function getSelect(prop?: string) {
-      const s = r.properties?.[prop || 'Select']?.select?.name;
-      return s || null;
-    }
-    function getCheckbox(prop?: string) {
-      const v = r.properties?.[prop || 'Checkbox']?.checkbox;
-      return !!v;
-    }
+    const titleText = (r.properties?.[P.title]?.title || []).map((x: any) => x.plain_text).join('').trim();
+    const bodyText  = P.body ? (r.properties?.[P.body]?.rich_text || []).map((x: any) => x.plain_text).join('').trim() : '';
+    const publishAt = P.publish ? (r.properties?.[P.publish]?.date?.start || null) : null;
+    const expiresAt = P.expires ? (r.properties?.[P.expires]?.date?.start || null) : null;
+    const pinned    = P.pinned ? !!r.properties?.[P.pinned]?.checkbox : false;
+    const audience  = (P.audience ? r.properties?.[P.audience]?.select?.name : 'all') || 'all';
 
-    return {
-      id: r.id,
-      title: getTitle(P.title),
-      body: getText(P.body),
-      publishAt: getDate(P.publish),
-      expiresAt: getDate(P.expires),
-      pinned: getCheckbox(P.pinned),
-      audience: (getSelect(P.audience) || 'all').toLowerCase(),
-    };
+    return { id: r.id, title: titleText, body: bodyText, publishAt, expiresAt, pinned, audience: audience.toLowerCase() };
   });
 
-  // Bubble pinned first
   items.sort((a: any, b: any) => Number(b.pinned) - Number(a.pinned));
-
   return json({ items });
 };
