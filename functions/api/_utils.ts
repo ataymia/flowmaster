@@ -75,20 +75,36 @@ export function pickCookieFromSetCookie(
  * Read Set-Cookie headers from an upstream Response and re-emit them
  * for the current domain with safe attributes (no Domain), using Lax.
  */
+// in functions/api/_utils.ts
+
 export function forwardSetCookies(
   upstreamResp: Response,
   outHeaders: Headers,
   defaults: { accessMaxAge?: number; refreshMaxAge?: number } = {}
 ) {
-  // Cloudflare runtime may expose getSetCookie()
   let setCookies: string[] = [];
+
+  // 1) CF Workers runtime helper (preferred)
   const anyHeaders = upstreamResp.headers as any;
   if (typeof anyHeaders.getSetCookie === 'function') {
     setCookies = anyHeaders.getSetCookie() || [];
-  } else {
+  }
+
+  // 2) Fallback: iterate all headers and collect each set-cookie line
+  if (!setCookies.length) {
+    try {
+      (upstreamResp.headers as any).forEach?.((value: string, key: string) => {
+        if (key && key.toLowerCase() === 'set-cookie' && value) setCookies.push(value);
+      });
+    } catch {}
+  }
+
+  // 3) Last resort: a single header (often only the first cookie)
+  if (!setCookies.length) {
     const single = upstreamResp.headers.get('set-cookie');
     if (single) setCookies = [single];
   }
+
   if (!setCookies.length) return;
 
   for (const line of setCookies) {
@@ -99,16 +115,30 @@ export function forwardSetCookies(
     const name = (rawName || '').trim();
     const value = vrest.join('=');
 
-    // Parse Max-Age if present
     let maxAge: number | undefined;
     for (const a of attrs) {
       const [ak, av] = a.split('=');
-      if (!ak) continue;
-      if (ak.toLowerCase() === 'max-age') {
+      if (ak && ak.toLowerCase() === 'max-age') {
         const n = Number(av);
         if (!Number.isNaN(n)) maxAge = n;
       }
     }
+    if (maxAge === undefined) {
+      if (name === 'access_token' && defaults.accessMaxAge) maxAge = defaults.accessMaxAge;
+      if (name === 'refresh_token' && defaults.refreshMaxAge) maxAge = defaults.refreshMaxAge;
+    }
+
+    // Re-emit as host-only cookies (no Domain) so they work on pages.dev and your custom domain
+    setCookie(outHeaders, name, value, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge,
+    });
+  }
+}
+
 
     // Optional defaults
     if (maxAge === undefined) {
