@@ -1,34 +1,34 @@
-export async function onRequestGet({ env }: { env: any }) {
-  const out: any = { ok: true };
-  try {
-    const headers = {
-      Authorization: `Bearer ${env.NOTION_SECRET}`,
-      "Notion-Version": "2022-06-28",
-      "Content-Type": "application/json",
-    };
-    // check direct read
-    const r1 = await fetch(
-      `https://api.notion.com/v1/databases/${env.NOTION_DATABASE_ID}`,
-      { headers }
-    );
-    out.db_status = r1.status;
-    out.db_ok = r1.ok;
-    out.db_text = await r1.text();
+import type { Env } from './_utils';
+import { json } from './_utils';
 
-    // quick search to see what the token can see
-    const r2 = await fetch(`https://api.notion.com/v1/search`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ filter: { value: "database", property: "object" }, page_size: 5 }),
-    });
-    out.search_status = r2.status;
-    out.search_ok = r2.ok;
-    out.search_text = await r2.text();
-  } catch (e: any) {
-    out.ok = false;
-    out.error = String(e?.message || e);
+export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+  const ok = !!env.NOTION_SECRET && !!env.NOTION_DATABASE_ID;
+  let db_status = 0, db_ok = false, db_text = '', search_status = 0, search_ok = false, search_text = '';
+
+  if (ok) {
+    try {
+      const r = await fetch(`https://api.notion.com/v1/databases/${env.NOTION_DATABASE_ID}`, {
+        headers: {
+          'Authorization': `Bearer ${env.NOTION_SECRET}`,
+          'Notion-Version': '2022-06-28'
+        }
+      });
+      db_status = r.status; db_ok = r.ok; db_text = await r.text();
+    } catch (e: any) { db_text = String(e); }
+
+    try {
+      const r2 = await fetch('https://api.notion.com/v1/search', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.NOTION_SECRET}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query: 'Team Billboard' })
+      });
+      search_status = r2.status; search_ok = r2.ok; search_text = await r2.text();
+    } catch (e: any) { search_text = String(e); }
   }
-  return new Response(JSON.stringify(out), {
-    headers: { "content-type": "application/json" },
-  });
-}
+
+  return json({ ok, db_status, db_ok, db_text, search_status, search_ok, search_text });
+};
