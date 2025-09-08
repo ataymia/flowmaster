@@ -1,44 +1,48 @@
-// functions/api/login.ts
-import { json, setCookie } from './_utils';
+import { json, setCookie, Env } from './_utils';
 
-export const onRequestPost: PagesFunction = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({} as any));
     const email = (body.email || '').toLowerCase().trim();
     const username = (body.username || '').toLowerCase().trim();
     const password = body.password || '';
 
-    // call Worker upstream (your auth service) as before:
-    const res = await fetch(env.AUTH_BASE + '/auth/login', {
+    const res = await fetch(new URL('/auth/login', env.AUTH_BASE).toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(
-        email ? { email, password } : { username, password }
-      ),
+      body: JSON.stringify(email ? { email, password } : { username, password }),
     });
 
-    // bubble up any error payload, but don't throw opaque 1101
     if (!res.ok) {
       const err = await res.text().catch(() => '');
       return json({ ok: false, error: err || 'LOGIN_FAILED' }, res.status);
     }
 
-    // read tokens from body so we can mirror them as first-party cookies
     const data = await res.json();
-    const access = data.access;
-    const refresh = data.refresh;
-
     const headers = new Headers();
-    if (access) {
+
+    if (data.access) {
       headers.append(
         'Set-Cookie',
-        setCookie('access_token', access, { httpOnly: true, sameSite: 'None', secure: true, path: '/', maxAge: 60 * 15 })
+        setCookie('access_token', data.access, {
+          path: '/',
+          httpOnly: true,
+          secure: true,
+          sameSite: 'None',
+          maxAge: 60 * 15,
+        })
       );
     }
-    if (refresh) {
+    if (data.refresh) {
       headers.append(
         'Set-Cookie',
-        setCookie('refresh_token', refresh, { httpOnly: true, sameSite: 'None', secure: true, path: '/api', maxAge: 60 * 60 * 24 * 7 })
+        setCookie('refresh_token', data.refresh, {
+          path: '/api',
+          httpOnly: true,
+          secure: true,
+          sameSite: 'None',
+          maxAge: 60 * 60 * 24 * 7,
+        })
       );
     }
 
@@ -47,7 +51,7 @@ export const onRequestPost: PagesFunction = async ({ request, env }) => {
         ok: true,
         username: data.username,
         role: data.role,
-        mustChangePassword: !!data.mustChangePassword
+        mustChangePassword: !!data.mustChangePassword,
       },
       200,
       headers
@@ -57,6 +61,5 @@ export const onRequestPost: PagesFunction = async ({ request, env }) => {
   }
 };
 
-// Optional: make GET return a friendly JSON instead of 1101 when visited directly
 export const onRequestGet: PagesFunction = async () =>
   json({ error: 'Method Not Allowed' }, 405);
