@@ -1,56 +1,81 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Allstar Sign In</title>
-<style>
-:root{ --bg:#0f1115; --card:#161b22; --text:#e5e7eb; --muted:#9ca3af;
-       --brand:#c0392b; --brand-700:#a93226; --border:#2b3340; }
-*{box-sizing:border-box} html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;display:grid;place-items:center}
-.card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px}
-h1{margin:0 0 6px;font-size:22px}
-.muted{color:var(--muted);margin-bottom:14px}
-.label{font-size:12px;color:var(--muted);margin:12px 0 6px}
-.field{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0b0f13;color:var(--text)}
-.btn{width:100%;margin-top:14px;padding:10px 12px;border-radius:10px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer;font-weight:600}
-.btn:hover{background:var(--brand-700)}
-.error{display:none;margin-top:10px;color:#ffdada;background:rgba(192,57,43,.12);border:1px solid rgba(192,57,43,.35);padding:8px 10px;border-radius:10px}
-</style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Allstar Agent Hub — Sign in</title>
+  <link rel="stylesheet" href="/theme.css"/>
+  <style>
+    body{margin:0;background:#0b1220;color:#e5efff;font:14px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{min-height:100dvh;display:grid;place-items:center;padding:24px}
+    .card{width:100%;max-width:420px;background:#0f172a;border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,10,30,.35)}
+    .title{font-weight:800;font-size:20px;margin-bottom:14px;color:#f43f5e}
+    .muted{color:#8aa3c2}
+    .field{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b1220;color:#e5efff}
+    .btn{width:100%;padding:10px 12px;border-radius:10px;border:0;background:#2563eb;color:white;cursor:pointer}
+    .btn:hover{filter:brightness(.95)}
+    .err{color:#fecaca}
+    .row{display:flex;gap:10px}
+  </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Allstar <span style="color:var(--brand);font-weight:800">Agent Hub</span></h1>
-    <div class="muted">Sign in with your scheduling credentials.</div>
-    <div class="label">Email</div>
-    <input id="email" class="field" type="email" placeholder="you@company.com" autocomplete="username"/>
-    <div class="label">Password</div>
-    <input id="password" class="field" type="password" placeholder="••••••••" autocomplete="current-password"/>
-    <button id="loginBtn" class="btn">Sign In</button>
-    <div id="err" class="error"></div>
+<div class="wrap">
+  <div class="card" id="panel">
+    <div class="title">Allstar Agent Hub</div>
+    <div class="muted" style="margin-bottom:8px">Sign in with your scheduling credentials.</div>
+    <div id="err" class="err" style="display:none;margin-bottom:8px"></div>
+    <label class="muted">Email or Username</label>
+    <input id="u" class="field" autocomplete="username" placeholder="your.email@company.com"/>
+    <div style="height:8px"></div>
+    <label class="muted">Password</label>
+    <input id="p" class="field" type="password" autocomplete="current-password" placeholder="••••••••"/>
+    <div style="height:12px"></div>
+    <button id="btn" class="btn">Sign in</button>
   </div>
+</div>
 
-<script>
-const API = "/api";
-document.getElementById('loginBtn').addEventListener('click', async ()=>{
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const err = document.getElementById('err'); err.style.display='none';
-  if(!email || !password){ err.textContent="Enter email and password."; err.style.display='block'; return; }
-  try{
-    const r = await fetch(API + "/login", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type":"application/json" },
-      body: JSON.stringify({ email, password })
+<script type="module">
+const E = (id)=>document.getElementById(id);
+const err = (m)=>{ const e=E('err'); e.textContent=m; e.style.display='block'; };
+
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, { credentials:'include', ...opts });
+  const ct = r.headers.get('content-type') || '';
+  const body = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) throw new Error(typeof body==='string'?body:(body.error||('HTTP '+r.status)));
+  return body;
+}
+
+async function check() {
+  try {
+    const me = await fetchJSON('/api/whoami');
+    if (me && me.username) {
+      location.href = '/hub';
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+// If already authed, bounce straight to hub
+await check();
+
+E('btn').addEventListener('click', async () => {
+  E('err').style.display='none';
+  const u = E('u').value.trim();
+  const p = E('p').value;
+  if (!u || !p) return err('Enter your email/username and password.');
+
+  try {
+    await fetchJSON('/api/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ email:u.includes('@')?u:'', username: u.includes('@')?'':u, password:p })
     });
-    if(!r.ok) throw new Error("Invalid email or password");
-    // after login, go to hub
-    location.href = "/hub";
-  }catch(e){
-    err.textContent = e.message || "Login failed";
-    err.style.display = 'block';
+    // login succeeded; whoami should now be good (access set or refreshed)
+    await check() || err('Login ok but session not established. Please refresh.');
+  } catch (e) {
+    err(e.message || 'Sign in failed.');
   }
 });
 </script>
