@@ -4,80 +4,104 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Allstar Agent Hub — Sign in</title>
-  <link rel="stylesheet" href="/theme.css"/>
   <style>
-    body{margin:0;background:#0b1220;color:#e5efff;font:14px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    :root{--brand:#e11d48;--ink:#0b1220;--panel:#0f172a;--muted:#8aa3c2;--ok:#16a34a;--btn:#2563eb}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--ink);color:#e5efff;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     .wrap{min-height:100dvh;display:grid;place-items:center;padding:24px}
-    .card{width:100%;max-width:420px;background:#0f172a;border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,10,30,.35)}
-    .title{font-weight:800;font-size:20px;margin-bottom:14px;color:#f43f5e}
-    .muted{color:#8aa3c2}
+    .card{width:100%;max-width:420px;background:var(--panel);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,10,30,.35)}
+    .title{font-weight:800;font-size:20px;margin-bottom:14px;color:var(--brand)}
+    .muted{color:var(--muted)}
     .field{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b1220;color:#e5efff}
-    .btn{width:100%;padding:10px 12px;border-radius:10px;border:0;background:#2563eb;color:white;cursor:pointer}
+    .btn{width:100%;padding:10px 12px;border-radius:10px;border:0;background:var(--btn);color:#fff;cursor:pointer}
     .btn:hover{filter:brightness(.95)}
+    .row{display:flex;gap:10px;align-items:center}
+    .note{margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.06)}
+    .ok{color:#bbf7d0}
     .err{color:#fecaca}
-    .row{display:flex;gap:10px}
+    .links{display:flex;gap:8px;margin-top:10px}
+    .ghost{background:transparent;border:1px solid rgba(255,255,255,.15)}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="card" id="panel">
+  <div class="card">
     <div class="title">Allstar Agent Hub</div>
     <div class="muted" style="margin-bottom:8px">Sign in with your scheduling credentials.</div>
-    <div id="err" class="err" style="display:none;margin-bottom:8px"></div>
+
+    <div id="authed-note" class="note" style="display:none">
+      <span class="ok">You’re already signed in.</span>
+      <div class="links">
+        <button id="go-hub" class="btn">Enter Hub</button>
+        <button id="btn-logout" class="btn ghost">Sign out</button>
+      </div>
+    </div>
+
+    <div id="err" class="note err" style="display:none"></div>
+
     <label class="muted">Email or Username</label>
     <input id="u" class="field" autocomplete="username" placeholder="your.email@company.com"/>
+
     <div style="height:8px"></div>
     <label class="muted">Password</label>
     <input id="p" class="field" type="password" autocomplete="current-password" placeholder="••••••••"/>
+
     <div style="height:12px"></div>
     <button id="btn" class="btn">Sign in</button>
   </div>
 </div>
 
 <script type="module">
-const E = (id)=>document.getElementById(id);
-const err = (m)=>{ const e=E('err'); e.textContent=m; e.style.display='block'; };
+const E = id => document.getElementById(id);
+const show = (el, on=true)=>{ el.style.display = on?'block':'none'; };
+const err = (msg)=>{ E('err').textContent = msg; show(E('err'), true); };
 
-async function fetchJSON(url, opts) {
+async function j(url, opts={}) {
   const r = await fetch(url, { credentials:'include', ...opts });
-  const ct = r.headers.get('content-type') || '';
-  const body = ct.includes('json') ? await r.json() : await r.text();
-  if (!r.ok) throw new Error(typeof body==='string'?body:(body.error||('HTTP '+r.status)));
-  return body;
+  const ct = r.headers.get('content-type')||'';
+  const b = ct.includes('json') ? await r.json() : await r.text();
+  if(!r.ok) throw new Error(typeof b==='string'?b:(b.error||('HTTP '+r.status)));
+  return b;
 }
 
-async function check() {
+async function checkAuthed() {
   try {
-    const me = await fetchJSON('/api/whoami');
+    const me = await j('/api/whoami');
     if (me && me.username) {
-      location.href = '/hub';
+      show(E('authed-note'), true);
       return true;
     }
   } catch {}
   return false;
 }
 
-// If already authed, bounce straight to hub
-await check();
+// NOTE: we DO NOT auto-redirect. We just reveal the "Enter Hub" button.
+checkAuthed();
 
-E('btn').addEventListener('click', async () => {
-  E('err').style.display='none';
+E('go-hub').onclick = ()=> location.href = '/hub';
+E('btn-logout').onclick = async ()=> {
+  try { await j('/api/logout', {method:'POST'}); } catch {}
+  location.reload();
+};
+
+E('btn').onclick = async () => {
+  show(E('err'), false);
   const u = E('u').value.trim();
   const p = E('p').value;
   if (!u || !p) return err('Enter your email/username and password.');
 
   try {
-    await fetchJSON('/api/login',{
+    await j('/api/login', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ email:u.includes('@')?u:'', username: u.includes('@')?'':u, password:p })
+      body: JSON.stringify({ email: u.includes('@')?u:'', username: u.includes('@')?'':u, password: p })
     });
-    // login succeeded; whoami should now be good (access set or refreshed)
-    await check() || err('Login ok but session not established. Please refresh.');
+    // login succeeded; send to hub (no looping here)
+    location.href = '/hub';
   } catch (e) {
     err(e.message || 'Sign in failed.');
   }
-});
+};
 </script>
 </body>
 </html>
