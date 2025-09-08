@@ -2,7 +2,7 @@
 export type Env = {
   AUTH_BASE: string; // e.g. https://allstar-auth.ataymia.workers.dev
   NOTION_SECRET?: string;
-  NOTION_DB_ID?: string;
+  NOTION_DATABASE_ID?: string;
 };
 
 export function json(data: any, status = 200, headers?: HeadersInit) {
