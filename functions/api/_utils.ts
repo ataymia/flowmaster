@@ -1,11 +1,12 @@
-// Shared helpers for Pages Functions (Cloudflare Workers runtime)
+// functions/api/_utils.ts
+
 export interface Env {
-  AUTH_BASE: string;              // e.g. https://allstar-auth.ataymia.workers.dev
-  NOTION_SECRET?: string;         // Notion internal integration token
-  NOTION_DATABASE_ID?: string;    // Team Billboard database id
+  AUTH_BASE: string;            // e.g. https://allstar-auth.ataymia.workers.dev
+  NOTION_TOKEN?: string;        // "secret_..."
+  NOTION_DATABASE_ID?: string;  // Notion DB id
 }
 
-/* ---------- Basic JSON helper ---------- */
+/* ------------ JSON helper ------------ */
 export function json(data: any, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(data), {
     status,
@@ -13,7 +14,7 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
   });
 }
 
-/* ---------- Cookie helpers ---------- */
+/* ------------ Cookie helpers ------------ */
 type SameSite = 'Lax' | 'Strict' | 'None';
 
 export function setCookie(
@@ -33,7 +34,7 @@ export function setCookie(
   if (opts.httpOnly ?? true) parts.push('HttpOnly');
   if (opts.secure ?? true) parts.push('Secure');
   parts.push(`SameSite=${opts.sameSite ?? 'Lax'}`);
-  if (opts.maxAge) parts.push(`Max-Age=${opts.maxAge}`);
+  if (typeof opts.maxAge === 'number') parts.push(`Max-Age=${opts.maxAge}`);
   headers.append('Set-Cookie', parts.join('; '));
 }
 
@@ -70,95 +71,90 @@ export function pickCookieFromSetCookie(
   return null;
 }
 
-/* ---------- Token helpers ---------- */
-export function getAccessFromRequest(req: Request): string | null {
-  const cookies = parseCookies(req);
-  return cookies.get('access_token') ?? null;
-}
-export function getRefreshFromRequest(req: Request): string | null {
-  const cookies = parseCookies(req);
-  return cookies.get('refresh_token') ?? null;
-}
-
 /**
- * ensureAccess:
- * - Returns {ok:true, token} if access token exists.
- * - Otherwise returns a 401 JSON Response you can return from handlers.
+ * Read Set-Cookie headers from an upstream Response and re-emit them
+ * for the current domain with safe attributes (no Domain), using Lax.
  */
-export function ensureAccess(req: Request) {
-  const token = getAccessFromRequest(req);
-  if (!token) return { ok: false as const, response: json({ error: 'unauthorized' }, 401) };
-  return { ok: true as const, token };
+export function forwardSetCookies(
+  upstreamResp: Response,
+  outHeaders: Headers,
+  defaults: { accessMaxAge?: number; refreshMaxAge?: number } = {}
+) {
+  // Cloudflare’s runtime supports headers.getSetCookie()
+  let setCookies: string[] = [];
+  const anyHeaders = upstreamResp.headers as any;
+  if (typeof anyHeaders.getSetCookie === 'function') {
+    setCookies = anyHeaders.getSetCookie() || [];
+  } else {
+    const single = upstreamResp.headers.get('set-cookie');
+    if (single) setCookies = [single];
+  }
+  if (!setCookies.length) return;
+
+  for (const line of setCookies) {
+    const parts = line.split(';').map(s => s.trim());
+    const [pair, ...attrs] = parts;
+    if (!pair) continue;
+    const [rawName, ...vrest] = pair.split('=');
+    const name = (rawName || '').trim();
+    const value = vrest.join('=');
+
+    // Parse Max-Age if present
+    let maxAge: number | undefined;
+    for (const a of attrs) {
+      const [ak, av] = a.split('=');
+      if (!ak) continue;
+      if (ak.toLowerCase() === 'max-age') {
+        const n = Number(av);
+        if (!Number.isNaN(n)) maxAge = n;
+      }
+    }
+
+    // Apply sensible defaults if upstream omitted Max-Age (optional)
+    if (maxAge === undefined) {
+      if (name === 'access_token' && defaults.accessMaxAge) maxAge = defaults.accessMaxAge;
+      if (name === 'refresh_token' && defaults.refreshMaxAge) maxAge = defaults.refreshMaxAge;
+    }
+
+    // Re-set cookie for our domain (no Domain attribute)
+    setCookie(outHeaders, name, value, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge,
+    });
+  }
 }
 
-/* ---------- Upstream helpers ---------- */
+/* ------------ Token accessors ------------ */
+export function getAccessFromRequest(req: Request) {
+  return parseCookies(req).get('access_token') ?? null;
+}
+export function getRefreshFromRequest(req: Request) {
+  return parseCookies(req).get('refresh_token') ?? null;
+}
 
-/**
- * upstream: simple fetch to AUTH_BASE + path
- */
-export function upstream(
-  env: Env,
-  path: string,
-  init?: RequestInit
-): Promise<Response> {
-  // Allow callers to pass absolute URLs too
+/* ------------ Upstream convenience ------------ */
+export function upstream(env: Env, path: string, init?: RequestInit) {
   const url = path.startsWith('http') ? path : `${env.AUTH_BASE}${path}`;
   return fetch(url, init);
 }
 
 /**
- * proxyWithAuth:
- * - Grabs access_token from cookies
- * - Adds Authorization: Bearer <token>
- * - Proxies to env.AUTH_BASE + path (or absolute path passed in)
- * - You can pass method/body/headers in init; we merge headers
+ * Proxy with Authorization: Bearer <access_token> from cookies
  */
 export async function proxyWithAuth(
   req: Request,
   env: Env,
   path: string,
-  init: RequestInit & { headers?: HeadersInit } = {}
-): Promise<Response> {
-  const cookies = parseCookies(req);
-  const access = cookies.get('access_token');
+  init: RequestInit = {}
+) {
+  const access = getAccessFromRequest(req);
   if (!access) return json({ error: 'unauthorized' }, 401);
-
   const headers = new Headers(init.headers || {});
-  if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${access}`);
-
-  // If original request had JSON body and no explicit content-type, add it
-  if (init.body && !headers.has('content-type')) {
-    // best-effort; callers may set it themselves
-    headers.set('content-type', 'application/json');
-  }
-
+  if (!headers.has('authorization')) headers.set('authorization', `Bearer ${access}`);
   const url = path.startsWith('http') ? path : `${env.AUTH_BASE}${path}`;
   const res = await fetch(url, { ...init, headers });
-
-  // Pass-through response (body, status, headers)
-  const outHeaders = new Headers(res.headers);
-  return new Response(res.body, { status: res.status, headers: outHeaders });
-}
-
-/* ---------- Small CORS helper (optional) ---------- */
-export function withCors(resp: Response, origin?: string) {
-  const h = new Headers(resp.headers);
-  if (origin) {
-    h.set('access-control-allow-origin', origin);
-    h.set('access-control-allow-credentials', 'true');
-  }
-  return new Response(resp.body, { status: resp.status, headers: h });
-}
-
-export function preflight(origin?: string) {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      'access-control-allow-origin': origin || '*',
-      'access-control-allow-credentials': 'true',
-      'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-      'access-control-allow-headers': 'content-type, authorization',
-      'access-control-max-age': '86400',
-    },
-  });
+  return new Response(res.body, { status: res.status, headers: new Headers(res.headers) });
 }
