@@ -1,48 +1,51 @@
 // functions/_middleware.ts
-/**
- * Gatekeep only the protected routes and never auto-redirect "/" anywhere.
- * This removes the / ↔ /hub ping-pong loop while keeping /hub, /adherence,
- * and /flowmaster protected.
- */
+// Gate app routes by presence of the access/refresh cookie.
+// Never auto-redirect / (login). Only protect the app pages.
 
-type PagesCtx = {
-  request: Request;
-  next: () => Promise<Response>;
-};
+const GATED_PREFIXES = ['/hub', '/adherence', '/flowmaster'];
 
-function readCookie(req: Request, name: string): string | null {
-  const raw = req.headers.get("cookie") || "";
-  const m = raw.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
-  return m ? decodeURIComponent(m[1]) : null;
+function hasTokenCookie(req: Request) {
+  const c = req.headers.get('cookie') || '';
+  // accept either cookie; access_token is the normal case,
+  // but allow refresh_token so the page JS can refresh on load.
+  return /(?:^|;\s*)(access_token|refresh_token)=/.test(c);
 }
 
-export const onRequest = async ({ request, next }: PagesCtx) => {
-  const url = new URL(request.url);
-  const path = url.pathname;
+function isGatedPath(pathname: string) {
+  return GATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
 
-  // Never intercept your server functions.
-  if (path.startsWith("/api/")) return next();
+export const onRequest = [
+  async (ctx: any) => {
+    const url = new URL(ctx.request.url);
+    const { pathname } = url;
 
-  // Only these paths require auth.
-  const needsAuth =
-    path.startsWith("/hub") ||
-    path.startsWith("/adherence") ||
-    path.startsWith("/flowmaster");
+    // 1) Don’t touch API routes.
+    if (pathname.startsWith('/api/')) {
+      // Add minimal CORS for your own origin + worker preview
+      const res = await ctx.next();
+      const h = new Headers(res.headers);
+      // same-origin requests don’t need CORS, but this is harmless
+      h.set('Vary', 'Origin');
+      return new Response(res.body, { status: res.status, headers: h });
+    }
 
-  if (!needsAuth) {
-    // "/" and public pages just render. No auto-redirects.
-    return next();
-  }
+    // 2) LOGIN page must NEVER redirect anywhere (prevents loops)
+    if (pathname === '/' || pathname === '/index.html') {
+      return ctx.next();
+    }
 
-  // A valid session exists if either token is present.
-  const hasAccess = !!readCookie(request, "access_token");
-  const hasRefresh = !!readCookie(request, "refresh_token");
+    // 3) Protect app surfaces
+    if (isGatedPath(pathname)) {
+      if (!hasTokenCookie(ctx.request)) {
+        // not signed in → go to login
+        return Response.redirect(new URL('/', url), 302);
+      }
+      // signed in → allow through
+      return ctx.next();
+    }
 
-  if (hasAccess || hasRefresh) {
-    return next();
-  }
-
-  // Not authenticated → send to login (root). No infinite loops.
-  const to = new URL("/", url);
-  return Response.redirect(to, 302);
-};
+    // 4) Everything else just passes through
+    return ctx.next();
+  },
+];
