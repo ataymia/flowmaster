@@ -1,62 +1,48 @@
-export const config = {
-  matcher: ['/*']
+// functions/_middleware.ts
+/**
+ * Gatekeep only the protected routes and never auto-redirect "/" anywhere.
+ * This removes the / ↔ /hub ping-pong loop while keeping /hub, /adherence,
+ * and /flowmaster protected.
+ */
+
+type PagesCtx = {
+  request: Request;
+  next: () => Promise<Response>;
 };
 
-import type { Env } from './api/_utils';
-import { parseCookies } from './api/_utils';
-
-function redirect(url: string, setCookies?: string[]) {
-  const h = new Headers({ Location: url });
-  (setCookies || []).forEach(v => h.append('Set-Cookie', v));
-  return new Response(null, { status: 302, headers: h });
+function readCookie(req: Request, name: string): string | null {
+  const raw = req.headers.get("cookie") || "";
+  const m = raw.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
-export default async function Middleware(req: Request, env: Env, ctx: ExecutionContext) {
-  const u = new URL(req.url);
-  const p = u.pathname;
+export const onRequest = async ({ request, next }: PagesCtx) => {
+  const url = new URL(request.url);
+  const path = url.pathname;
 
-  // never touch API or static assets
-  if (p.startsWith('/api/')) return;
-  if (/\.[a-z0-9]+$/i.test(p)) return;
+  // Never intercept your server functions.
+  if (path.startsWith("/api/")) return next();
 
-  // cookies
-  const ck = req.headers.get('cookie') || '';
-  const hasAccess  = ck.includes('access_token=') || ck.includes('allstar_at=');
-  const hasRefresh = ck.includes('refresh_token=');
+  // Only these paths require auth.
+  const needsAuth =
+    path.startsWith("/hub") ||
+    path.startsWith("/adherence") ||
+    path.startsWith("/flowmaster");
 
-  // one-time marker cookie so UI can tell we’re “signed in”
-  const set: string[] = [];
-  if (hasRefresh && !ck.includes('allstar_at=')) {
-    try {
-      const r = await fetch(new URL('/api/refresh', u).toString(), {
-        method: 'POST', headers: { cookie: ck },
-      });
-      const sc = (r as any).headers.getSetCookie?.()
-        || r.headers.get('set-cookie')?.split(/\s*,\s*(?=access_token|refresh_token)/)
-        || [];
-      sc.forEach(v => set.push(v));
-      set.push(`allstar_at=1; Max-Age=${60*60*24*7}; Path=/; SameSite=Lax; Secure`);
-    } catch {}
+  if (!needsAuth) {
+    // "/" and public pages just render. No auto-redirects.
+    return next();
   }
 
-  // login
-  if (p === '/' || p === '/index' || p === '/index/' || p === '/index.html') {
-    if (hasAccess) return redirect('/hub', set);
-    return set.length ? new Response(null, { status: 200, headers: new Headers({ 'Set-Cookie': set.join('\n') }) }) : undefined;
+  // A valid session exists if either token is present.
+  const hasAccess = !!readCookie(request, "access_token");
+  const hasRefresh = !!readCookie(request, "refresh_token");
+
+  if (hasAccess || hasRefresh) {
+    return next();
   }
 
-  // hub
-  if (p === '/hub' || p === '/hub/' || p === '/hub.html') {
-    if (!hasAccess && !hasRefresh) return redirect('/');
-    return set.length ? new Response(null, { status: 200, headers: new Headers({ 'Set-Cookie': set.join('\n') }) }) : undefined;
-  }
-
-  // protected areas
-  if (p.startsWith('/adherence') || p.startsWith('/flowmaster')) {
-    if (!hasAccess && !hasRefresh) return redirect('/');
-    return set.length ? new Response(null, { status: 200, headers: new Headers({ 'Set-Cookie': set.join('\n') }) }) : undefined;
-  }
-
-  // everything else: pass through (maybe with the marker cookie)
-  return set.length ? new Response(null, { status: 200, headers: new Headers({ 'Set-Cookie': set.join('\n') }) }) : undefined;
-}
+  // Not authenticated → send to login (root). No infinite loops.
+  const to = new URL("/", url);
+  return Response.redirect(to, 302);
+};
