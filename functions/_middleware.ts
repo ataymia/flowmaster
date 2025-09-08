@@ -1,5 +1,5 @@
 // Light gate: protect app pages from anonymous access
-import { parseCookies } from './_utils';
+import { parseCookies } from './api/_utils';
 
 const PUBLIC_PATHS = new Set([
   '/',                 // login
