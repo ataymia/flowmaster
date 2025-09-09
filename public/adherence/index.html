@@ -250,6 +250,16 @@ function setError(s){ const e=document.getElementById('error'); if(!s){ e.style.
     ME = { username, role };
     document.getElementById('hdr-meta').textContent = `${ME.username} · ${ME.role}`;
   }catch(e){ return location.replace('/'); }
+// Restore last known status to seed the UI timer, then start heartbeat
+(async()=>{
+  const pres = await getMyPresence();
+  if (pres && pres.status) {
+    // seed the local "current status" display/timer from presence (ts = when it started)
+    AGENT.currentStatus = { key: pres.status, since: pres.ts || Date.now() };
+  }
+  // heartbeat: keep last_seen fresh so admin sees them "online"
+  setInterval(()=> presencePing(null), 30000);
+})();
 
   const isAdmin = /^(ADMIN|SUPERADMIN)$/.test(ME.role);
   document.getElementById('tab-admin').style.display = isAdmin ? 'block' : 'none';
@@ -279,6 +289,16 @@ function showPane(which){
   if(which==='admin') startAdminLoops();
 }
 function clearTickers(){ TICKERS.forEach(clearInterval); TICKERS=[]; }
+  
+function setStatus(status){
+  const ev = { status, ts: Date.now() };
+  EVENTS.list.push(ev);
+  updateAgentUI();
+  // Persist both: event log + presence
+  postEvent(status).catch(()=>{});
+  presencePing({ status, ts: ev.ts }).catch(()=>{});
+}
+
 
 /* ===== AGENT VIEW ===== */
 function buildAgent(){
@@ -299,6 +319,22 @@ async function setAgentStatus(status){
     renderAgent();
   }catch(e){ setError('Failed to post status'); }
 }
+async function fetchTeamPresence(){
+  const r = await fetch('/api/presence', { credentials:'include', cache:'no-store' });
+  if (!r.ok) return [];
+  const data = await r.json().catch(()=>[]);
+  return Array.isArray(data) ? data : [data];
+}
+
+// on admin dashboard mount:
+(async function startPresencePoll(){
+  async function refresh(){
+    const list = await fetchTeamPresence();
+    renderLiveTeam(list); // your UI
+  }
+  await refresh();
+  setInterval(refresh, 5000);
+})();
 async function refreshAgentData(){
   try{
     const [sched, ev] = await Promise.all([
@@ -316,6 +352,16 @@ function startAgentLoops(){
   TICKERS.push(setInterval(renderAgent, 1000));               // redraw every second
   TICKERS.push(setInterval(async ()=>{ await refreshAgentData(); renderAgent(); }, 15000)); // refresh data
 }
+function fmtAgo(ms){
+  const m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000);
+  if (m >= 60) { const h=Math.floor(m/60), mm=m%60; return `${h}h ${mm}m`; }
+  if (m) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+// example in a row renderer
+const since = item.ts ? Date.now() - item.ts : 0;
+row.querySelector('.since').textContent = item.status ? fmtAgo(since) : '—';
 function renderAgent(){
   const cur = AGENT.events.length ? AGENT.events[AGENT.events.length-1] : null;
   const curLabel = cur ? `${label(cur.status)} • ${hms(Date.now()-Number(cur.ts||Date.now()))}` : '—';
@@ -385,6 +431,22 @@ function startAdminLoops(){
   TICKERS.push(setInterval(loadAdminDay,5000));
 }
 
+async function presencePing(payload) {
+  try {
+    await fetch('/api/presence', {
+      method:'POST',
+      credentials:'include',
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify(payload||{})
+    });
+  } catch {}
+}
+
+async function getMyPresence(){
+  const r = await fetch('/api/presence', { credentials:'include', cache:'no-store' });
+  if (!r.ok) return null;
+  return await r.json().catch(()=>null); // returns {username,status,ts,last_seen,online} for agent
+}
 async function reloadUsers(){
   try{
     ADMIN.users = await API.listUsers() || [];
