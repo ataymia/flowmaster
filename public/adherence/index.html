@@ -7,17 +7,18 @@
   <style>
     :root{
       --brand:#e11d48; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb; --bg:#fff;
-      --card: #ffffff; --shadow:0 10px 25px rgba(17,24,39,.08); --radius:16px;
+      --card:#fff; --shadow:0 10px 25px rgba(17,24,39,.08); --radius:16px;
 
-      /* Status colors — spaced apart to avoid confusion */
+      /* Clear, distinct status colors */
       --st-available:#10b981;
-      --st-bathroom:#d97706;   /* darker amber */
-      --st-break:#f59e0b;      /* amber */
-      --st-lunch:#ea580c;      /* vivid orange */
-      --st-training:#8b5cf6;   /* violet */
-      --st-meeting:#3b82f6;    /* blue */
-      --st-offline:#9ca3af;    /* gray */
-      --diff:#ef4444;          /* red overlay for mismatches */
+      --st-bathroom:#d97706;
+      --st-break:#f59e0b;
+      --st-lunch:#ea580c;
+      --st-training:#8b5cf6;
+      --st-meeting:#3b82f6;
+      --st-offline:#9ca3af;
+
+      --diff:#ef4444;   /* mismatch overlay */
       --grid:#f3f4f6;
     }
     *{box-sizing:border-box}
@@ -84,6 +85,7 @@
       <div id="tab-admin"  class="tab">Admin Tools</div>
     </div>
 
+    <!-- ===== Agent Pane ===== -->
     <div id="pane-agent">
       <div class="card">
         <div class="row-between">
@@ -112,6 +114,7 @@
       </div>
     </div>
 
+    <!-- ===== Admin Pane ===== -->
     <div id="pane-admin" style="display:none">
       <div class="card">
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -128,18 +131,29 @@
             <button id="saveSched" class="btn" disabled>Save to Server</button>
           </div>
         </div>
+
         <div class="grid grid-2" style="margin-top:12px">
+          <!-- Schedule editor -->
           <div>
             <h3 style="margin:6px 0">Schedule Blocks</h3>
             <div id="blocks"></div>
           </div>
+
+          <!-- Daily overview -->
           <div>
-            <h3 style="margin:6px 0">Daily Overview</h3>
+            <div class="row-between">
+              <h3 style="margin:6px 0">Daily Overview</h3>
+              <div class="pill" id="admin-current">—</div>
+            </div>
             <div id="admin-bars" class="timeline-wrap"></div>
             <div class="muted" id="admin-pct" style="margin-top:8px">Adherence: —</div>
             <div style="margin-top:10px">
               <h4 style="margin:0 0 6px 0">AUX breakdown</h4>
               <ul id="byStatus" style="margin:0;padding-left:18px"></ul>
+            </div>
+            <div style="margin-top:10px">
+              <h4 style="margin:0 0 6px 0">Timeline (IMED-style)</h4>
+              <div id="imed" class="scroll"></div>
             </div>
           </div>
         </div>
@@ -214,7 +228,6 @@ const STATUS_LIST = [
 
 const API = {
   whoami:   ()=>fetch('/api/whoami',{credentials:'include',cache:'no-store'}).then(r=>r.json()),
-  me:       ()=>fetch('/api/me',{credentials:'include',cache:'no-store'}).then(r=>r.json()).catch(()=>null), // fallback if you kept /api/me
   listUsers:()=>fetch('/api/users',{credentials:'include'}).then(r=>r.ok?r.json():[]),
   createUser:(username,password,role)=>fetch('/api/users',{method:'POST',headers:{'content-type':'application/json'},credentials:'include',body:JSON.stringify({username,password,role})}).then(r=>r.json()),
   patchUser:(id,patch)=>fetch('/api/users/'+id,{method:'PATCH',headers:{'content-type':'application/json'},credentials:'include',body:JSON.stringify(patch)}).then(r=>r.json()),
@@ -250,27 +263,18 @@ function setError(s){ const e=document.getElementById('error'); if(!s){ e.style.
     document.getElementById('hdr-meta').textContent = `${ME.username} · ${ME.role}`;
   }catch(e){ return location.replace('/'); }
 
-  // Tabs
   const isAdmin = /^(ADMIN|SUPERADMIN)$/i.test(ME.role||'');
   document.getElementById('tab-admin').style.display = isAdmin ? 'block' : 'none';
 
-  // Bind tab clicks
   document.getElementById('tab-agent').onclick = ()=>showPane('agent');
   document.getElementById('tab-admin').onclick = ()=>showPane('admin');
 
-  // Change password dialog
   wirePasswordDialog();
-
-  // Logout button
   document.getElementById('btn-logout').onclick = ()=>{ document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax'; document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax'; location.assign('/'); };
 
-  // Build agent pane
   buildAgent();
-
-  // Build admin if allowed
   if(isAdmin) buildAdmin();
 
-  // Default to Agent pane
   showPane('agent');
 })();
 
@@ -283,13 +287,11 @@ function showPane(which){
   if(which==='agent') startAgentLoops();
   if(which==='admin') startAdminLoops();
 }
-
 function clearTickers(){ TICKERS.forEach(clearInterval); TICKERS=[]; }
 
 /* ======= AGENT VIEW ======= */
 function buildAgent(){
   document.getElementById('agent-date').textContent = AGENT.date;
-  // Buttons
   const host=document.getElementById('agent-status-buttons'); host.innerHTML='';
   STATUS_LIST.forEach(s=>{
     const b=document.createElement('button');
@@ -302,8 +304,7 @@ function buildAgent(){
 async function setAgentStatus(status){
   try{
     await API.postEvent(status);
-    // optimistic append
-    AGENT.events.push({ status, ts: Date.now() });
+    AGENT.events.push({ status, ts: Date.now() });  // optimistic
     renderAgent();
   }catch(e){ setError('Failed to post status'); }
 }
@@ -318,12 +319,9 @@ async function refreshAgentData(){
   }catch{}
 }
 function startAgentLoops(){
-  // initial load
   refreshAgentData().then(renderAgent);
-  // redraw every second
-  TICKERS.push(setInterval(renderAgent, 1000));
-  // refresh data periodically
-  TICKERS.push(setInterval(async ()=>{ await refreshAgentData(); renderAgent(); }, 15000));
+  TICKERS.push(setInterval(renderAgent, 1000));               // every second redraw
+  TICKERS.push(setInterval(async ()=>{ await refreshAgentData(); renderAgent(); }, 15000)); // refresh data
 }
 function renderAgent(){
   // live timer
@@ -331,7 +329,7 @@ function renderAgent(){
   const curLabel = cur ? `${label(cur.status)} • ${hms(Date.now()-Number(cur.ts||Date.now()))}` : '—';
   document.getElementById('agent-current').textContent = 'Current: '+curLabel;
 
-  // dual bars
+  // bars
   const barsHost = document.getElementById('agent-bars');
   barsHost.innerHTML='';
   barsHost.appendChild(buildDualBars(AGENT.date, AGENT.schedule, AGENT.events));
@@ -356,7 +354,6 @@ function renderAgent(){
 
 /* ======= ADMIN VIEW ======= */
 function buildAdmin(){
-  // date init
   document.getElementById('day').value = ADMIN.date;
 
   // quick ranges
@@ -386,10 +383,8 @@ function buildAdmin(){
   document.getElementById('dls').onclick=()=>API.download('schedules', getFrom(), getTo());
   document.getElementById('dla').onclick=()=>API.download('adherence', getFrom(), getTo());
 
-  // users
   reloadUsers();
 
-  // handlers
   document.getElementById('selUser').onchange = loadAdminDay;
   document.getElementById('day').onchange     = ()=>{ ADMIN.date=document.getElementById('day').value; loadAdminDay(); };
   document.getElementById('addBlock').onclick = ()=>{ ADMIN.schedule.push({status:'available',start:480,end:540}); renderBlocks(); renderAdminDay(); };
@@ -399,7 +394,6 @@ function getFrom(){ return document.getElementById('from').value || ''; }
 function getTo(){   return document.getElementById('to').value || ''; }
 
 function startAdminLoops(){
-  // only redraw when we have a user selected
   if(!ADMIN.user) return;
   renderAdminDay();
   TICKERS.push(setInterval(renderAdminDay,1000));
@@ -445,14 +439,30 @@ function renderBlocks(){
   });
 }
 function renderAdminDay(){
+  // live "current" status + timer for selected user
+  const evs = sortEvents(ADMIN.events);
+  const cur = evs.length ? evs[evs.length-1] : null;
+  const pill = document.getElementById('admin-current');
+  pill.textContent = cur ? `Current: ${label(cur.status)} • ${hms(Date.now()-Number(cur.ts||Date.now()))}` : 'Current: —';
+
+  // bars
   const wrap=document.getElementById('admin-bars'); wrap.innerHTML='';
   wrap.appendChild(buildDualBars(ADMIN.date, ADMIN.schedule, ADMIN.events));
+
+  // KPIs
   const d=calcAdherence(ADMIN.date, ADMIN.schedule, ADMIN.events);
   document.getElementById('admin-pct').textContent = `Adherence: ${Math.round(d.pct)}% · in ${minutesAs(d.inMin)} / out ${minutesAs(d.outMin)}`;
+
+  // AUX breakdown
   const by=document.getElementById('byStatus'); by.innerHTML='';
   Object.entries(d.byStatus).forEach(([k,v])=>{
     const li=document.createElement('li'); li.textContent=`${label(k)}: ${minutesAs(v)}`; by.appendChild(li);
   });
+
+  // IMED timeline
+  const im=document.getElementById('imed'); im.innerHTML='';
+  if(d.lines.length){ d.lines.forEach(t=>{ const div=document.createElement('div'); div.textContent=t; im.appendChild(div); }); }
+  else im.textContent='No events for this day';
 }
 async function saveAdminSchedule(){
   try{
@@ -466,16 +476,18 @@ function minutesAs(m){ if(m<60) return `${m}m`; const h=Math.floor(m/60), mm=m%6
 function hm2mm(hm){ const [h,m]=hm.split(':').map(Number); return h*60+m; }
 function mm2hm(mm){ const h=Math.floor(mm/60), m=mm%60; return `${pad(h)}:${pad(m)}`; }
 
+function sortEvents(events){
+  return [...(events||[])].map(e=>({status:e.status, ts:Number(e.ts)})).sort((a,b)=>a.ts-b.ts);
+}
+
 function buildDualBars(date, scheduleBlocks, events){
-  // full-day timeline for visuals; adherence only counts where scheduled
   const dayStart = Date.parse(date+'T00:00:00Z');
   const startMin = 0, endMin = 1440; const total = endMin - startMin;
 
-  // PROJECTED segs: paint schedule, rest 'offline'
+  // PROJECTED: schedule painted; rest offline
   const proj = [];
-  let cur = startMin;
-  // sort blocks
   const blocks = [...(scheduleBlocks||[])].sort((a,b)=>a.start-b.start);
+  let cur = startMin;
   for(const b of blocks){
     if(b.start>cur) proj.push({status:'offline', start:cur, width:b.start-cur});
     proj.push({status:b.status, start:b.start, width:Math.max(0,b.end-b.start)});
@@ -483,22 +495,20 @@ function buildDualBars(date, scheduleBlocks, events){
   }
   if(cur<endMin) proj.push({status:'offline', start:cur, width:endMin-cur});
 
-  // ACTUAL segs: only up to "now"
+  // ACTUAL: up to "now"
   const nowMin = Math.max(startMin, Math.min(endMin, Math.floor((Date.now()-dayStart)/60000)));
+  const evs = sortEvents(events);
   const act=[];
   let cursor=startMin;
   let curStat=null;
-  const pts = (events||[]).map(ev=>Math.max(startMin,Math.min(nowMin, Math.floor((Number(ev.ts)-dayStart)/60000)))).sort((a,b)=>a-b);
-  for(let i=0;i<pts.length;i++){
-    const p=pts[i];
+  for(let i=0;i<evs.length;i++){
+    const p = Math.max(startMin, Math.min(nowMin, Math.floor((evs[i].ts - dayStart)/60000)));
     if(p>cursor){ act.push({status:curStat, start:cursor, width:p-cursor}); cursor=p; }
-    curStat = events[i].status;
+    curStat = evs[i].status;
   }
   if(cursor<nowMin) act.push({status:curStat, start:cursor, width:nowMin-cursor});
-  // if no events yet, show empty until now (null status)
-  if(!events?.length && nowMin>startMin) act.unshift({status:null, start:startMin, width:nowMin-startMin});
+  if(!evs.length && nowMin>startMin) act.unshift({status:null, start:startMin, width:nowMin-startMin});
 
-  // builders
   function barRow(segs, compare){
     const bar=document.createElement('div'); bar.className='gridbar';
     segs.forEach(s=>{
@@ -507,7 +517,6 @@ function buildDualBars(date, scheduleBlocks, events){
       seg.className = 'seg '+(s.status?cssOf(s.status):'');
       seg.style.width = w;
       if(compare){
-        // probe midpoint — if scheduled expectation differs, overlay diff
         const probe = s.start + Math.max(1, Math.floor(s.width/2));
         const exp = blocks.find(b=> probe>=b.start && probe<b.end);
         if(exp && s.status && exp.status !== s.status) seg.classList.add('diff');
@@ -518,21 +527,18 @@ function buildDualBars(date, scheduleBlocks, events){
   }
 
   const wrap=document.createElement('div');
-
   const projRow=document.createElement('div'); projRow.className='row';
   projRow.appendChild(tag('div','rowlabel','Projected'));
-  const projBar=barRow(proj,false); projRow.appendChild(grow(projBar));
+  projRow.appendChild(grow(barRow(proj,false)));
   wrap.appendChild(projRow);
 
   const actRow=document.createElement('div'); actRow.className='row';
   actRow.appendChild(tag('div','rowlabel','Actual'));
-  const actBar=barRow(act,true); actRow.appendChild(grow(actBar));
+  actRow.appendChild(grow(barRow(act,true)));
   wrap.appendChild(actRow);
 
-  // now line (relative to full day)
   const nl=document.createElement('div'); nl.className='nowline';
-  const nowPct = (nowMin-startMin)/total*100;
-  nl.style.left = nowPct+'%';
+  nl.style.left = ((nowMin-startMin)/total*100)+'%';
   wrap.appendChild(nl);
 
   return wrap;
@@ -545,33 +551,31 @@ function calcAdherence(date, blocks, events){
   const endMin   = Math.max(...blocks.map(b=>b.end));
   const nowMin   = Math.min(endMin, Math.max(startMin, Math.floor((Date.now()-dayStart)/60000)));
 
-  let inMin=0, outMin=0, idx=0, cur=events.length?events[0].status:null, curStart=startMin;
+  const evs = sortEvents(events);
+
+  // Lines (IMED)
+  let idx=0, cur=evs.length?evs[0].status:null, curStart=startMin;
   const lines=[], byStatus={};
-
-  const evs=[...(events||[])].sort((a,b)=>a.ts-b.ts);
-
   function pushLine(st, sM, eM){
-    const dur = Math.max(0, eM-sM);
-    if(!st || !dur) return;
-    const startTS = dayStart + sM*60000;
-    lines.push(`${new Date(startTS).toLocaleTimeString()} ${label(st)} ${minutesAs(dur)}`);
+    const dur=Math.max(0,eM-sM); if(!st||!dur) return;
+    const ts=dayStart + sM*60000;
+    lines.push(`${new Date(ts).toLocaleTimeString()} ${label(st)} ${minutesAs(dur)}`);
     byStatus[st]=(byStatus[st]||0)+dur;
   }
-
-  // Build lines across whole scheduled window (for IMED-style)
-  for(let m=startMin; m<=nowMin; m++){
-    const ms=dayStart+m*60000;
-    while(idx+1<evs.length && Number(evs[idx+1].ts)<=ms){ pushLine(cur,curStart,m); idx++; cur=evs[idx].status; curStart=m; }
+  for(let m=startMin;m<=nowMin;m++){
+    const ms=dayStart + m*60000;
+    while(idx+1<evs.length && evs[idx+1].ts<=ms){ pushLine(cur,curStart,m); idx++; cur=evs[idx].status; curStart=m; }
   }
   pushLine(cur, curStart, nowMin);
 
-  // Minute-by-minute adherence across scheduled minutes only
+  // Adherence minutes across scheduled minutes only
   idx=0; cur=evs.length?evs[0].status:null;
-  for(let m=startMin; m<nowMin; m++){
-    const ms=dayStart+m*60000;
-    while(idx+1<evs.length && Number(evs[idx+1].ts)<=ms){ idx++; cur=evs[idx].status; }
+  let inMin=0, outMin=0;
+  for(let m=startMin;m<nowMin;m++){
+    const ms=dayStart + m*60000;
+    while(idx+1<evs.length && evs[idx+1].ts<=ms){ idx++; cur=evs[idx].status; }
     const expected = (blocks||[]).find(b=> m>=b.start && m<b.end);
-    if(!expected) continue; // outside schedule: ignore for adherence
+    if(!expected) continue; // outside schedule ignored
     if(cur && cur===expected.status) inMin++; else outMin++;
   }
   const total=inMin+outMin;
