@@ -1,98 +1,115 @@
-// Returns Team Billboard items from Notion.
-// - Respects audience: agents see 'all/agents'; admins see everything.
-// - Publishes items only if PublishedAt <= now and (ExpiresAt empty or >= now).
-// - Sort: pinned first, then newest PublishedAt.
+// functions/api/news.ts
+import { Env, json, ensureAccess } from "./_utils";
 
-export const onRequestGet: PagesFunction = async ({ env, request }) => {
-  const nowIso = new Date().toISOString();
-
-  const audience = await getAudience(env, request); // 'admin' | 'agent'
-  const db = env.NOTION_DATABASE_ID;
-  const token = env.NOTION_TOKEN;
-
-  if (!db || !token) {
-    return json({ error: 'NOTION_MISCONFIG' }, 500);
-  }
-
-  // Filters cover both "PublishedAt" and "PublishAt" (you used both spellings)
-  const filter: any = {
-    and: [
-      {
-        or: [
-          { property: 'PublishedAt', date: { on_or_before: nowIso } },
-          { property: 'PublishAt',  date: { on_or_before: nowIso } },
-          { property: 'PublishedAt', date: { is_empty: true } },
-          { property: 'PublishAt',  date: { is_empty: true } }
-        ]
-      },
-      {
-        or: [
-          { property: 'ExpiresAt', date: { on_or_after: nowIso } },
-          { property: 'ExpiresAt', date: { is_empty: true } }
-        ]
-      }
-    ]
-  };
-
-  // Agents shouldn't see admin-only posts.
-  if (audience !== 'admin') {
-    filter.and.push({
-      or: [
-        { property: 'Audience', select: { equals: 'all' } },
-        { property: 'Audience', select: { equals: 'agents' } },
-        { property: 'Audience', select: { is_empty: true } }
-      ]
-    });
-  }
-
-  const r = await fetch(`https://api.notion.com/v1/databases/${db}/query`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Notion-Version': '2022-06-28',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ page_size: 50, filter })
-  });
-
-  if (!r.ok) {
-    const body = await r.text();
-    return json({ error: 'NOTION_QUERY_FAILED', status: r.status, body }, 500);
-  }
-
-  const data = await r.json();
-
-  const items = (data.results || []).map((p: any) => {
-    const props = p.properties || {};
-    const titleProp = props.Title || props.Name;
-    const title = titleProp?.title?.map((t: any) => t.plain_text).join('') || 'Untitled';
-    const body = (props.Body?.rich_text || []).map((t: any) => t.plain_text).join('');
-    const publishedAt = props.PublishedAt?.date?.start || props.PublishAt?.date?.start || null;
-    const expiresAt = props.ExpiresAt?.date?.start || null;
-    const pinned = !!props.Pinned?.checkbox;
-    const aud = (props.Audience?.select?.name || 'all').toLowerCase();
-    return { id: p.id, title, body, publishedAt, expiresAt, pinned, audience: aud };
-  });
-
-  // pinned first, then newest
-  items.sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1) || (b.publishedAt || '').localeCompare(a.publishedAt || ''));
-
-  return json({ items, audience });
+type NotionPage = {
+  id: string;
+  properties: Record<string, any>;
 };
 
-function json(obj: any, status = 200) {
-  return new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
+const NOTION_VERSION = "2022-06-28";
+
+function propKeyByType(props: Record<string, any>, type: string): string | null {
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v?.type === type) return k;
+  }
+  return null;
 }
 
-async function getAudience(env: any, request: Request): Promise<'admin' | 'agent'> {
-  try {
-    const m = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)allstar_at=([^;]+)/);
-    if (!m) return 'agent';
-    const r = await fetch(`${env.AUTH_BASE}/me`, { headers: { Cookie: `access_token=${m[1]}` } });
-    if (!r.ok) return 'agent';
-    const me = await r.json();
-    return (me.role === 'ADMIN' || me.role === 'SUPERADMIN') ? 'admin' : 'agent';
-  } catch {
-    return 'agent';
-  }
+function readTitle(p: any, key: string | null): string {
+  if (!key) return "";
+  const arr = p[key]?.title || [];
+  return arr.map((t: any) => t?.plain_text || "").join("").trim();
 }
+
+function readRichText(p: any, key: string | null): string {
+  if (!key) return "";
+  const arr = p[key]?.rich_text || [];
+  return arr.map((t: any) => t?.plain_text || "").join("").trim();
+}
+
+function readDateISO(p: any, key: string | null): string | null {
+  if (!key) return null;
+  const d = p[key]?.date;
+  const iso = d?.start || d?.end || null;
+  return iso || null;
+}
+
+function readSelectName(p: any, key: string | null): string | null {
+  if (!key) return null;
+  const s = p[key]?.select;
+  return s?.name || null;
+}
+
+function readCheckbox(p: any, key: string | null): boolean {
+  if (!key) return true; // if there is no published flag, treat as published
+  return !!p[key]?.checkbox;
+}
+
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  // Require auth (keeps hub behavior consistent), but don’t change functionality otherwise
+  const acc = ensureAccess(request);
+  if (!acc.ok) return acc.response;
+
+  if (!env.NOTION_TOKEN || !env.NOTION_DATABASE_ID) {
+    return json({ items: [], note: "notion_missing_env" }, 200, { "cache-control":"no-store" });
+  }
+
+  const audParam = new URL(request.url).searchParams.get("aud") || "ALL"; // AGENT | ADMIN | ALL
+
+  // Query the DB (we'll filter client-side to be tolerant of property names)
+  const q = await fetch(`https://api.notion.com/v1/databases/${env.NOTION_DATABASE_ID}/query`, {
+    method: "POST",
+    headers: {
+      "authorization": `Bearer ${env.NOTION_TOKEN}`,
+      "notion-version": NOTION_VERSION,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      page_size: 25,
+      // Sort if a date exists—tolerant approach: Notion ignores unknown sorts
+      sorts: [{ property: "Date", direction: "descending" }],
+    }),
+  });
+
+  if (!q.ok) {
+    const text = await q.text().catch(()=> "");
+    return json({ items: [], note: "notion_error", status: q.status, detail: text }, 200, { "cache-control":"no-store" });
+  }
+
+  const data = await q.json();
+  const pages: NotionPage[] = Array.isArray(data?.results) ? data.results : [];
+
+  const items = pages.map(page => {
+    const props = page.properties || {};
+    // Discover keys by type
+    const titleKey = propKeyByType(props, "title");
+    const textKey  = propKeyByType(props, "rich_text");
+    const dateKey  = propKeyByType(props, "date");
+    const selKey   = propKeyByType(props, "select");
+    const chkKey   = propKeyByType(props, "checkbox");
+
+    const title    = readTitle(props, titleKey);
+    const body     = readRichText(props, textKey);
+    const dateISO  = readDateISO(props, dateKey);
+    const audience = (readSelectName(props, selKey) || "all").toLowerCase();
+    const published= readCheckbox(props, chkKey);
+
+    return { title, body, date: dateISO, audience, published };
+  })
+  // Keep only published
+  .filter(it => it.published)
+  // Audience gate: 'all' always passes; otherwise match value
+  .filter(it => {
+    if (!it.audience || it.audience === "all") return true;
+    if (audParam === "ALL") return true;
+    return it.audience.toLowerCase() === audParam.toLowerCase();
+  })
+  // Sort newest first by date if present
+  .sort((a,b)=>{
+    const ta = a.date ? Date.parse(a.date) : 0;
+    const tb = b.date ? Date.parse(b.date) : 0;
+    return tb - ta;
+  });
+
+  return json({ items }, 200, { "cache-control":"no-store" });
+};
