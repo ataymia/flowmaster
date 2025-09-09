@@ -29,34 +29,44 @@
   </div>
 
 <script>
-async function doLogin(e){
-  e?.preventDefault?.();
-  const emailOrUser = document.querySelector('#u').value.trim();
-  const password = document.querySelector('#p').value;
+(function(){
+  const $ = s => document.querySelector(s);
 
-  const body = emailOrUser.includes('@')
-    ? { email: emailOrUser, password }
-    : { username: emailOrUser, password };
+  async function doLogin(e){
+    e?.preventDefault?.();
+    const u = $('#u')?.value?.trim() || '';
+    const p = $('#p')?.value || '';
+    if(!u || !p){ alert('Enter username/email and password'); return; }
 
-  const r = await fetch('/api/login', {
-    method:'POST',
-    headers:{'content-type':'application/json'},
-    credentials:'include',
-    body: JSON.stringify(body)
-  });
+    const body = u.includes('@') ? { email:u, password:p } : { username:u, password:p };
 
-  if (!r.ok) {
-    const t = await r.text().catch(()=> '');
-    alert('Login failed:\n' + t.slice(0,300));
-    return;
+    try{
+      const res = await fetch('/api/login', {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        credentials:'include',
+        body: JSON.stringify(body)
+      });
+      console.log('[login] status:', res.status);
+      const text = await res.text();
+      console.log('[login] body:', text);
+      if(!res.ok){ alert('Login failed.\n'+text.slice(0,300)); return; }
+
+      // ✅ Go to the actual file that exists
+      location.assign('/hub.html');
+    }catch(err){
+      console.error(err);
+      alert('Network error during login');
+    }
   }
 
-  // ✅ Go to the actual file that exists
-  location.assign('/hub.html');
-}
-document.querySelector('#login')?.addEventListener('click', doLogin);
-document.querySelector('#form')?.addEventListener('submit', doLogin);
+  document.addEventListener('DOMContentLoaded', ()=>{
+    $('#login')?.addEventListener('click', doLogin);
+    $('#form')?.addEventListener('submit', doLogin);
+  });
+})();
 </script>
+
 
 
 </body>
