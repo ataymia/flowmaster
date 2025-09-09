@@ -8,18 +8,8 @@
     :root{
       --brand:#e11d48; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb; --bg:#fff;
       --card:#fff; --shadow:0 10px 25px rgba(17,24,39,.08); --radius:16px;
-
-      /* Distinct status colors */
-      --st-available:#10b981;
-      --st-bathroom:#d97706;
-      --st-break:#f59e0b;
-      --st-lunch:#ea580c;
-      --st-training:#8b5cf6;
-      --st-meeting:#3b82f6;
-      --st-offline:#9ca3af;
-
-      --diff:#ef4444;
-      --grid:#f3f4f6;
+      --st-available:#10b981; --st-bathroom:#d97706; --st-break:#f59e0b; --st-lunch:#ea580c;
+      --st-training:#8b5cf6; --st-meeting:#3b82f6; --st-offline:#9ca3af; --diff:#ef4444; --grid:#f3f4f6;
     }
     *{box-sizing:border-box}
     body{margin:0;font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--ink)}
@@ -54,12 +44,9 @@
     .row-between{display:flex;align-items:center;justify-content:space-between;gap:12px}
     .error{position:fixed;left:0;right:0;bottom:0;background:#fee2e2;color:#991b1b;border-top:1px solid #fecaca;padding:10px 14px;display:none}
     .status-btn{color:#fff;border:0}
-    .st-available{background:var(--st-available)}
-    .st-bathroom{background:var(--st-bathroom)}
-    .st-break{background:var(--st-break)}
-    .st-lunch{background:var(--st-lunch)}
-    .st-training{background:var(--st-training)}
-    .st-meeting{background:var(--st-meeting)}
+    .st-available{background:var(--st-available)} .st-bathroom{background:var(--st-bathroom)}
+    .st-break{background:var(--st-break)} .st-lunch{background:var(--st-lunch)}
+    .st-training{background:var(--st-training)} .st-meeting{background:var(--st-meeting)}
     .st-offline{background:var(--st-offline)}
     .small{font-size:12px}
     @media (max-width: 920px){ .grid-2{grid-template-columns:1fr} }
@@ -85,16 +72,14 @@
       <div id="tab-admin"  class="tab">Admin Tools</div>
     </div>
 
-    <!-- ===== Agent Pane ===== -->
+    <!-- Agent Pane -->
     <div id="pane-agent">
       <div class="card">
         <div class="row-between">
           <h2 style="margin:0">Today</h2>
           <div class="pill" id="agent-date">—</div>
         </div>
-
         <div class="timeline-wrap" id="agent-bars"></div>
-
         <div class="row" style="margin-top:10px">
           <div class="kpi">
             <div class="big" id="agent-pct">100%</div>
@@ -114,7 +99,7 @@
       </div>
     </div>
 
-    <!-- ===== Admin Pane ===== -->
+    <!-- Admin Pane -->
     <div id="pane-admin" style="display:none">
       <div class="card">
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -133,13 +118,11 @@
         </div>
 
         <div class="grid grid-2" style="margin-top:12px">
-          <!-- Schedule editor -->
           <div>
             <h3 style="margin:6px 0">Schedule Blocks</h3>
             <div id="blocks"></div>
           </div>
 
-          <!-- Daily overview -->
           <div>
             <div class="row-between">
               <h3 style="margin:6px 0">Daily Overview</h3>
@@ -177,6 +160,7 @@
         </div>
       </div>
 
+      <!-- Users stays at the very bottom -->
       <div class="card">
         <h3 style="margin-top:0">Users</h3>
         <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
@@ -199,7 +183,6 @@
     <div class="dlg-body">
       <label class="label">Current password</label>
       <input id="curPw" class="field" type="password" autocomplete="current-password">
-
       <label class="label" style="margin-top:8px">New password</label>
       <div style="display:flex;gap:8px">
         <input id="newPw" class="field" type="password" autocomplete="new-password" style="flex:1">
@@ -218,12 +201,12 @@
 /* ===== CONFIG / STATUS MAP ===== */
 const STATUS_LIST = [
   { key:'available', label:'Available', css:'st-available' },
-  { key:'bathroom',  label:'Bathroom', css:'st-bathroom'  },
-  { key:'break',     label:'Break',    css:'st-break'     },
-  { key:'lunch',     label:'Lunch',    css:'st-lunch'     },
-  { key:'training',  label:'Training', css:'st-training'  },
-  { key:'meeting',   label:'Meeting',  css:'st-meeting'   },
-  { key:'offline',   label:'Offline',  css:'st-offline'   },
+  { key:'bathroom',  label:'Bathroom',  css:'st-bathroom'  },
+  { key:'break',     label:'Break',     css:'st-break'     },
+  { key:'lunch',     label:'Lunch',     css:'st-lunch'     },
+  { key:'training',  label:'Training',  css:'st-training'  },
+  { key:'meeting',   label:'Meeting',   css:'st-meeting'   },
+  { key:'offline',   label:'Offline',   css:'st-offline'   },
 ];
 
 const API = {
@@ -255,50 +238,34 @@ let TICKERS=[];
 
 function setError(s){ const e=document.getElementById('error'); if(!s){ e.style.display='none'; e.textContent=''; return; } e.textContent='⚠️ '+s; e.style.display='block'; }
 
-/* ===== AUTH BOOT (robust to your /api/whoami shape) ===== */
+/* ===== AUTH BOOT ===== */
 (async function init(){
   try{
     const who = await API.whoami();
-
-    // Your current whoami returns: { authed:false|true, me:{id,username,role,...} }
     if (who && who.authed === false) return location.replace('/');
-
     const meObj = (who && who.me) ? who.me : who || {};
     const username = meObj.username || '';
     const role = String(meObj.role || '').toUpperCase();
-
-    if (!username || !role) {
-      // If anything essential is missing, treat as not authed.
-      return location.replace('/');
-    }
-
+    if (!username || !role) return location.replace('/');
     ME = { username, role };
     document.getElementById('hdr-meta').textContent = `${ME.username} · ${ME.role}`;
-  }catch(e){
-    return location.replace('/');
-  }
+  }catch(e){ return location.replace('/'); }
 
-  // Tab visibility by role
   const isAdmin = /^(ADMIN|SUPERADMIN)$/.test(ME.role);
   document.getElementById('tab-admin').style.display = isAdmin ? 'block' : 'none';
-
-  // Tab wiring
   document.getElementById('tab-agent').onclick = ()=>showPane('agent');
   document.getElementById('tab-admin').onclick = ()=>showPane('admin');
 
-  // Password dialog + logout
   wirePasswordDialog();
   document.getElementById('btn-logout').onclick = ()=>{
     document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
     document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
+    document.cookie='allstar_at=; Path=/; Max-Age=0; Secure; SameSite=Lax';
     location.assign('/');
   };
 
-  // Build panes
   buildAgent();
   if(isAdmin) buildAdmin();
-
-  // Default to Agent pane (unchanged behavior)
   showPane('agent');
 })();
 
@@ -339,7 +306,9 @@ async function refreshAgentData(){
       API.listEvents(ME.username, AGENT.date, AGENT.date)
     ]);
     AGENT.schedule = sched?.blocks || [];
-    AGENT.events   = Array.isArray(ev)? ev : [];
+    // DO NOT clobber with an empty refresh (prevents “flip to Offline”)
+    if (Array.isArray(ev) && ev.length) AGENT.events = ev;
+    if (!Array.isArray(ev) && AGENT.events.length === 0) AGENT.events = [];
   }catch{}
 }
 function startAgentLoops(){
@@ -348,22 +317,18 @@ function startAgentLoops(){
   TICKERS.push(setInterval(async ()=>{ await refreshAgentData(); renderAgent(); }, 15000)); // refresh data
 }
 function renderAgent(){
-  // live timer
   const cur = AGENT.events.length ? AGENT.events[AGENT.events.length-1] : null;
   const curLabel = cur ? `${label(cur.status)} • ${hms(Date.now()-Number(cur.ts||Date.now()))}` : '—';
   document.getElementById('agent-current').textContent = 'Current: '+curLabel;
 
-  // bars
   const barsHost = document.getElementById('agent-bars');
   barsHost.innerHTML='';
   barsHost.appendChild(buildDualBars(AGENT.date, AGENT.schedule, AGENT.events));
 
-  // adherence
   const d = calcAdherence(AGENT.date, AGENT.schedule, AGENT.events);
   document.getElementById('agent-pct').textContent = Math.round(d.pct)+'%';
   document.getElementById('agent-io').textContent  = 'in: '+minutesAs(d.inMin)+' · out: '+minutesAs(d.outMin);
 
-  // recent
   const rec = document.getElementById('agent-recent'); rec.innerHTML='';
   AGENT.events.slice(-12).reverse().forEach(ev=>{
     const row=document.createElement('div');
@@ -381,29 +346,23 @@ function buildAdmin(){
   ADMIN.date = toISOdate(new Date());
   document.getElementById('day').value = ADMIN.date;
 
-  // quick ranges
   document.querySelectorAll('[data-range]').forEach(btn=>{
     btn.onclick=()=>{
       const kind=btn.getAttribute('data-range');
       const today=new Date();
       let from, to;
-      if(kind==='today'){
-        from = toISOdate(today); to=from;
-      }else if(kind==='thisweek'){
-        const d=today; const day=(d.getUTCDay()+6)%7; // Mon=0
+      if(kind==='today'){ from = toISOdate(today); to=from; }
+      else if(kind==='thisweek'){
+        const d=today; const day=(d.getUTCDay()+6)%7;
         const start=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-day));
         const end  =new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()+(6-day)));
         from=toISOdate(start); to=toISOdate(end);
-      }else{ // last7
-        const end=today; const start=new Date(end); start.setUTCDate(end.getUTCDate()-6);
-        from=toISOdate(start); to=toISOdate(end);
-      }
+      }else{ const end=today; const start=new Date(end); start.setUTCDate(end.getUTCDate()-6); from=toISOdate(start); to=toISOdate(end); }
       document.getElementById('from').value=from;
       document.getElementById('to').value=to;
     };
   });
 
-  // downloads
   document.getElementById('dle').onclick=()=>API.download('events', getFrom(), getTo());
   document.getElementById('dls').onclick=()=>API.download('schedules', getFrom(), getTo());
   document.getElementById('dla').onclick=()=>API.download('adherence', getFrom(), getTo());
@@ -422,7 +381,8 @@ function startAdminLoops(){
   if(!ADMIN.user) return;
   renderAdminDay();
   TICKERS.push(setInterval(renderAdminDay,1000));
-  TICKERS.push(setInterval(loadAdminDay,15000));
+  // faster poll so you see agent updates quickly
+  TICKERS.push(setInterval(loadAdminDay,5000));
 }
 
 async function reloadUsers(){
@@ -442,7 +402,9 @@ async function loadAdminDay(){
       API.listEvents(ADMIN.user, ADMIN.date, ADMIN.date)
     ]);
     ADMIN.schedule = sched?.blocks || [];
-    ADMIN.events   = Array.isArray(ev)? ev : [];
+    // Don't clobber with empty result
+    if (Array.isArray(ev) && ev.length) ADMIN.events = ev;
+    if (!Array.isArray(ev) && ADMIN.events.length === 0) ADMIN.events = [];
     renderBlocks(); renderAdminDay();
   }catch{}
 }
@@ -464,27 +426,22 @@ function renderBlocks(){
   });
 }
 function renderAdminDay(){
-  // live "current" status + timer for selected user
   const evs = sortEvents(ADMIN.events);
   const cur = evs.length ? evs[evs.length-1] : null;
   const pill = document.getElementById('admin-current');
   pill.textContent = cur ? `Current: ${label(cur.status)} • ${hms(Date.now()-Number(cur.ts||Date.now()))}` : 'Current: —';
 
-  // bars
   const wrap=document.getElementById('admin-bars'); wrap.innerHTML='';
   wrap.appendChild(buildDualBars(ADMIN.date, ADMIN.schedule, ADMIN.events));
 
-  // KPIs
   const d=calcAdherence(ADMIN.date, ADMIN.schedule, ADMIN.events);
   document.getElementById('admin-pct').textContent = `Adherence: ${Math.round(d.pct)}% · in ${minutesAs(d.inMin)} / out ${minutesAs(d.outMin)}`;
 
-  // AUX breakdown
   const by=document.getElementById('byStatus'); by.innerHTML='';
   Object.entries(d.byStatus).forEach(([k,v])=>{
     const li=document.createElement('li'); li.textContent=`${label(k)}: ${minutesAs(v)}`; by.appendChild(li);
   });
 
-  // IMED timeline
   const im=document.getElementById('imed'); im.innerHTML='';
   if(d.lines.length){ d.lines.forEach(t=>{ const div=document.createElement('div'); div.textContent=t; im.appendChild(div); }); }
   else im.textContent='No events for this day';
@@ -500,16 +457,12 @@ async function saveAdminSchedule(){
 function minutesAs(m){ if(m<60) return `${m}m`; const h=Math.floor(m/60), mm=m%60; return `${h}h${mm?(' '+mm+'m'):''}`; }
 function hm2mm(hm){ const [h,m]=hm.split(':').map(Number); return h*60+m; }
 function mm2hm(mm){ const h=Math.floor(mm/60), m=mm%60; return `${pad(h)}:${pad(m)}`; }
-
-function sortEvents(events){
-  return [...(events||[])].map(e=>({status:e.status, ts:Number(e.ts)})).sort((a,b)=>a.ts-b.ts);
-}
+function sortEvents(events){ return [...(events||[])].map(e=>({status:e.status, ts:Number(e.ts)})).sort((a,b)=>a.ts-b.ts); }
 
 function buildDualBars(date, scheduleBlocks, events){
   const dayStart = Date.parse(date+'T00:00:00Z');
   const startMin = 0, endMin = 1440; const total = endMin - startMin;
 
-  // PROJECTED (24h; schedule where defined, offline elsewhere)
   const proj = [];
   const blocks = [...(scheduleBlocks||[])].sort((a,b)=>a.start-b.start);
   let cur = startMin;
@@ -520,7 +473,6 @@ function buildDualBars(date, scheduleBlocks, events){
   }
   if(cur<endMin) proj.push({status:'offline', start:cur, width:endMin-cur});
 
-  // ACTUAL (from midnight up to now)
   const nowMin = Math.max(startMin, Math.min(endMin, Math.floor((Date.now()-dayStart)/60000)));
   const evs = sortEvents(events);
   const act=[];
@@ -578,7 +530,6 @@ function calcAdherence(date, blocks, events){
 
   const evs = sortEvents(events);
 
-  // Lines (IMED)
   let idx=0, cur=evs.length?evs[0].status:null, curStart=startMin;
   const lines=[], byStatus={};
   function pushLine(st, sM, eM){
@@ -593,14 +544,13 @@ function calcAdherence(date, blocks, events){
   }
   pushLine(cur, curStart, nowMin);
 
-  // Adherence across scheduled minutes only
   idx=0; cur=evs.length?evs[0].status:null;
   let inMin=0, outMin=0;
   for(let m=startMin;m<nowMin;m++){
     const ms=dayStart + m*60000;
     while(idx+1<evs.length && evs[idx+1].ts<=ms){ idx++; cur=evs[idx].status; }
     const expected = (blocks||[]).find(b=> m>=b.start && m<b.end);
-    if(!expected) continue; // outside schedule ignored
+    if(!expected) continue;
     if(cur && cur===expected.status) inMin++; else outMin++;
   }
   const total=inMin+outMin;
@@ -608,7 +558,6 @@ function calcAdherence(date, blocks, events){
   return { pct, inMin, outMin, byStatus, lines };
 }
 
-/* helpers */
 function tag(t, cls, txt){ const el=document.createElement(t); el.className=cls||''; if(txt!=null) el.textContent=txt; return el; }
 function grow(el){ const w=document.createElement('div'); w.style.flex='1'; w.appendChild(el); return w; }
 
