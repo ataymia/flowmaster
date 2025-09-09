@@ -1,10 +1,15 @@
-import { Env, upstream, clearCookie, forwardSetCookies } from "./_utils";
+import { Env, upstream, forwardSetCookies, clearCookie } from "./_utils";
 
 export const onRequestPost: PagesFunction<Env> = async ({ env }) => {
-  const res = await upstream(env, "/auth/logout", { method: "POST" });
-  const headers = new Headers(res.headers);
-  // clear site-local session too
-  clearCookie(headers, "allstar_at", "/");
-  forwardSetCookies(res.headers, headers);
-  return new Response(res.body, { status: res.status, headers });
+  const up = await upstream(env, "/auth/logout", { method: "POST", redirect: "manual" });
+
+  const outHeaders = new Headers();
+  forwardSetCookies(up, outHeaders); // clears upstream cookies
+
+  // Clear our host-level mirrors
+  clearCookie(outHeaders, "allstar_at");
+  clearCookie(outHeaders, "access_token");
+  clearCookie(outHeaders, "refresh_token");
+
+  return new Response(null, { status: 204, headers: outHeaders });
 };
