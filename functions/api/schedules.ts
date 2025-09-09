@@ -1,18 +1,10 @@
-// functions/api/schedules.ts
-import { Env, ensureAccess, json, proxyWithSession } from "./_utils";
+import { Env, proxyWithAuth } from "./_utils";
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const auth = ensureAccess(request);
-  if (!auth.ok) return auth.response;
-
-  const u = new URL(request.url);
-  const qs = u.search ? u.search : '';
-  return proxyWithSession(request, env, `/schedules${qs}`);
-};
-
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const auth = ensureAccess(request);
-  if (!auth.ok) return auth.response;
-
-  return proxyWithSession(request, env, `/schedules`);
+export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
+  if (request.method === "POST") {
+    return proxyWithAuth(request, env, "/schedules", { method:"POST", body: request.body });
+  }
+  const url = new URL(request.url);
+  const qs = url.search ? url.search : "";
+  return proxyWithAuth(request, env, `/schedules${qs}`, { method:"GET" });
 };
