@@ -335,6 +335,41 @@ async function fetchTeamPresence(){
   await refresh();
   setInterval(refresh, 5000);
 })();
+<script>
+  // …your existing admin code…
+
+  function fmtDuration(s) {
+    const hh = String(Math.floor(s/3600)).padStart(2,'0');
+    const mm = String(Math.floor((s%3600)/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  async function refreshWall() {
+    try {
+      const res = await fetch('/api/presence', { credentials:'include', cache:'no-store' });
+      const list = await res.json(); // [{username,status,ts,last_seen,online}, …]
+
+      // TODO: render into your table/list UI
+      // Example (pseudo):
+      // const host = document.getElementById('liveAgents');
+      // host.innerHTML = '';
+      // for (const row of list) {
+      //   const secs = row.ts ? Math.floor((Date.now() - row.ts)/1000) : 0;
+      //   host.appendChild(htmlRow({
+      //     username: row.username,
+      //     status: row.status || 'OFFLINE',
+      //     timer: fmtDuration(Math.max(0, secs)),
+      //     online: !!row.online
+      //   }));
+      // }
+    } catch {}
+  }
+
+  // initial + poll every 10s
+  refreshWall();
+  setInterval(refreshWall, 10000);
+</script>
 async function refreshAgentData(){
   try{
     const [sched, ev] = await Promise.all([
@@ -642,6 +677,43 @@ function wirePasswordDialog(){
     }catch(e){ alert('Change failed'); }
   };
 }
+   // …your existing code…
+
+  // ---- Presence heartbeat ----
+  async function ping(status) {
+    try {
+      const body = status ? { status, ts: Date.now() } : {};
+      await fetch('/api/presence/ping', {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        credentials:'include',
+        body: JSON.stringify(body)
+      });
+    } catch {}
+  }
+
+  // Start heartbeat when the page is ready (after whoami succeeds)
+  ping();                          // immediate
+  setInterval(()=> ping(), 30000); // every 30s
+
+  // When an agent clicks a status button, keep your existing /api/events call,
+  // then also call ping(status) so presence updates instantly.
+  async function onStatusClick(newStatus) {
+    // your existing POST /api/events ...
+    await fetch('/api/events', {
+      method:'POST',
+      headers:{ 'content-type':'application/json' },
+      credentials:'include',
+      body: JSON.stringify({ status: newStatus })
+    });
+
+    // instantly reflect in presence
+    ping(newStatus);
+  }
+
+  // Wire your buttons to onStatusClick('AVAILABLE' | 'BREAK' | 'LUNCH' | etc.)
+  // document.getElementById('btnAvailable').onclick = () => onStatusClick('AVAILABLE');
+  // …
 </script>
 </body>
 </html>
