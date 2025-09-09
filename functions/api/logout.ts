@@ -1,27 +1,16 @@
-// functions/api/logout.ts
-import { Env, json, upstream, parseCookies, forwardSetCookies, clearCookie } from './_utils';
-
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  // Forward both cookies to upstream so it can clear its side
-  const rawCookie = request.headers.get('cookie') || '';
-  const up = await upstream(env, '/auth/logout', {
-    method: 'POST',
-    headers: { cookie: rawCookie }
-  });
-
-  const hdr = new Headers();
-
-  // Forward upstream Set-Cookie (if it clears them)
-  forwardSetCookies(up, hdr);
-
-  // Always clear locally too (belt & suspenders)
-  clearCookie(hdr, 'access_token', '/');
-  clearCookie(hdr, 'refresh_token', '/');
-
-  if (!up.ok) {
-    const t = await up.text().catch(()=> '');
-    return json({ ok: true, note: 'local_cleared_upstream_failed', upstream: t }, 200, hdr);
+// Clears session cookies on Pages and best-effort logs out at the Worker.
+function clear(name:string){ return `${name}=; Path=/; Max-Age=0; Secure; SameSite=Lax; HttpOnly`; }
+function readCookie(req: Request, name: string): string | null {
+  const raw = req.headers.get("Cookie") || ""; const m = raw.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`)); return m ? m[1] : null;
+}
+export const onRequestPost: PagesFunction = async ({ request, env }) => {
+  const access = readCookie(request, "allstar_at");
+  const h = new Headers({ 'content-type':'application/json' });
+  h.append('Set-Cookie', clear('allstar_at'));
+  h.append('Set-Cookie', clear('allstar_rt'));
+  if (access && env.AUTH_BASE) {
+    // best effort – Worker will drop its own cookies on its domain
+    try { await fetch(`${env.AUTH_BASE}/auth/logout`, { method:'POST', headers:{ Cookie:`access_token=${access}` } }); } catch {}
   }
-
-  return json({ ok: true }, 200, hdr);
+  return new Response(JSON.stringify({ ok:true }), { headers:h });
 };
