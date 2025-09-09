@@ -63,7 +63,7 @@
         <h1>Welcome back<span id="welcomeName"></span> 👋</h1>
         <p class="muted">Quick links to your tools and live team updates.</p>
       </div>
-      <!-- Top quick-link buttons removed by request -->
+      <!-- Top quick-link buttons intentionally removed -->
     </div>
 
     <div class="grid grid-2">
@@ -82,7 +82,7 @@
         <h2>Account</h2>
         <div id="roleLine" class="muted" style="margin:6px 0 12px 0">Role: …</div>
         <div class="btn-row">
-          <!-- Renamed: Open Adherence -> Open Schedule (same href) -->
+          <!-- Renamed per request -->
           <a class="btn" href="/adherence/" role="button">Open Schedule</a>
           <a class="btn" href="/flowmaster/" role="button">Open Flowmaster</a>
           <a id="adminToolsBtn" class="btn hidden" href="/admin/" role="button">Open Admin Tools</a>
@@ -94,19 +94,38 @@
   <script>
   (async function boot(){
     try{
-      // Keep original behavior: 401 -> go back to sign-in
       const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store' });
       if (r.status === 401) { location.replace('/'); return; }
       const me = await r.json().catch(()=>null);
 
       // Header identity
-      document.getElementById('me').textContent = me?.username ? `${me.username} · ${me.role}` : 'Signed in';
+      document.getElementById('me').textContent = me?.username ? `${me.username} · ${me.role ?? ''}`.trim() : 'Signed in';
       document.getElementById('welcomeName').textContent = me?.username ? `, ${escapeHTML(me.username)}` : '';
 
-      // Role badge logic (ADMIN / SUPERADMIN / AGENT)
-      const role = (me?.role || '').toUpperCase();
+      // ==== Robust role resolution (never UNKNOWN) ====
+      function extractRole(obj){
+        if (!obj || typeof obj !== 'object') return null;
+        // common shapes
+        return (
+          obj.role ||
+          obj.Role ||
+          obj.user?.role ||
+          obj.data?.role ||
+          obj.claims?.role ||
+          (Array.isArray(obj.roles) && obj.roles[0]) ||
+          null
+        );
+      }
+      let roleRaw = extractRole(me);
+      // normalize
+      let role = (roleRaw ? String(roleRaw) : '').toUpperCase();
+      if (role !== 'ADMIN' && role !== 'SUPERADMIN' && role !== 'AGENT') {
+        // final fallback: assume AGENT (never show UNKNOWN)
+        role = 'AGENT';
+      }
+
+      // Show/Hide Admin Tools
       const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN';
-      const aud = isAdmin ? 'ADMIN' : 'AGENT';
       if (isAdmin) document.getElementById('adminToolsBtn').classList.remove('hidden');
 
       // Role line with a color badge
@@ -114,13 +133,13 @@
       const badgeClass = role === 'SUPERADMIN' ? 'role-super'
                         : role === 'ADMIN' ? 'role-admin'
                         : 'role-agent';
-      const roleLabel = role || 'UNKNOWN';
       roleLine.innerHTML = `
         Role:
-        <span class="rolepill ${badgeClass}" title="${escapeHTML(roleLabel)}">${escapeHTML(roleLabel)}</span>
+        <span class="rolepill ${badgeClass}" title="${escapeHTML(role)}">${escapeHTML(role)}</span>
       `;
 
       // Notion news: initial load + live updates (no page reload)
+      const aud = isAdmin ? 'ADMIN' : 'AGENT';
       let lastNewsSig = '';
       async function loadNewsOnce(){
         try{
@@ -136,12 +155,10 @@
               `Updated ${ts.toLocaleTimeString()}`;
           }
         } catch (e) {
-          // Fail silently — never break the page
           console.warn('news_poll_error', e);
         }
       }
       await loadNewsOnce();
-      // Poll every 60s without overlapping
       let polling = false;
       setInterval(async ()=>{
         if (polling) return;
@@ -149,7 +166,7 @@
         try { await loadNewsOnce(); } finally { polling = false; }
       }, 60000);
 
-      // Logout keeps your working behavior
+      // Logout (unchanged)
       document.getElementById('logout').addEventListener('click', (e)=>{
         e.preventDefault();
         document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
@@ -158,7 +175,6 @@
       });
 
     }catch(e){
-      // Same as working file
       location.replace('/');
     }
   })();
