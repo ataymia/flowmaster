@@ -1,494 +1,483 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Allstar — Agent Adherence</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Allstar Agent Adherence</title>
   <style>
-    :root{
-      /* brand (hub-matched) */
-      --brand:#e11d48; --brand-ink:#fff;
-
-      /* light theme palette (dark mode later) */
-      --bg:#ffffff; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb; --card:#ffffff;
-      --shadow:0 10px 25px rgba(17,24,39,.08);
-      --radius:18px;
-
-      /* status colors (more distinct oranges/yellows) */
-      --st-available:#10b981;  /* green */
-      --st-bathroom:#d97706;   /* amber-600 (darker than break) */
-      --st-break:#f59e0b;      /* amber-500 */
-      --st-lunch:#fb923c;      /* orange-400 */
-      --st-training:#8b5cf6;   /* violet-500 */
-      --st-meeting:#3b82f6;    /* blue-500 */
-      --st-offline:#9ca3af;    /* gray-400 */
-
-      --diff:rgba(239,68,68,.35); /* red-500 overlay for mismatch */
-    }
-    *{box-sizing:border-box}
-    body{margin:0;font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--ink)}
-    a{color:var(--brand);text-decoration:none}
-    .header{position:sticky;top:0;z-index:10;backdrop-filter:blur(6px);background:rgba(255,255,255,.9);border-bottom:1px solid var(--line)}
-    .header-inner{display:flex;align-items:center;gap:14px;padding:14px 20px}
-    .logo{font-weight:900;letter-spacing:.3px;color:var(--brand);font-size:18px}
-    .me{margin-left:auto;color:var(--muted)}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer;color:inherit;text-decoration:none;box-shadow:var(--shadow)}
-    .btn:hover{background:#fafafa}
-    .btn-brand{background:var(--brand);border-color:transparent;color:var(--brand-ink)}
-    .container{max-width:1150px;margin:0 auto;padding:22px}
-    .grid{display:grid;gap:20px}
-    .grid-2{grid-template-columns:2fr 1fr}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
-    .muted{color:var(--muted)}
-    .title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
-    .h1{font-size:22px;font-weight:800;margin:0}
-    .h2{font-size:16px;font-weight:700;margin:0}
-    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:#f8fafc;font-size:12px}
-    .row{display:flex;align-items:center;gap:10px}
-    .btns{display:flex;flex-wrap:wrap;gap:10px}
-    .status-btn{border:0;color:#fff;border-radius:12px;padding:8px 12px;cursor:pointer;box-shadow:var(--shadow)}
-    .status-btn:hover{filter:brightness(.97)}
-    .small{font-size:12px}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
-    .list{max-height:220px;overflow:auto;border-top:1px solid var(--line);margin-top:8px}
-    .li{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
-    .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:8px}
-
-    /* dual bars */
-    .timeline-wrap{position:relative;display:grid;gap:10px}
-    .bar-row{display:flex;align-items:center;gap:12px}
-    .rowlabel{width:7.2rem;color:var(--muted);font-size:12px}
-    .gridbar{height:22px;border-radius:10px;overflow:hidden;background:#f3f4f6;flex:1;position:relative}
-    .seg{height:100%;display:inline-block;position:relative}
-    .seg.diff::after{content:"";position:absolute;inset:0;background:var(--diff)} /* red overlay for mismatch */
-    .nowline{position:absolute;top:-6px;bottom:-6px;width:2px;background:#111827}
-    .stat-big{font-size:32px;font-weight:800}
-    .stat-sub{color:var(--muted)}
-
-    /* status classes for segments & buttons */
-    .st-available{background:var(--st-available)}
-    .st-bathroom{background:var(--st-bathroom)}
-    .st-break{background:var(--st-break)}
-    .st-lunch{background:var(--st-lunch)}
-    .st-training{background:var(--st-training)}
-    .st-meeting{background:var(--st-meeting)}
-    .st-offline{background:var(--st-offline)}
-
-    @media (max-width: 1000px){
-      .grid-2{grid-template-columns:1fr}
-    }
+    :root { --brand:#e11d48; --muted:#6b7280; --text:#0f172a; --line:#e5e7eb; --bg:#ffffff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:var(--bg); color:var(--text); }
+    a { color:var(--brand); text-decoration:none; }
+    h1,h2,h3 { margin:0 0 .5rem 0; }
+    .container { max-width:1040px; margin:0 auto; padding:16px; }
+    .header { position:sticky; top:0; z-index:50; backdrop-filter: blur(6px); background:rgba(255,255,255,.9); border-bottom:1px solid var(--line); }
+    .header-inner { display:flex; align-items:center; gap:10px; padding:10px 16px; }
+    .title { font-weight:800; font-size:18px; letter-spacing:.3px; color:var(--brand); }
+    .muted { color:var(--muted); }
+    .btn { display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+    .btn:hover { background:#fafafa; }
+    .btn-brand { border-color:transparent; background:var(--brand); color:#fff; }
+    .btn-brand:hover { filter:brightness(.95); }
+    .btn-danger { border-color:#fecaca; background:#fee2e2; color:#991b1b; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px; }
+    .grid { display:grid; gap:16px; }
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .row-between { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .field { display:block; width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:10px; }
+    .label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+    .table { width:100%; border-collapse:collapse; font-size:13px; }
+    .table th, .table td { text-align:left; padding:8px 10px; border-top:1px solid var(--line); }
+    .scroll { max-height:260px; overflow:auto; }
+    .pill { display:inline-flex; align-items:center; padding:4px 8px; border-radius:999px; background:#f1f5f9; font-size:12px; }
+    .spacer { height:8px; }
+    .mt-2 { margin-top:8px; } .mt-3 { margin-top:12px; } .mt-4 { margin-top:16px; } .mt-6 { margin-top:24px; }
+    .mb-2 { margin-bottom:8px; } .mb-3 { margin-bottom:12px; } .mb-4 { margin-bottom:16px; }
+    .status-dot { width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; }
+    .gridbar { height:20px; border-radius:8px; overflow:hidden; position:relative; background:#f3f4f6; }
+    .seg { height:100%; display:inline-block; position:relative; }
+    .seg.diff::after { content:""; position:absolute; inset:0; background:rgba(239,68,68,0.35); }
+    .rowlabel { font-size:12px; color:#6b7280; width:7rem; }
+    .timeline-wrap { position:relative; }
+    .nowline { position:absolute; top:-4px; bottom:-4px; width:2px; background:#111827; }
+    /* Status colors */
+    .st-available { background:#10b981; }
+    .st-bathroom  { background:#ca8a04; }  /* deeper amber for contrast */
+    .st-break     { background:#f59e0b; }
+    .st-lunch     { background:#fb923c; }
+    .st-training  { background:#8b5cf6; }
+    .st-meeting   { background:#3b82f6; }
+    .st-offline   { background:#9ca3af; }
+    .error-banner { position:fixed; inset:auto 0 0 0; background:#fee2e2; color:#991b1b; padding:10px 14px; border-top:1px solid #fecaca; z-index:9999; display:none; }
+    .logo { height:40px; width:auto; border-radius:8px; }
+    @media (max-width: 880px) { .grid-2 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
+  <div id="error" class="error-banner"></div>
+
   <div class="header">
-    <div class="header-inner">
-      <div class="logo">ALLSTAR — Adherence</div>
-      <a class="btn" href="/hub.html">← Back to Hub</a>
-      <div id="me" class="me">Loading…</div>
+    <div class="header-inner container">
+      <div class='title'>ALLSTAR — Adherence</div>
+      <div id="hdr-meta" class="muted" style="margin-left:auto">Loading…</div>
+      <button id="btn-logout" class="btn" style="display:none">Logout</button>
     </div>
   </div>
 
-  <div class="container">
-    <div class="grid grid-2">
-      <!-- Left: Today -->
-      <div class="card">
-        <div class="title-row">
-          <div class="row">
-            <h1 class="h1">Today</h1>
-            <span id="today" class="pill"></span>
-          </div>
-          <div class="row">
-            <div class="stat-big" id="adhPct">100%</div>
-            <div class="stat-sub" id="adhBreakdown">in: 0m · out: 0m</div>
-          </div>
-        </div>
+  <div id="app" class="container" style="padding-top:16px;"></div>
 
-        <div id="bars" class="timeline-wrap" style="margin-top:6px"></div>
+<script>
+// ==========================
+// SAME-ORIGIN API HELPERS
+// ==========================
+async function me(){
+  try{
+    // Your whoami returns { authed:true, me:{ id, username, role, ... } }
+    const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store' });
+    if (!r.ok) return null;
+    const data = await r.json().catch(()=>null);
+    return data?.me || data || null;
+  }catch{ return null; }
+}
 
-        <div class="card" style="margin-top:16px">
-          <div class="row" style="justify-content:space-between">
-            <h2 class="h2">Set status</h2>
-            <div class="small muted mono" id="since">Status: — · 00:00:00</div>
-          </div>
-          <div class="btns" id="statusBtns" style="margin-top:10px"></div>
+async function listUsers(){ const r=await fetch('/api/users', { credentials:'include' }); if(!r.ok) throw new Error('users '+r.status); return r.json(); }
+async function createUser(username,password,role){ const r=await fetch('/api/users',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password,role})}); if(!r.ok) throw new Error('create '+r.status); return r.json(); }
+async function patchUser(id,patch){ const r=await fetch('/api/users/'+id,{ method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)}); if(!r.ok) throw new Error('patch '+r.status); return r.json(); }
+async function deleteUserApi(id){ const r=await fetch('/api/users/'+id,{ method:'DELETE', credentials:'include' }); if(!r.ok) throw new Error('delete '+r.status); return true; }
 
-          <div style="margin-top:14px">
-            <div class="h2" style="margin-bottom:6px">Recent switches</div>
-            <div id="recent" class="list small"></div>
-          </div>
-        </div>
-      </div>
+async function getSchedule(user,date){ const q=new URLSearchParams({user,date}).toString(); const r=await fetch('/api/schedules?'+q,{ credentials:'include' }); if(!r.ok) throw new Error('schedules '+r.status); return r.json(); }
+async function saveSchedule(user,date,blocks){ const r=await fetch('/api/schedules',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username:user, date, blocks }) }); if(!r.ok) throw new Error('save '+r.status); return r.json(); }
 
-      <!-- Right: My overview (fast glance) -->
-      <div class="card">
-        <div class="title-row">
-          <h2 class="h2">My Overview</h2>
-          <span class="muted small" id="lastSync">—</span>
-        </div>
-        <div class="small muted">Live adherence and timeline update every second; server sync every 15s.</div>
-        <div id="aux" class="small" style="margin-top:12px"></div>
-      </div>
-    </div>
-  </div>
+async function postEvent(status,ts){ const r=await fetch('/api/events',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ts?{status,ts}:{status}) }); if(!r.ok) throw new Error('event '+r.status); return r.json(); }
+async function listEvents(user,from,to){ const q=new URLSearchParams({user,from,to}).toString(); const r=await fetch('/api/events?'+q,{ credentials:'include' }); if(!r.ok) throw new Error('events '+r.status); return r.json(); }
 
-  <script>
-  // -------- CONFIG / STATUS SET --------
-  const STATUS = [
-    { key:'available', label:'Available', cls:'st-available' },
-    { key:'bathroom',  label:'Bathroom',  cls:'st-bathroom'  },
-    { key:'break',     label:'Break',     cls:'st-break'     },
-    { key:'lunch',     label:'Lunch',     cls:'st-lunch'     },
-    { key:'training',  label:'Training',  cls:'st-training'  },
-    { key:'meeting',   label:'Meeting',   cls:'st-meeting'   },
-    { key:'offline',   label:'Offline',   cls:'st-offline'   },
-  ];
-  const STATUS_MAP = Object.fromEntries(STATUS.map(s=>[s.key,s]));
+// ---------- utils ----------
+function qs(sel, el){ return (el||document).querySelector(sel); }
+function el(tag, attrs, ...children){ const n=document.createElement(tag); if(attrs) Object.keys(attrs).forEach(k=>{ if(k==='class') n.className=attrs[k]; else if(k==='style') Object.assign(n.style, attrs[k]); else if(k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]); else n.setAttribute(k, attrs[k]); }); children.flat().forEach(c=>{ if(c==null) return; if(c.nodeType) n.appendChild(c); else n.appendChild(document.createTextNode(String(c))); }); return n; }
+function pad(n){ return String(n).padStart(2,'0'); }
+function isoDate(d){ const dt=(d instanceof Date)?d:new Date(d); return dt.toISOString().slice(0,10); }
+function toHM(m){ const h=Math.floor(m/60), mm=m%60; return pad(h)+':'+pad(mm); }
+function fmtDur(mins){ if(mins<60) return mins+'m'; const h=Math.floor(mins/60), m=mins%60; return h+'h '+(m?m+'m':''); }
+function fmtTS(ms){ const d=new Date(ms); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+function showError(msg){ const b=qs('#error'); if(!b) return; b.style.display='block'; b.textContent='⚠️ '+msg; console.error('[Allstar]', msg); }
 
-  // -------- API HELPERS --------
-  async function api(path, init={}){
-    const res = await fetch(path, { credentials:'include', cache:'no-store', ...init });
-    if (res.status===204) return null;
-    const ct = res.headers.get('content-type')||'';
-    const body = ct.includes('application/json') ? await res.json() : await res.text();
-    if (!res.ok) throw new Error((body && body.error) || ('HTTP '+res.status));
-    return body;
+const STATUSES = [
+  { key:'available', label:'Available', color:'st-available' },
+  { key:'bathroom',  label:'Bathroom',  color:'st-bathroom'  },
+  { key:'break',     label:'Break',     color:'st-break'     },
+  { key:'lunch',     label:'Lunch',     color:'st-lunch'     },
+  { key:'training',  label:'Training',  color:'st-training'  },
+  { key:'meeting',   label:'Meeting',   color:'st-meeting'   },
+  { key:'offline',   label:'Offline',   color:'st-offline'   },
+];
+function statusByKey(k){ return STATUSES.find(s=>s.key===k) || { label:k, color:'st-offline' }; }
+function getComputedStyleColor(cls){ const map={ 'st-available':'#10b981','st-bathroom':'#ca8a04','st-break':'#f59e0b','st-lunch':'#fb923c','st-training':'#8b5cf6','st-meeting':'#3b82f6','st-offline':'#9ca3af' }; return map[cls]||'#9ca3af'; }
+
+// ---------- state ----------
+let STATE = { me:null, timers:[] };
+function clearTimers(){ STATE.timers.forEach(id=>clearInterval(id)); STATE.timers=[]; }
+
+// ---------- header ----------
+function renderHeader(){
+  const meta=qs('#hdr-meta'); const btn=qs('#btn-logout');
+  if(STATE.me){
+    meta.textContent=STATE.me.username+' · '+STATE.me.role;
+    btn.style.display='inline-flex';
+    btn.onclick=()=>{ try{ /* simple sign out */ document.cookie='allstar_at=; Path=/; Max-Age=0; Secure; SameSite=Lax'; document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax'; document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax'; }finally{ location.href='/' } };
+  } else {
+    meta.textContent='Not signed in';
+    btn.style.display='none';
+    btn.onclick=null;
   }
-  const apiWhoami   = ()=> api('/api/whoami');
-  const apiSchedule = (u,d)=> api(`/api/schedules?user=${encodeURIComponent(u)}&date=${encodeURIComponent(d)}`);
-  const apiEvents   = (u,from,to)=> api(`/api/events?user=${encodeURIComponent(u)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-  const apiPostEvent= (status)=> api('/api/events',{ method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ status }) });
+}
 
-  // -------- UTIL --------
-  const pad=n=>String(n).padStart(2,'0');
-  const toISODate = (d)=> (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10);
-  const fmtDur = (mins)=> (mins<60) ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60? (mins%60+'m') : ''}`;
-  const fmtTS = (ms)=>{ const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+// ---------- AGENT VIEW ----------
+function renderAgentView(user){
+  const app=qs('#app'); clearTimers(); app.innerHTML='';
+  const date=isoDate(new Date());
+  const wrap=el('div',{class:'grid grid-2'});
 
-  function statusLabel(k){ return (STATUS_MAP[k]||{}).label || k || '—'; }
-  function statusClass(k){ return (STATUS_MAP[k]||{}).cls || 'st-offline'; }
+  // left: Today card
+  const todayCard=el('div',{class:'card'});
+  const titleRow=el('div',{class:'row-between mb-3'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
+  todayCard.appendChild(titleRow);
+  const timelines=el('div'); todayCard.appendChild(timelines);
+  const statsRow=el('div',{class:'row mt-3'}, el('div',{style:{fontWeight:'800', fontSize:'32px'}}, '100%'), el('div',{class:'muted'}, 'in: 0m · out: 0m'));
+  todayCard.appendChild(statsRow);
+  wrap.appendChild(todayCard);
 
-  function minuteOfDay(msUTC){ const d=new Date(msUTC); return d.getUTCHours()*60 + d.getUTCMinutes(); }
+  // right: Set status
+  const statusCard=el('div',{class:'card'}); statusCard.appendChild(el('h3',{},'Set status'));
+  const btns=el('div',{class:'row', style:{flexWrap:'wrap'}});
+  STATUSES.forEach(s=>{
+    btns.appendChild(el('button',{class:'btn', style:{color:'#fff', background:getComputedStyleColor(s.color)}, onclick:()=> setStatus(s.key)}, s.label));
+  });
+  statusCard.appendChild(btns);
+  const rec=el('div',{class:'mt-4'}, el('h4',{},'Recent switches'), el('div',{id:'recent', class:'scroll'}));
+  statusCard.appendChild(rec);
+  wrap.appendChild(statusCard);
+  app.appendChild(wrap);
 
-  // Compute adherence up to "now" (UTC minutes), only where schedule defines expected
-  function calcAdherence(dateISO, blocks, events){
-    if (!blocks.length) return { pct:100, inMin:0, outMin:0, byStatus:{}, lines:[] };
+  // local holders used by update
+  const SCHEDULE={ blocks:[] }; const EVENTS={ list:[] };
 
-    const dayStart = Date.parse(dateISO + 'T00:00:00Z');
-    const startMin = Math.min(...blocks.map(b=>b.start));
-    const endMin   = Math.max(...blocks.map(b=>b.end));
-    const nowMin   = Math.min(endMin, Math.max(startMin, minuteOfDay(Date.now())));
+  // fetch initial
+  (async()=>{
+    try{
+      const s=await getSchedule(user.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
+      const ev=await listEvents(user.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
+      updateAgentUI();
+    }catch(e){ showError('Failed to load schedule/events'); }
+  })();
 
-    // walk events → (minute -> current status)
-    const evSorted = [...events].sort((a,b)=> Number(a.ts)-Number(b.ts));
-    let idx=0, cur = evSorted.length ? evSorted[0].status : null;
+  // timers
+  STATE.timers.push(setInterval(updateAgentUI, 1000));
+  STATE.timers.push(setInterval(async()=>{ try{
+    const s=await getSchedule(user.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
+    const ev=await listEvents(user.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
+  }catch(e){} }, 15000));
 
-    // timeline lines & totals by status (actual)
-    const lines=[], byStatus={};
-    let spanStatus = cur, spanStart = startMin;
+  function setStatus(status){ const ev={ status, ts: Date.now() }; EVENTS.list.push(ev); updateAgentUI(); postEvent(status).catch(()=>{}); }
 
-    let inMin=0, outMin=0;
-    for (let m=startMin; m<=nowMin; m++){
-      const ms = dayStart + m*60000;
-      while (idx+1 < evSorted.length && Number(evSorted[idx+1].ts) <= ms) {
-        // close previous span at this minute
-        if (spanStatus && spanStart < m){
-          const dur = m - spanStart;
-          byStatus[spanStatus] = (byStatus[spanStatus]||0) + dur;
-          lines.push(`${fmtTS(dayStart + spanStart*60000)} ${statusLabel(spanStatus)} ${fmtDur(dur)}`);
-        }
-        idx++; cur = evSorted[idx].status;
-        spanStatus = cur; spanStart = m;
-      }
-      // adherence minute-by-minute
-      const exp = blocks.find(b=> m>=b.start && m<b.end);
-      if (!exp) continue; // unscheduled minutes don't count
-      if (cur && cur===exp.status) inMin++;
-      else outMin++;
-    }
-    // close last span to endMin for display purposes
-    if (spanStatus && spanStart < endMin){
-      const dur = (Math.max(nowMin,spanStart)) - spanStart;
-      if (dur > 0) {
-        byStatus[spanStatus] = (byStatus[spanStatus]||0) + dur;
-        lines.push(`${fmtTS(dayStart + spanStart*60000)} ${statusLabel(spanStatus)} ${fmtDur(dur)}`);
-      }
-    }
-    const total = inMin + outMin;
-    const pct = total ? (inMin/total*100) : 100;
-    return { pct, inMin, outMin, byStatus, lines };
+  function updateAgentUI(){
+    // bars
+    timelines.innerHTML='';
+    const bars = buildDualBars(date, SCHEDULE.blocks, EVENTS.list);
+    timelines.appendChild(bars);
+
+    // adherence calc
+    const x=calcAdherence(date, SCHEDULE.blocks, EVENTS.list);
+    statsRow.firstChild.textContent = Math.round(x.pct)+'%';
+    statsRow.lastChild.textContent = 'in: '+fmtDur(x.inMin)+' · out: '+fmtDur(x.outMin);
+
+    // recent list
+    const r=qs('#recent', statusCard); r.innerHTML='';
+    const last=EVENTS.list.slice(-10).reverse();
+    last.forEach(ev=>{
+      r.appendChild(
+        el('div',{class:'row-between', style:{borderTop:'1px solid var(--line)', padding:'6px 0'}},
+          el('div',{}, el('span',{class:'status-dot '+statusByKey(ev.status).color}),' ', statusByKey(ev.status).label),
+          el('div',{class:'muted'}, fmtTS(ev.ts))
+        )
+      );
+    });
   }
+}
 
-  // Build the two bars + a red overlay on Actual segments that differ from the scheduled status
-  function buildDualBars(dateISO, blocks, events){
-    const wrap = document.createElement('div');
-    wrap.className='timeline-wrap';
+// ---------- ADMIN VIEW ----------
+function renderAdminView(meUser){
+  const app=qs('#app'); clearTimers(); app.innerHTML='';
 
-    if (!blocks.length){
-      wrap.innerHTML = `<div class="muted small">No schedule for today.</div>`;
-      return wrap;
+  // Agent summary at top
+  (function mountMyAgentCard(){
+    const date=isoDate(new Date());
+    const SCHEDULE={blocks:[]}, EVENTS={list:[]};
+    const card=el('div',{class:'card'});
+    const title=el('div',{class:'row-between mb-3'}, el('h2',{},'Today'), el('div',{class:'muted'}, date));
+    const bars=el('div');
+    const stats=el('div',{class:'row mt-3'}, el('div',{style:{fontWeight:'800', fontSize:'28px'}}, '100%'), el('div',{class:'muted'}, 'in: 0m · out: 0m'));
+    card.appendChild(title); card.appendChild(bars); card.appendChild(stats);
+    app.appendChild(card);
+
+    async function refresh(){ try{
+      const s=await getSchedule(meUser.username, date); SCHEDULE.blocks=(s&&s.blocks)||[];
+      const ev=await listEvents(meUser.username, date, date); EVENTS.list=Array.isArray(ev)?ev:[];
+      redraw();
+    }catch(e){} }
+    function redraw(){
+      bars.innerHTML=''; bars.appendChild(buildDualBars(date,SCHEDULE.blocks,EVENTS.list));
+      const d=calcAdherence(date,SCHEDULE.blocks,EVENTS.list);
+      stats.firstChild.textContent=Math.round(d.pct)+'%';
+      stats.lastChild.textContent='in: '+fmtDur(d.inMin)+' · out: '+fmtDur(d.outMin);
     }
+    refresh();
+    STATE.timers.push(setInterval(redraw,1000));
+    STATE.timers.push(setInterval(refresh,15000));
+  })();
 
-    const dayStart = Date.parse(dateISO + 'T00:00:00Z');
-    const startMin = Math.min(...blocks.map(b=>b.start));
-    const endMin   = Math.max(...blocks.map(b=>b.end));
-    const total    = endMin - startMin || 1;
+  // Admin controls
+  const adminCard=el('div',{class:'card mt-4'});
+  const header=el('div',{class:'row', style:{flexWrap:'wrap', gap:'12px', alignItems:'flex-end'}},
+    el('div',{}, el('div',{class:'label'},'Agent'), el('select',{id:'selUser', class:'field', style:{minWidth:'200px'}}, el('option',{value:''},'Pick a user'))),
+    el('div',{}, el('div',{class:'label'},'Date'), el('input',{id:'day', class:'field', type:'date', value:isoDate(new Date())})),
+    el('div',{style:{marginLeft:'auto'}},
+      el('button',{id:'addBlock', class:'btn btn-brand'},'+ Block'),
+      ' ',
+      el('button',{id:'saveSched', class:'btn', disabled:true},'Save to Server')
+    )
+  );
+  adminCard.appendChild(header);
 
-    function blocksToSegs() {
-      return blocks.map(b => ({ status:b.status, start:b.start, width:b.end-b.start }));
-    }
+  const grid=el('div',{class:'grid grid-2 mt-4'});
+  const schedCard=el('div',{class:'card'}, el('h3',{},'Schedule Blocks'), el('div',{id:'blocks'}));
+  const dayCard=el('div',{class:'card'},
+    el('h3',{},'Daily Overview'),
+    el('div',{id:'bars'}),
+    el('div',{id:'pct', class:'mt-3 muted'}),
+    el('div',{class:'mt-3'}, el('h4',{},'AUX breakdown (durations)'), el('ul',{id:'byStatus'})),
+    el('div',{class:'mt-3'}, el('h4',{},'Timeline (IMED style)'), el('div',{id:'lines', class:'scroll card'}))
+  );
+  grid.appendChild(schedCard); grid.appendChild(dayCard); adminCard.appendChild(grid);
+  app.appendChild(adminCard);
 
-    function eventsToSegs() {
-      const segs=[];
-      const sorted = [...events].sort((a,b)=> Number(a.ts)-Number(b.ts));
-      let cur = sorted.length ? sorted[0].status : null;
-      let cursor = startMin;
-      for (let i=0; i<sorted.length; i++){
-        const p = Math.max(startMin, Math.min(endMin, Math.floor((Number(sorted[i].ts)-dayStart)/60000)));
-        if (p>cursor){ segs.push({ status:cur, start:cursor, width:p-cursor }); }
-        cursor = p; cur = sorted[i].status;
-      }
-      if (cursor<endMin) segs.push({ status:cur, start:cursor, width:endMin-cursor });
-      return segs;
-    }
+  // Users card (if your /api/users proxy exists; if not, this stays harmless)
+  const usersCard=el('div',{class:'card mt-4'},
+    el('h3',{},'Users'),
+    el('div',{class:'row', style:{flexWrap:'wrap', gap:'8px', alignItems:'flex-end', marginBottom:'12px'}},
+      el('input',{id:'newU', class:'field', placeholder:'Username', style:{maxWidth:'200px'}}),
+      el('input',{id:'newP', class:'field', type:'password', placeholder:'Temp password', value:'Welcome123', style:{maxWidth:'200px'}}),
+      el('select',{id:'newR', class:'field', style:{maxWidth:'140px'}},
+        el('option',{value:'AGENT'},'AGENT'),
+        el('option',{value:'ADMIN'},'ADMIN')
+      ),
+      el('button',{id:'createU', class:'btn btn-brand'},'Create')
+    ),
+    el('div',{id:'usersTblWrap'})
+  );
+  app.appendChild(usersCard);
 
-    const proj = blocksToSegs();
-    const act  = eventsToSegs();
+  const DAY={ value: isoDate(new Date()) }; const SELECTED={ value:'' }; const BLOCKS={ list:[] }; const EVENTS={ list:[] }; const USERS={ list:[] };
 
-    function row(segs, compare){
-      const bar = document.createElement('div'); bar.className='gridbar';
-      segs.forEach(s=>{
-        const w = (s.width/total*100).toFixed(4)+'%';
-        const div = document.createElement('div');
-        let diff=false;
-        if (compare){
-          // probe mid-point to decide mismatch; only count if schedule expects something
-          const probe = s.start + Math.max(1, Math.floor(s.width/2));
-          const exp = blocks.find(b => probe>=b.start && probe<b.end);
-          diff = !!(exp && s.status && exp.status !== s.status) || (!!exp && !s.status);
-        }
-        div.className = `seg ${s.status ? statusClass(s.status) : 'st-offline'} ${compare && diff ? 'diff' : ''}`;
-        div.style.width = w;
-        bar.appendChild(div);
-      });
-      return bar;
-    }
-
-    const top = document.createElement('div'); top.className='bar-row';
-    top.appendChild(el('div',{class:'rowlabel'},'Projected'));
-    top.appendChild(row(proj,false));
-    wrap.appendChild(top);
-
-    const bottom = document.createElement('div'); bottom.className='bar-row';
-    bottom.appendChild(el('div',{class:'rowlabel'},'Actual'));
-    bottom.appendChild(row(act,true));
-    wrap.appendChild(bottom);
-
-    // nowline
-    const now = Date.now();
-    const nowMin = Math.floor((now - dayStart)/60000);
-    const nowPct = Math.max(0, Math.min(100, ((nowMin-startMin)/(total))*100));
-    const nl = document.createElement('div');
-    nl.className='nowline';
-    nl.style.left = nowPct+'%';
-    bottom.lastChild.appendChild(nl);
-
-    return wrap;
-  }
-
-  // tiny element helper
-  function el(tag, attrs, ...children){
-    const n=document.createElement(tag);
-    if (attrs) for (const [k,v] of Object.entries(attrs)){
-      if (k==='class') n.className=v;
-      else if (k==='style') Object.assign(n.style,v);
-      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
-      else n.setAttribute(k,v);
-    }
-    children.flat().forEach(c=> n.appendChild(c.nodeType?c:document.createTextNode(String(c))));
-    return n;
-  }
-
-  // -------- PAGE STATE --------
-  const STATE = {
-    me:null,
-    date: toISODate(new Date()),
-    schedule: [],   // [{status, start, end}]
-    events: [],     // [{status, ts}]
-    timers: []
-  };
-  function clearTimers(){ STATE.timers.forEach(id=>clearInterval(id)); STATE.timers=[]; }
-
-  // -------- RENDER --------
-  function renderHeader(){
-    const meEl = document.getElementById('me');
-    meEl.textContent = STATE.me?.username ? `${STATE.me.username} · ${STATE.me.role}` : 'Signed in';
-    document.getElementById('today').textContent = STATE.date;
-  }
-
-  function renderBars(){
-    const host = document.getElementById('bars');
-    host.innerHTML='';
-    host.appendChild(buildDualBars(STATE.date, STATE.schedule, STATE.events));
-  }
-
-  function renderStats(){
-    const d = calcAdherence(STATE.date, STATE.schedule, STATE.events);
-    document.getElementById('adhPct').textContent = Math.round(d.pct)+'%';
-    document.getElementById('adhBreakdown').textContent = `in: ${fmtDur(d.inMin)} · out: ${fmtDur(d.outMin)}`;
-
-    // AUX breakdown
-    const aux = document.getElementById('aux');
-    aux.innerHTML = '<div class="h2" style="margin:0 0 6px">AUX breakdown (actual)</div>';
-    if (!Object.keys(d.byStatus).length) {
-      aux.innerHTML += '<div class="muted small">No activity yet.</div>';
-    } else {
-      for (const [k,mins] of Object.entries(d.byStatus)){
-        const row = el('div',{class:'row',style:{margin:'4px 0'}},
-          el('span',{class:'dot',style:{background:getComputedStyleColor(statusClass(k))}}),
-          el('span',{}, `${statusLabel(k)} — ${fmtDur(mins)}`)
-        );
-        aux.appendChild(row);
-      }
-    }
-
-    // live "since"
-    const last = [...STATE.events].sort((a,b)=>Number(b.ts)-Number(a.ts))[0];
-    if (last){
-      const sinceEl = document.getElementById('since');
-      const tick = ()=>{
-        const secs = Math.floor((Date.now() - Number(last.ts))/1000);
-        const h=pad(Math.floor(secs/3600)), m=pad(Math.floor((secs%3600)/60)), s=pad(secs%60);
-        sinceEl.textContent = `Status: ${statusLabel(last.status)} · ${h}:${m}:${s}`;
-      };
-      tick();
-    } else {
-      document.getElementById('since').textContent = 'Status: — · 00:00:00';
-    }
-  }
-
-  function renderRecent(){
-    const host = document.getElementById('recent');
-    host.innerHTML='';
-    const items = [...STATE.events].sort((a,b)=>Number(b.ts)-Number(a.ts)).slice(0,12);
-    if (!items.length){
-      host.innerHTML = '<div class="muted small" style="padding:8px 0">No switches yet.</div>';
-      return;
-    }
-    items.forEach(ev=>{
-      const row = el('div',{class:'li'},
-        el('div',{}, el('span',{class:'dot',style:{background:getComputedStyleColor(statusClass(ev.status))}}), statusLabel(ev.status)),
-        el('div',{class:'muted mono'}, fmtTS(Number(ev.ts)))
+  function renderBlocksUI(){
+    const host=qs('#blocks'); host.innerHTML='';
+    BLOCKS.list.forEach((b,i)=>{
+      const row=el('div',{class:'row', style:{marginBottom:'8px'}},
+        el('select',{class:'field', style:{maxWidth:'160px'}, onchange:e=>{ b.status=e.target.value; } }, ...STATUSES.map(s=> el('option',{ value:s.key, selected:s.key===b.status }, s.label))),
+        el('input',{type:'time', class:'field', style:{maxWidth:'140px'}, value:toHM(b.start), onchange:e=>{ const h=parseInt(e.target.value.slice(0,2)), m=parseInt(e.target.value.slice(3,5)); b.start=h*60+m; } }), 'to',
+        el('input',{type:'time', class:'field', style:{maxWidth:'140px'}, value:toHM(b.end), onchange:e=>{ const h=parseInt(e.target.value.slice(0,2)), m=parseInt(e.target.value.slice(3,5)); b.end=h*60+m; } }),
+        el('button',{class:'btn', onclick:()=>{ BLOCKS.list.splice(i,1); renderBlocksUI(); updateDayUI(); } },'Remove')
       );
       host.appendChild(row);
     });
   }
-
-  function renderStatusButtons(){
-    const host = document.getElementById('statusBtns');
-    host.innerHTML='';
-    STATUS.forEach(s=>{
-      const b = document.createElement('button');
-      b.className = `status-btn ${s.cls}`;
-      b.textContent = s.label;
-      b.onclick = async ()=>{
-        // optimistic local add
-        STATE.events.push({ status:s.key, ts: Date.now() });
-        renderBars(); renderStats(); renderRecent();
-        try{ await apiPostEvent(s.key); }catch(e){ console.warn('postEvent failed', e); }
-      };
-      host.appendChild(b);
-    });
+  function updateDayUI(){
+    const bars=qs('#bars'); bars.innerHTML=''; bars.appendChild(buildDualBars(DAY.value, BLOCKS.list, EVENTS.list));
+    const d=calcAdherence(DAY.value, BLOCKS.list, EVENTS.list);
+    qs('#pct').textContent = 'Adherence: '+Math.round(d.pct)+'% · in '+fmtDur(d.inMin)+' / out '+fmtDur(d.outMin);
+    const by=qs('#byStatus'); by.innerHTML=''; Object.keys(d.byStatus).forEach(k=> by.appendChild(el('li',{}, statusByKey(k).label+': '+fmtDur(d.byStatus[k]))));
+    const lines=qs('#lines'); lines.innerHTML=''; (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--line)'}}, t)));
+  }
+  function updateMonthButtons(){
+    const dt=new Date(DAY.value+'T00:00:00'); const y=dt.getUTCFullYear(); const m=('0'+(dt.getUTCMonth()+1)).slice(-2);
+    const monthStart=`${y}-${m}-01`; const monthEnd=new Date(Date.UTC(y, parseInt(m), 0)).toISOString().slice(0,10);
+    function dl(path,name){ fetch(path,{credentials:'include'}).then(r=>r.blob()).then(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); }); }
+    // Export endpoints are on AUTH worker. Proxy them if you added /api/export/*; otherwise use AUTH_BASE via a same-origin function.
+    // If you have /api/export set up, switch the URLs below to /api/export/...
+    qs('#dle')?.remove(); qs('#dls')?.remove(); qs('#dla')?.remove();
+    const dlRow=el('div',{class:'mt-4'},
+      el('button',{id:'dle', class:'btn'},'Download Events (month)'),
+      ' ',
+      el('button',{id:'dls', class:'btn'},'Download Schedules (month)'),
+      ' ',
+      el('button',{id:'dla', class:'btn'},'Download Adherence (month)')
+    );
+    adminCard.appendChild(dlRow);
+    qs('#dle').onclick=()=>dl(`/api/export/events?from=${monthStart}&to=${monthEnd}`, `events_${y}${m}.csv`);
+    qs('#dls').onclick=()=>dl(`/api/export/schedules?from=${monthStart}&to=${monthEnd}`, `schedules_${y}${m}.csv`);
+    qs('#dla').onclick=()=>dl(`/api/export/adherence?from=${monthStart}&to=${monthEnd}`, `adherence_${y}${m}.csv`);
   }
 
-  function getComputedStyleColor(cls){
-    const map={
-      'st-available':'var(--st-available)',
-      'st-bathroom':'var(--st-bathroom)',
-      'st-break':'var(--st-break)',
-      'st-lunch':'var(--st-lunch)',
-      'st-training':'var(--st-training)',
-      'st-meeting':'var(--st-meeting)',
-      'st-offline':'var(--st-offline)',
-    };
-    // Compute to actual value:
-    const probe = document.createElement('div');
-    probe.style.display='none';
-    probe.className=cls;
-    document.body.appendChild(probe);
-    const c = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    // fallback to CSS var if computed isn't resolved
-    return c || map[cls] || '#9ca3af';
-  }
-
-  // -------- BOOT --------
-  (async function init(){
-    try{
-      const who = await apiWhoami();
-      if (!who?.authed && who?.me) { STATE.me = who.me; }
-      if (who?.me) STATE.me = who.me;
-      // support both shapes: {authed:true,me:{...}} or direct {id,username,role}
-      if (!STATE.me?.username && who?.username) STATE.me = who;
-
-      if (!STATE.me?.username) { location.replace('/'); return; }
-      renderHeader();
-
-      document.getElementById('today').textContent = STATE.date;
-
-      // load schedule + events
-      const [sched, ev] = await Promise.all([
-        apiSchedule(STATE.me.username, STATE.date),
-        apiEvents(STATE.me.username, STATE.date, STATE.date),
-      ]);
-
-      // Normalize schedule shape
-      const blocks = (sched?.blocks||[]).map(b=>({
-        status: b.status,
-        start:  typeof b.start === 'number' ? b.start : hhmmToMinute(b.start),
-        end:    typeof b.end   === 'number' ? b.end   : hhmmToMinute(b.end),
-      })).sort((a,b)=> a.start-b.start);
-
-      STATE.schedule = blocks;
-      STATE.events   = Array.isArray(ev) ? ev : [];
-
-      renderStatusButtons();
-      renderBars(); renderStats(); renderRecent();
-      document.getElementById('lastSync').textContent = 'Synced now';
-
-      // 1s UI tick
-      STATE.timers.push(setInterval(()=>{
-        renderBars(); renderStats();
-      }, 1000));
-
-      // 15s data refresh
-      STATE.timers.push(setInterval(async()=>{
-        try{
-          const [sched2, ev2] = await Promise.all([
-            apiSchedule(STATE.me.username, STATE.date),
-            apiEvents(STATE.me.username, STATE.date, STATE.date),
-          ]);
-          STATE.schedule = (sched2?.blocks||[]).map(b=>({
-            status:b.status,
-            start: typeof b.start === 'number' ? b.start : hhmmToMinute(b.start),
-            end:   typeof b.end   === 'number' ? b.end   : hhmmToMinute(b.end),
-          })).sort((a,b)=> a.start-b.start);
-          STATE.events = Array.isArray(ev2) ? ev2 : [];
-          document.getElementById('lastSync').textContent =
-            'Synced ' + new Date().toLocaleTimeString();
-        }catch(e){ /* never hard-fail UI */ }
-      }, 15000));
-
-    }catch(e){
-      console.error(e);
-      location.replace('/');
-    }
+  (async()=>{
+    try{ USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); }catch(e){}
   })();
 
-  function hhmmToMinute(s){
-    if (typeof s === 'number') return s|0;
-    const [h,m] = String(s||'').split(':').map(Number);
-    return ((h|0)*60 + (m|0))|0;
+  function refreshUsersUI(){
+    const sel=qs('#selUser'); sel.innerHTML='<option value="">Pick a user</option>';
+    (USERS.list||[]).forEach(u=> sel.appendChild(el('option',{value:u.username}, u.username+' · '+u.role)));
   }
-  </script>
+
+  // react to selections
+  qs('#selUser').onchange = async (e)=>{
+    SELECTED.value=e.target.value; qs('#saveSched').disabled=!SELECTED.value;
+    if(!SELECTED.value) return;
+    try{
+      const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
+      const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
+      renderBlocksUI(); updateDayUI(); updateMonthButtons();
+    }catch(e){ showError('Failed to load'); }
+  };
+  qs('#day').onchange = async (e)=>{
+    DAY.value=e.target.value; if(!SELECTED.value) return;
+    try{
+      const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
+      const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
+      renderBlocksUI(); updateDayUI(); updateMonthButtons();
+    }catch(e){}
+  };
+  qs('#addBlock').onclick = ()=>{ BLOCKS.list.push({ status:'available', start:480, end:540 }); renderBlocksUI(); updateDayUI(); };
+  qs('#saveSched').onclick = async ()=>{
+    try{ await saveSchedule(SELECTED.value, DAY.value, BLOCKS.list); alert('Saved'); }
+    catch(e){ alert('Save failed: '+(e.message||e)); }
+  };
+
+  qs('#createU').onclick = async ()=>{
+    const u=qs('#newU').value.trim(); const p=qs('#newP').value; const r=qs('#newR').value;
+    if(!u||!p) return alert('Enter username and password');
+    try{
+      const res = await createUser(u,p,r);
+      if(res && res.username){
+        USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable();
+        qs('#newU').value=''; qs('#newP').value='Welcome123'; qs('#newR').value='AGENT';
+      } else alert('Create failed');
+    }catch(e){ alert('Create failed: '+(e.message||e)); }
+  };
+
+  function renderUsersTable(){
+    const wrap=document.getElementById('usersTblWrap'); wrap.innerHTML='';
+    const t=el('table',{class:'table'});
+    t.appendChild(el('thead',{}, el('tr',{}, el('th',{},'Username'), el('th',{},'Role'), el('th',{},'Force Reset'), el('th',{}))));
+    const tb=el('tbody');
+    (USERS.list||[]).forEach(u=>{
+      const tr=el('tr',{},
+        el('td',{}, u.username),
+        el('td',{}, u.role),
+        el('td',{}, (function(){
+          const lab=el('label',{class:'row'},
+            (function(){
+              const c=el('input',{type:'checkbox'}); c.checked=!!u.must_change_password;
+              c.onchange=async()=>{ try{ await patchUser(u.id, { mustChangePassword: !u.must_change_password }); USERS.list=await listUsers()||[]; renderUsersTable(); }catch(e){ alert('Update failed'); } };
+              return c;
+            })(),
+            el('span',{class:'muted'},'must change on next login')
+          );
+          return lab;
+        })()),
+        el('td',{}, (function(){ const b=el('button',{class:'btn'},'Delete'); b.onclick=async()=>{ if(!confirm('Delete '+u.username+'?')) return; try{ await deleteUserApi(u.id); USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); }catch(e){ alert('Delete failed'); } }; return b; })())
+      );
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    wrap.appendChild(t);
+  }
+
+  updateMonthButtons();
+}
+
+// ---------- shared visuals ----------
+function buildDualBars(date, scheduleBlocks, events){
+  const wrap=el('div',{class:'timeline-wrap'});
+  const mins = (scheduleBlocks && scheduleBlocks.length) ? [Math.min(...scheduleBlocks.map(b=>b.start)), Math.max(...scheduleBlocks.map(b=>b.end))] : [480,1020];
+  const startMin=mins[0], endMin=mins[1]; const total=endMin-startMin||1;
+  const dayStart=Date.parse(date+'T00:00:00');
+
+  function blocksToSegs(blocks){ return blocks.map(b=>({ status:b.status, start:b.start, width:(b.end-b.start) })); }
+  function eventsToSegs(events){
+    const segs=[]; let cur=events.length?events[0].status:null;
+    const pts=events.map(ev=> Math.max(startMin, Math.min(endMin, Math.floor((Number(ev.ts)-dayStart)/60000))));
+    let cursor=startMin;
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i]; if(p>cursor) segs.push({status:cur,start:cursor,width:p-cursor}); cursor=p; cur=events[i].status;
+    }
+    if(cursor<endMin) segs.push({status:cur,start:cursor,width:endMin-cursor}); return segs;
+  }
+  const proj=blocksToSegs(scheduleBlocks||[]); const act=eventsToSegs(events||[]);
+  function row(segs, compare){
+    const bar=el('div',{class:'gridbar'});
+    segs.forEach(s=>{
+      const w=(s.width/total*100).toFixed(4)+'%';
+      let diff=false;
+      if(compare){
+        const probe=s.start+Math.max(1,Math.floor(s.width/2));
+        const exp=(scheduleBlocks||[]).find(b=> probe>=b.start && probe<b.end);
+        diff = !!(exp && s.status && exp.status!==s.status);
+      }
+      const seg=el('div',{class:'seg '+(s.status?statusByKey(s.status).color:'' ) + (compare && diff ? ' diff':''), style:{width:w}});
+      bar.appendChild(seg);
+    });
+    return bar;
+  }
+  wrap.appendChild(el('div',{class:'row', style:{marginBottom:'6px'}}, el('div',{class:'rowlabel'},'Projected'), el('div',{style:{flex:'1'}}, row(proj,false))));
+  wrap.appendChild(el('div',{class:'row'}, el('div',{class:'rowlabel'},'Actual'), el('div',{style:{flex:'1'}}, row(act,true))));
+  const now=Date.now(); const nowMin=Math.floor((now-dayStart)/60000); const nowPct=Math.max(0, Math.min(100, ((nowMin-startMin)/total)*100));
+  const nl=el('div',{class:'nowline', style:{left:nowPct+'%'}}); wrap.appendChild(nl); return wrap;
+}
+
+function calcAdherence(date, blocks, events){
+  if(!blocks||!blocks.length) return { pct:100, inMin:0, outMin:0, lines:[], byStatus:{} };
+  const dayStart=Date.parse(date+'T00:00:00'); const startMin=Math.min(...blocks.map(b=>b.start)); const endMin=Math.max(...blocks.map(b=>b.end));
+  let idx=0, cur=events.length?events[0].status:null, curStart=startMin; const lines=[]; const byStatus={};
+  function pushLine(st, sM, eM){
+    const startTS=dayStart + sM*60000; const dur=Math.max(0,eM-sM);
+    if(st){ lines.push(`${fmtTS(startTS)} ${statusByKey(st).label} ${fmtDur(dur)}`); byStatus[st]=(byStatus[st]||0)+dur; }
+  }
+  for(let m=startMin;m<=endMin;m++){
+    const ms=dayStart + m*60000;
+    if(idx+1<events.length && Number(events[idx+1].ts) <= ms){ pushLine(cur, curStart, m); idx++; cur=events[idx].status; curStart=m; }
+  }
+  pushLine(cur, curStart, endMin);
+
+  let inMin=0, outMin=0; idx=0; cur=events.length?events[0].status:null;
+  const nowMin=Math.min(Math.max(startMin, Math.floor((Date.now()-dayStart)/60000)), endMin);
+  for(let m=startMin;m<nowMin;m++){
+    const ms=dayStart + m*60000;
+    while(idx+1<events.length && Number(events[idx+1].ts) <= ms){ idx++; cur=events[idx].status; }
+    const expected=(blocks||[]).find(b=> m>=b.start && m<b.end);
+    if(!expected) continue;
+    if(!cur) outMin++; else if(cur===expected.status) inMin++; else outMin++;
+  }
+  const total=inMin+outMin; const pct = total? (inMin/total*100):100;
+  return { pct, inMin, outMin, lines, byStatus };
+}
+
+// ---------- boot ----------
+(async function init(){
+  try{
+    const m=await me();
+    if(!m || !m.username){ location.replace('/'); return; }
+    // Normalize role text
+    m.role = (m.role||'').toUpperCase();
+    STATE.me=m;
+  }catch(e){ /* if whoami fails, send to sign-in */ location.replace('/'); return; }
+  render();
+})();
+
+function render(){
+  renderHeader();
+  if(!STATE.me) return;
+  if(STATE.me.role==='ADMIN' || STATE.me.role==='SUPERADMIN') renderAdminView(STATE.me);
+  else renderAgentView(STATE.me);
+}
+</script>
 </body>
 </html>
