@@ -86,15 +86,31 @@
       if (r.status === 401) { location.replace('/'); return; }
       const me = await r.json().catch(()=>null);
 
-      // robust role normalization
-      const raw = (me?.role ?? '').toString().trim();
-      const roleKey = raw.toUpperCase();
-      const role = roleKey === 'SUPERADMIN' ? 'SUPERADMIN'
-                 : roleKey === 'ADMIN'      ? 'ADMIN'
-                 : roleKey === 'AGENT'      ? 'AGENT'
-                 : (raw || 'AGENT'); // never show "UNKNOWN"
+     // --- role display (no forced fallback to AGENT) ---
+const roleRaw = (me?.role ?? '').toString().trim();
+const roleUpper = roleRaw.toUpperCase();
 
-      const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN';
+// Badge class & admin gate decided case-insensitively
+const badgeClass = roleUpper === 'SUPERADMIN' ? 'role-super'
+                : roleUpper === 'ADMIN'      ? 'role-admin'
+                : 'role-agent';
+
+const isAdmin = roleUpper === 'ADMIN' || roleUpper === 'SUPERADMIN';
+
+// Use the raw server value for the label; if empty, show 'AGENT' instead of 'UNKNOWN'
+const roleLabel = roleRaw || 'AGENT';
+
+// Header identity + greeting
+document.getElementById('me').textContent = me?.username ? `${me.username} · ${roleLabel}` : 'Signed in';
+document.getElementById('welcomeName').textContent = me?.username ? `, ${escapeHTML(me.username)}` : '';
+
+// Role pill
+const roleLine = document.getElementById('roleLine');
+roleLine.innerHTML = `Role: <span class="rolepill ${badgeClass}" title="${escapeHTML(roleLabel)}">${escapeHTML(roleLabel)}</span>`;
+
+// Notion audience: admins (ADMIN/SUPERADMIN) get ADMIN feed; everyone else AGENT
+const aud = isAdmin ? 'ADMIN' : 'AGENT';
+
 
       // header text + greeting
       document.getElementById('me').textContent = me?.username ? `${me.username} · ${role}` : 'Signed in';
