@@ -10,16 +10,15 @@
       --bg:#ffffff; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb;
       --chip:#f8fafc; --chip-ink:#0f172a; --shadow:0 10px 25px rgba(17,24,39,.08);
       --radius:18px;
-      --admin:#0ea5e9;     /* cyan-blue */
-      --super:#8b5cf6;     /* violet */
-      --agent:#10b981;     /* green */
+      --admin:#0ea5e9; --super:#8b5cf6; --agent:#10b981;
     }
     *{box-sizing:border-box}
     body{margin:0;font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--ink)}
     .container{max-width:1200px;margin:0 auto;padding:24px}
     .header{position:sticky;top:0;z-index:10;backdrop-filter:blur(6px);background:rgba(255,255,255,.9);border-bottom:1px solid var(--line)}
     .header-inner{display:flex;align-items:center;gap:14px;padding:14px 20px}
-    .logo{font-weight:900;letter-spacing:.3px;color:var(--brand);font-size:18px}
+    .brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none}
+    .brand-img{height:26px;width:auto;display:block}
     .me{margin-left:auto;color:var(--muted)}
     .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer;color:inherit;text-decoration:none;box-shadow:var(--shadow)}
     .btn:hover{background:#fafafa}
@@ -27,7 +26,6 @@
     .btn-brand:hover{filter:brightness(.97)}
     .btn-ghost{background:#fff}
     .btn-row{display:flex;flex-wrap:wrap;gap:12px}
-    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:var(--chip);color:var(--chip-ink);font-size:12px;border:1px solid var(--line)}
     .rolepill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:600}
     .role-admin{background:var(--admin)}
     .role-super{background:var(--super)}
@@ -51,7 +49,10 @@
 <body>
   <div class="header">
     <div class="header-inner">
-      <div class="logo">ALLSTAR — Agent Hub</div>
+      <!-- Image branding -->
+      <a href="/hub" class="brand" aria-label="Allstar">
+        <img src="./allstar-logo.png" alt="ALLSTAR" class="brand-img">
+      </a>
       <div id="me" class="me">Loading…</div>
       <a id="logout" class="btn btn-ghost" href="#" role="button">Log out</a>
     </div>
@@ -63,16 +64,17 @@
         <h1>Welcome back<span id="welcomeName"></span> 👋</h1>
         <p class="muted">Quick links to your tools and live team updates.</p>
       </div>
-      <!-- Top quick-link buttons intentionally removed -->
+      <div class="btn-row">
+        <a class="btn btn-brand" href="/adherence/" role="button">Adherence / Schedule</a>
+        <a class="btn btn-ghost" href="/flowmaster/" role="button">Flowmaster</a>
+        <a id="adminToolsBtn" class="btn btn-ghost hidden" href="/admin/" role="button">Admin Tools</a>
+      </div>
     </div>
 
     <div class="grid grid-2">
       <div class="card">
         <div class="news-head">
-          <div style="display:flex;align-items:center;gap:8px">
-            <h2 style="margin:0">Team News</h2>
-            <!-- audience chip removed -->
-          </div>
+          <h2 style="margin:0">Team News</h2>
           <div class="small muted" id="newsUpdated">—</div>
         </div>
         <div id="news" class="muted">Loading news…</div>
@@ -82,10 +84,8 @@
         <h2>Account</h2>
         <div id="roleLine" class="muted" style="margin:6px 0 12px 0">Role: …</div>
         <div class="btn-row">
-          <!-- Renamed per request -->
           <a class="btn" href="/adherence/" role="button">Open Schedule</a>
           <a class="btn" href="/flowmaster/" role="button">Open Flowmaster</a>
-          <a id="adminToolsBtn" class="btn hidden" href="/admin/" role="button">Open Admin Tools</a>
         </div>
       </div>
     </div>
@@ -94,51 +94,30 @@
   <script>
   (async function boot(){
     try{
+      // Always bypass cache when determining identity
       const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store' });
       if (r.status === 401) { location.replace('/'); return; }
       const me = await r.json().catch(()=>null);
 
-      // Header identity
-      document.getElementById('me').textContent = me?.username ? `${me.username} · ${me.role ?? ''}`.trim() : 'Signed in';
+      // Normalize role robustly (no accidental fallback to AGENT)
+      const roleRaw = (me?.role ?? '').toString().trim().toUpperCase();
+      const role = ({ SUPERADMIN:'SUPERADMIN', ADMIN:'ADMIN', AGENT:'AGENT' }[roleRaw]) ?? 'UNKNOWN';
+      const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN';
+
+      // Header identity + greeting
+      document.getElementById('me').textContent = me?.username ? `${me.username} · ${role}` : 'Signed in';
       document.getElementById('welcomeName').textContent = me?.username ? `, ${escapeHTML(me.username)}` : '';
 
-      // ==== Robust role resolution (never UNKNOWN) ====
-      function extractRole(obj){
-        if (!obj || typeof obj !== 'object') return null;
-        // common shapes
-        return (
-          obj.role ||
-          obj.Role ||
-          obj.user?.role ||
-          obj.data?.role ||
-          obj.claims?.role ||
-          (Array.isArray(obj.roles) && obj.roles[0]) ||
-          null
-        );
-      }
-      let roleRaw = extractRole(me);
-      // normalize
-      let role = (roleRaw ? String(roleRaw) : '').toUpperCase();
-      if (role !== 'ADMIN' && role !== 'SUPERADMIN' && role !== 'AGENT') {
-        // final fallback: assume AGENT (never show UNKNOWN)
-        role = 'AGENT';
-      }
-
-      // Show/Hide Admin Tools
-      const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN';
       if (isAdmin) document.getElementById('adminToolsBtn').classList.remove('hidden');
 
-      // Role line with a color badge
+      // Role badge
       const roleLine = document.getElementById('roleLine');
       const badgeClass = role === 'SUPERADMIN' ? 'role-super'
                         : role === 'ADMIN' ? 'role-admin'
                         : 'role-agent';
-      roleLine.innerHTML = `
-        Role:
-        <span class="rolepill ${badgeClass}" title="${escapeHTML(role)}">${escapeHTML(role)}</span>
-      `;
+      roleLine.innerHTML = `Role: <span class="rolepill ${badgeClass}" title="${escapeHTML(role)}">${escapeHTML(role)}</span>`;
 
-      // Notion news: initial load + live updates (no page reload)
+      // Notion news (audience: ADMIN if admin/superadmin, else AGENT)
       const aud = isAdmin ? 'ADMIN' : 'AGENT';
       let lastNewsSig = '';
       async function loadNewsOnce(){
@@ -151,41 +130,27 @@
             lastNewsSig = sig;
             renderNews(items);
             const ts = new Date();
-            document.getElementById('newsUpdated').textContent =
-              `Updated ${ts.toLocaleTimeString()}`;
+            document.getElementById('newsUpdated').textContent = `Updated ${ts.toLocaleTimeString()}`;
           }
-        } catch (e) {
-          console.warn('news_poll_error', e);
-        }
+        } catch (e) { /* never break page */ }
       }
       await loadNewsOnce();
       let polling = false;
-      setInterval(async ()=>{
-        if (polling) return;
-        polling = true;
-        try { await loadNewsOnce(); } finally { polling = false; }
-      }, 60000);
+      setInterval(async ()=>{ if (polling) return; polling = true; try{ await loadNewsOnce(); } finally { polling = false; }}, 60000);
 
-      // Logout (unchanged)
       document.getElementById('logout').addEventListener('click', (e)=>{
         e.preventDefault();
         document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
         document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
         location.assign('/');
       });
-
-    }catch(e){
-      location.replace('/');
-    }
+    }catch{ location.replace('/'); }
   })();
 
   function renderNews(items){
     const host = document.getElementById('news');
     host.innerHTML = '';
-    if (!items.length) {
-      host.innerHTML = '<div class="muted">No news yet.</div>';
-      return;
-    }
+    if (!items.length) { host.innerHTML = '<div class="muted">No news yet.</div>'; return; }
     for (const it of items) {
       const when = it.date ? new Date(it.date).toLocaleString() : '';
       const row = document.createElement('div');
@@ -193,14 +158,12 @@
       row.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
           <strong>${escapeHTML(it.title||'')}</strong>
-          <span class="pill">${escapeHTML(it.audience||'all')}</span>
         </div>
         <div class="muted small" style="margin-top:2px">${when}</div>
         <div style="margin-top:8px">${escapeHTML(it.body||'')}</div>`;
       host.appendChild(row);
     }
   }
-
   function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}
   </script>
 </body>
