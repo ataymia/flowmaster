@@ -8,61 +8,73 @@
     :root{
       --brand:#e11d48; --brand-ink:#fff;
       --bg:#ffffff; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb;
-      --shadow:0 10px 25px rgba(17,24,39,.08);
+      --chip:#f8fafc; --chip-ink:#0f172a; --shadow:0 10px 25px rgba(17,24,39,.08);
       --radius:18px;
-      --admin:#0ea5e9; --super:#8b5cf6; --agent:#10b981;
+      --admin:#0ea5e9;     /* cyan-blue */
+      --super:#8b5cf6;     /* violet */
+      --agent:#10b981;     /* green */
     }
     *{box-sizing:border-box}
     body{margin:0;font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--ink)}
     .container{max-width:1200px;margin:0 auto;padding:24px}
     .header{position:sticky;top:0;z-index:10;backdrop-filter:blur(6px);background:rgba(255,255,255,.9);border-bottom:1px solid var(--line)}
     .header-inner{display:flex;align-items:center;gap:14px;padding:14px 20px}
-    .brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none}
-    .brand-img{height:26px;width:auto;display:block}
+    .logoimg{height:28px;width:auto;border-radius:8px}
+    .logotxt{font-weight:900;letter-spacing:.3px;color:var(--brand);font-size:18px}
     .me{margin-left:auto;color:var(--muted)}
     .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer;color:inherit;text-decoration:none;box-shadow:var(--shadow)}
     .btn:hover{background:#fafafa}
+    .btn-brand{background:var(--brand);border-color:transparent;color:var(--brand-ink)}
+    .btn-brand:hover{filter:brightness(.97)}
+    .btn-ghost{background:#fff}
     .btn-row{display:flex;flex-wrap:wrap;gap:12px}
+    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:var(--chip);color:var(--chip-ink);font-size:12px;border:1px solid var(--line)}
     .rolepill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:600}
     .role-admin{background:var(--admin)}
     .role-super{background:var(--super)}
     .role-agent{background:var(--agent)}
-    .hero{margin:20px 0 16px}
+    .hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin:20px 0 16px}
     .hero h1{margin:0 0 6px 0;font-size:28px;letter-spacing:.2px}
     .hero p{margin:0;color:var(--muted)}
     .grid{display:grid;gap:20px}
     .grid-2{grid-template-columns:2fr 1fr}
     .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
     .card h2{margin:0 0 8px 0}
+    .news-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
     .news-item{padding:12px 0;border-top:1px solid var(--line)}
     .news-item:first-child{border-top:0}
     .muted{color:var(--muted)}
     .small{font-size:12px}
-    @media (max-width:1000px){ .grid-2{grid-template-columns:1fr}}
+    .hidden{display:none!important}
+    @media (max-width:1000px){ .grid-2{grid-template-columns:1fr} .hero{flex-direction:column;gap:12px} }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="header-inner">
-      <!-- keep your logo file name here -->
-      <a href="/hub" class="brand" aria-label="Allstar">
-        <img src="./allstar-logo.png" alt="ALLSTAR" class="brand-img">
-      </a>
-      <div id="me" class="me">Loading…</div>
-      <a id="logout" class="btn" href="#" role="button">Log out</a>
+      <!-- Use your logo file in this folder; fallback to text if it fails -->
+      <img class="logoimg" src="./allstar-logo.png" alt="Allstar" onerror="this.style.display='none';document.querySelector('.logotxt').style.display='inline-block'">
+      <div class="logotxt" style="display:none">ALLSTAR — Agent Hub</div>
+      <div class="me" id="me">Loading…</div>
+      <a id="logout" class="btn btn-ghost" href="#" role="button">Log out</a>
     </div>
   </div>
 
   <div class="container">
     <div class="hero">
-      <h1>Welcome back<span id="welcomeName"></span> 👋</h1>
-      <p class="muted">Quick links to your tools and live team updates.</p>
+      <div>
+        <h1>Welcome back<span id="welcomeName"></span> 👋</h1>
+        <p class="muted">Quick links to your tools and live team updates.</p>
+      </div>
+      <!-- Top quick-links removed per your preference -->
     </div>
 
     <div class="grid grid-2">
       <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
-          <h2 style="margin:0">Team News</h2>
+        <div class="news-head">
+          <div style="display:flex;align-items:center;gap:8px">
+            <h2 style="margin:0">Team News</h2>
+          </div>
           <div class="small muted" id="newsUpdated">—</div>
         </div>
         <div id="news" class="muted">Loading news…</div>
@@ -74,104 +86,116 @@
         <div class="btn-row">
           <a class="btn" href="/adherence/" role="button">Open Schedule</a>
           <a class="btn" href="/flowmaster/" role="button">Open Flowmaster</a>
+          <a id="adminToolsBtn" class="btn hidden" href="/admin/" role="button">Admin Tools</a>
         </div>
       </div>
     </div>
   </div>
 
-  <script>
-  (async function boot(){
-    try{
-      const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store' });
-      if (r.status === 401) { location.replace('/'); return; }
-      const me = await r.json().catch(()=>null);
+<script>
+(function(){
+  const state = { me:null, aud:'AGENT', lastSig:'' };
 
-     // --- role display (no forced fallback to AGENT) ---
-const roleRaw = (me?.role ?? '').toString().trim();
-const roleUpper = roleRaw.toUpperCase();
+  function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}
 
-// Badge class & admin gate decided case-insensitively
-const badgeClass = roleUpper === 'SUPERADMIN' ? 'role-super'
-                : roleUpper === 'ADMIN'      ? 'role-admin'
-                : 'role-agent';
+  function normalizeMe(raw){
+    if (!raw) return null;
+    // Accept both shapes: {id,username,role,...} or {authed:true, me:{...}}
+    const me = raw.me ? raw.me : raw;
+    if (!me) return null;
+    // Ensure role is present; default to 'AGENT' (no UNKNOWN display)
+    me.role = (me.role || 'AGENT').toUpperCase();
+    return me;
+  }
 
-const isAdmin = roleUpper === 'ADMIN' || roleUpper === 'SUPERADMIN';
+  async function whoami(){
+    const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store' });
+    if (r.status === 401) return null;
+    const raw = await r.json().catch(()=>null);
+    return normalizeMe(raw);
+  }
 
-// Use the raw server value for the label; if empty, show 'AGENT' instead of 'UNKNOWN'
-const roleLabel = roleRaw || 'AGENT';
+  function renderHeader(me){
+    document.getElementById('me').textContent = me?.username ? `${me.username} · ${me.role}` : 'Signed in';
+    document.getElementById('welcomeName').textContent = me?.username ? `, ${escapeHTML(me.username)}` : '';
+  }
 
-// Header identity + greeting
-document.getElementById('me').textContent = me?.username ? `${me.username} · ${roleLabel}` : 'Signed in';
-document.getElementById('welcomeName').textContent = me?.username ? `, ${escapeHTML(me.username)}` : '';
-
-// Role pill
-const roleLine = document.getElementById('roleLine');
-roleLine.innerHTML = `Role: <span class="rolepill ${badgeClass}" title="${escapeHTML(roleLabel)}">${escapeHTML(roleLabel)}</span>`;
-
-// Notion audience: admins (ADMIN/SUPERADMIN) get ADMIN feed; everyone else AGENT
-const aud = isAdmin ? 'ADMIN' : 'AGENT';
-
-
-      // header text + greeting
-      document.getElementById('me').textContent = me?.username ? `${me.username} · ${role}` : 'Signed in';
-      document.getElementById('welcomeName').textContent = me?.username ? `, ${escapeHTML(me.username)}` : '';
-
-      // role pill
-      const roleLine = document.getElementById('roleLine');
-      const pillClass = role === 'SUPERADMIN' ? 'role-super'
-                     : role === 'ADMIN' ? 'role-admin'
-                     : 'role-agent';
-      roleLine.innerHTML = `Role: <span class="rolepill ${pillClass}" title="${escapeHTML(role)}">${escapeHTML(role)}</span>`;
-
-      // Notion news audience (ADMIN for admin/superadmin, otherwise AGENT)
-      const aud = isAdmin ? 'ADMIN' : 'AGENT';
-      let lastSig = '';
-      async function loadNews(){
-        try{
-          const res = await fetch('/api/news?aud='+aud, { credentials:'include', cache:'no-store' });
-          const data = await res.json().catch(()=>({items:[]}));
-          const items = Array.isArray(data.items) ? data.items : [];
-          const sig = JSON.stringify(items.map(it => [it.title,it.body,it.date,it.audience]));
-          if (sig !== lastSig){
-            lastSig = sig;
-            renderNews(items);
-            document.getElementById('newsUpdated').textContent =
-              'Updated ' + new Date().toLocaleTimeString();
-          }
-        }catch(e){ /* never break the page */ }
-      }
-      await loadNews();
-      let ticking = false;
-      setInterval(async ()=>{ if (ticking) return; ticking = true; try{ await loadNews(); } finally { ticking = false; }}, 60000);
-
-      // logout
-      document.getElementById('logout').addEventListener('click', (e)=>{
-        e.preventDefault();
-        document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
-        document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
-        location.assign('/');
-      });
-    }catch{ location.replace('/'); }
-  })();
+  function renderRole(me){
+    const roleLine = document.getElementById('roleLine');
+    const role = (me?.role || 'AGENT').toUpperCase();
+    const badgeClass = role === 'SUPERADMIN' ? 'role-super' : role === 'ADMIN' ? 'role-admin' : 'role-agent';
+    roleLine.innerHTML = `Role: <span class="rolepill ${badgeClass}">${escapeHTML(role)}</span>`;
+    const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN';
+    const adminBtn = document.getElementById('adminToolsBtn');
+    if (isAdmin) adminBtn.classList.remove('hidden'); else adminBtn.classList.add('hidden');
+    state.aud = isAdmin ? 'ADMIN' : 'AGENT';
+  }
 
   function renderNews(items){
     const host = document.getElementById('news');
     host.innerHTML = '';
-    if (!items.length){ host.innerHTML = '<div class="muted">No news yet.</div>'; return; }
+    if (!items || !items.length){
+      host.innerHTML = '<div class="muted">No news yet.</div>';
+      return;
+    }
     for (const it of items){
       const when = it.date ? new Date(it.date).toLocaleString() : '';
       const row = document.createElement('div');
-      row.className='news-item';
+      row.className = 'news-item';
       row.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <strong>${escapeHTML(it.title||'')}</strong>
+          <strong>${escapeHTML(it.title || '')}</strong>
         </div>
         <div class="muted small" style="margin-top:2px">${when}</div>
-        <div style="margin-top:8px">${escapeHTML(it.body||'')}</div>`;
+        <div style="margin-top:8px">${escapeHTML(it.body || '')}</div>`;
       host.appendChild(row);
     }
   }
-  function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}
-  </script>
+
+  async function loadNewsOnce(){
+    try{
+      const res = await fetch('/api/news?aud='+state.aud, { credentials:'include', cache:'no-store' });
+      const data = await res.json().catch(()=>({items:[]}));
+      const items = Array.isArray(data.items)? data.items : [];
+      // Signature to avoid re-rendering same content
+      const sig = JSON.stringify(items.map(it => [it.title,it.body,it.date]));
+      if (sig !== state.lastSig){
+        state.lastSig = sig;
+        renderNews(items);
+        document.getElementById('newsUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+      }
+    }catch(e){
+      console.warn('news_error', e);
+    }
+  }
+
+  async function boot(){
+    try{
+      const me = await whoami();
+      if (!me){ location.replace('/'); return; }
+      state.me = me;
+      renderHeader(me);
+      renderRole(me);
+      await loadNewsOnce();
+      let polling = false;
+      setInterval(async ()=>{ if (!polling){ polling = true; try{ await loadNewsOnce(); } finally { polling = false; } } }, 60000);
+    }catch(e){
+      console.error(e);
+      location.replace('/');
+    }
+  }
+
+  document.getElementById('logout').addEventListener('click', (e)=>{
+    e.preventDefault();
+    // Clear either old or new cookie names
+    document.cookie='allstar_at=; Path=/; Max-Age=0; Secure; SameSite=Lax';
+    document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
+    document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
+    location.assign('/');
+  });
+
+  boot();
+})();
+</script>
 </body>
 </html>
