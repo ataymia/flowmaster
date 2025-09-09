@@ -1,7 +1,7 @@
 // functions/api/_utils.ts
 
 export interface Env {
-  AUTH_BASE: string;            // e.g. https://allstar-auth.ataymia.workers.dev
+  AUTH_BASE: string;            // e.g., https://allstar-auth.ataymia.workers.dev
   NOTION_TOKEN?: string;        // "secret_..."
   NOTION_DATABASE_ID?: string;  // Notion DB id
 }
@@ -17,8 +17,7 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
 /* ---------------- Cookie helpers ---------------- */
 type SameSite = 'Lax' | 'Strict' | 'None';
 
-export function setCookie(
-  headers: Headers,
+function buildCookie(
   name: string,
   value: string,
   opts: {
@@ -31,138 +30,118 @@ export function setCookie(
 ) {
   const parts = [`${name}=${encodeURIComponent(value)}`];
   parts.push(`Path=${opts.path ?? '/'}`);
-  if (opts.httpOnly ?? true) parts.push('HttpOnly');
-  if (opts.secure ?? true) parts.push('Secure');
+  if (opts.httpOnly !== false) parts.push('HttpOnly');
+  if (opts.secure !== false) parts.push('Secure');
   parts.push(`SameSite=${opts.sameSite ?? 'Lax'}`);
-  if (typeof opts.maxAge === 'number') parts.push(`Max-Age=${opts.maxAge}`);
-  headers.append('Set-Cookie', parts.join('; '));
+  if (opts.maxAge != null) parts.push(`Max-Age=${opts.maxAge}`);
+  return parts.join('; ');
+}
+
+export function setCookie(
+  headers: Headers,
+  name: string,
+  value: string,
+  opts: {
+    path?: string;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: SameSite;
+    maxAge?: number; // seconds
+  } = {}
+) {
+  headers.append('Set-Cookie', buildCookie(name, value, opts));
 }
 
 export function clearCookie(headers: Headers, name: string, path = '/') {
-  headers.append(
-    'Set-Cookie',
-    `${name}=; Path=${path}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
-  );
+  headers.append('Set-Cookie', `${name}=; Path=${path}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
 }
 
-export function parseCookies(req: Request): Map<string, string> {
-  const out = new Map<string, string>();
-  const raw = req.headers.get('cookie');
-  if (!raw) return out;
+export function parseCookies(req: Request): Record<string, string> {
+  const raw = req.headers.get('cookie') || '';
+  const map: Record<string, string> = {};
   for (const part of raw.split(';')) {
-    const [k, ...rest] = part.trim().split('=');
-    if (!k) continue;
-    out.set(k, decodeURIComponent(rest.join('=')));
+    const idx = part.indexOf('=');
+    if (idx > -1) {
+      const k = part.slice(0, idx).trim();
+      const v = part.slice(idx + 1).trim();
+      if (k) map[k] = decodeURIComponent(v);
+    }
   }
-  return out;
+  return map;
 }
 
-export function pickCookieFromSetCookie(
-  setCookie: string[] | null | undefined,
-  name: string
-): string | null {
-  if (!setCookie?.length) return null;
-  for (const line of setCookie) {
-    const [pair] = line.split(';', 1);
-    if (!pair) continue;
-    const [k, v] = pair.split('=', 2);
-    if (k?.trim() === name) return v ?? null;
+export function getCookie(req: Request, name: string): string | undefined {
+  return parseCookies(req)[name];
+}
+
+/* ---------------- Session helpers ---------------- */
+
+export function hasSessionCookie(req: Request): boolean {
+  const c = parseCookies(req);
+  // treat any of these as “logged in” (matches our flows)
+  return !!(c['access_token'] || c['refresh_token'] || c['allstar_at']);
+}
+
+/**
+ * If there is a session cookie, returns {ok:true}.
+ * Otherwise returns {ok:false,response:Response(401)}.
+ */
+export function ensureAccess(request: Request) {
+  if (hasSessionCookie(request)) {
+    return { ok: true as const };
+  }
+  return {
+    ok: false as const,
+    response: json({ error: 'unauthorized' }, 401, { 'cache-control': 'no-store' }),
+  };
+}
+
+/* ---------------- Set-Cookie forwarding ---------------- */
+
+/**
+ * Forward every Set-Cookie from an upstream response to the caller.
+ * Cloudflare may flatten multiple Set-Cookie headers; the split below is safe.
+ */
+export function forwardSetCookies(src: Headers, dst: Headers) {
+  // Try the single header first
+  const combined = src.get('set-cookie');
+  if (!combined) return;
+
+  // Split into individual cookie lines (handles flattened header)
+  const lines = combined.split(/,(?=[^;]+?=)/g);
+  for (const line of lines) {
+    if (line && line.trim()) dst.append('Set-Cookie', line.trim());
+  }
+}
+
+// Optional helper if you ever need to pluck one cookie by name.
+export function pickCookieFromSetCookie(src: Headers, cookieName: string): string | null {
+  const combined = src.get('set-cookie');
+  if (!combined) return null;
+  const lines = combined.split(/,(?=[^;]+?=)/g);
+  for (const l of lines) {
+    const first = l.split(';', 1)[0]?.trim() || '';
+    if (first.toLowerCase().startsWith(cookieName.toLowerCase() + '=')) return first;
   }
   return null;
 }
 
-/**
- * Forward every Set-Cookie from an upstream Response to the caller,
- * rewriting attributes for host-only cookies (no Domain) with Lax.
- */
-export function forwardSetCookies(
-  upstreamResp: Response,
-  outHeaders: Headers,
-  defaults: { accessMaxAge?: number; refreshMaxAge?: number } = {}
-) {
-  let setCookies: string[] = [];
-
-  // 1) CF runtime helper
-  const anyHeaders = upstreamResp.headers as any;
-  if (typeof anyHeaders.getSetCookie === 'function') {
-    setCookies = anyHeaders.getSetCookie() || [];
-  }
-
-  // 2) Fallback: iterate headers (captures multiple set-cookie lines)
-  if (!setCookies.length) {
-    try {
-      (upstreamResp.headers as any).forEach?.((value: string, key: string) => {
-        if (key && key.toLowerCase() === 'set-cookie' && value) setCookies.push(value);
-      });
-    } catch {}
-  }
-
-  // 3) Last resort: single header
-  if (!setCookies.length) {
-    const single = upstreamResp.headers.get('set-cookie');
-    if (single) setCookies = [single];
-  }
-
-  if (!setCookies.length) return;
-
-  for (const line of setCookies) {
-    const parts = line.split(';').map(s => s.trim());
-    const [pair, ...attrs] = parts;
-    if (!pair) continue;
-    const [rawName, ...vrest] = pair.split('=');
-    const name = (rawName || '').trim();
-    const value = vrest.join('=');
-
-    let maxAge: number | undefined;
-    for (const a of attrs) {
-      const [ak, av] = a.split('=');
-      if (ak && ak.toLowerCase() === 'max-age') {
-        const n = Number(av);
-        if (!Number.isNaN(n)) maxAge = n;
-      }
-    }
-    if (maxAge === undefined) {
-      if (name === 'access_token' && defaults.accessMaxAge) maxAge = defaults.accessMaxAge;
-      if (name === 'refresh_token' && defaults.refreshMaxAge) maxAge = defaults.refreshMaxAge;
-    }
-
-    setCookie(outHeaders, name, value, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Lax',
-      path: '/',
-      maxAge,
-    });
-  }
-}
-
-/* ---------------- Token accessors ---------------- */
-export function getAccessFromRequest(req: Request) {
-  return parseCookies(req).get('access_token') ?? null;
-}
-export function getRefreshFromRequest(req: Request) {
-  return parseCookies(req).get('refresh_token') ?? null;
-}
+/* ---------------- Upstream helpers ---------------- */
 
 /**
- * ensureAccess:
- * - Returns { ok:true, token } if access_token exists
- * - Else returns { ok:false, response: 401 JSON }
+ * Call your auth Worker with any headers/body you pass.
+ * `path` can be '/login', '/refresh', '/whoami', etc. (relative to AUTH_BASE),
+ * or a full URL if you prefer.
  */
-export function ensureAccess(req: Request) {
-  const token = getAccessFromRequest(req);
-  if (!token) return { ok: false as const, response: json({ error: 'unauthorized' }, 401) };
-  return { ok: true as const, token };
-}
-
-/* ---------------- Upstream convenience ---------------- */
 export function upstream(env: Env, path: string, init?: RequestInit) {
-  const url = path.startsWith('http') ? path : `${env.AUTH_BASE}${path}`;
+  const url = path.startsWith('http') ? path : new URL(path, env.AUTH_BASE).toString();
   return fetch(url, init);
 }
 
 /**
- * Proxy with Authorization: Bearer <access_token> from cookies
+ * Minimal proxy helper that uses the access_token cookie to add
+ * Authorization: Bearer <access_token> when calling your auth Worker.
+ * It returns upstream’s body/status and forwards Set-Cookie back to the browser.
  */
 export async function proxyWithAuth(
   req: Request,
@@ -170,11 +149,23 @@ export async function proxyWithAuth(
   path: string,
   init: RequestInit = {}
 ) {
-  const access = getAccessFromRequest(req);
-  if (!access) return json({ error: 'unauthorized' }, 401);
+  const cookies = parseCookies(req);
+  const access = cookies['access_token'];
+  if (!access) return json({ error: 'unauthorized' }, 401, { 'cache-control': 'no-store' });
+
+  const url = path.startsWith('http') ? path : new URL(path, env.AUTH_BASE).toString();
   const headers = new Headers(init.headers || {});
   if (!headers.has('authorization')) headers.set('authorization', `Bearer ${access}`);
-  const url = path.startsWith('http') ? path : `${env.AUTH_BASE}${path}`;
-  const res = await fetch(url, { ...init, headers });
-  return new Response(res.body, { status: res.status, headers: new Headers(res.headers) });
+
+  // Forward content-type if caller didn’t set one
+  const ct = req.headers.get('content-type');
+  if (ct && !headers.has('content-type')) headers.set('content-type', ct);
+
+  const up = await fetch(url, { ...init, headers });
+  const outHeaders = new Headers();
+  const upCT = up.headers.get('content-type');
+  if (upCT) outHeaders.set('content-type', upCT);
+  forwardSetCookies(up.headers, outHeaders);
+
+  return new Response(up.body, { status: up.status, headers: outHeaders });
 }
