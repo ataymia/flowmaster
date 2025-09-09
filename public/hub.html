@@ -1,91 +1,116 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Allstar Agent Hub</title>
-<link rel="stylesheet" href="/theme.css">
-<style>
-  body{background:#0b1220;color:#e6edf3;font:14px/1.45 ui-sans-serif,system-ui}
-  .header{display:flex;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid #1f2a44;background:#0f172a;position:sticky;top:0}
-  .title{font-weight:800;color:#60a5fa}
-  .muted{color:#9fb3c8}
-  .wrap{max-width:1000px;margin:18px auto;padding:0 16px}
-  .tabs a{display:inline-block;margin-right:8px;padding:8px 12px;border-radius:10px;border:1px solid #1f2a44;background:#0b1426;color:#e6edf3;text-decoration:none}
-  .tabs a:hover{background:#0f172a}
-  .card{background:#0f172a;border:1px solid #1f2a44;border-radius:16px;padding:16px;margin-top:16px}
-  .row{display:flex;justify-content:space-between;align-items:center}
-  .btn{padding:8px 12px;border-radius:10px;border:1px solid #1f2a44;background:#0b1426;color:#e6edf3;cursor:pointer}
-  .btn:hover{filter:brightness(.95)}
-  .red{color:#fecaca}
-</style>
+  <meta charset="utf-8" />
+  <title>Allstar Agent Hub — Home</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{--brand:#e11d48;--muted:#6b7280;--text:#0f172a;--line:#e5e7eb;--bg:#fff;--chip:#f8fafc;--chip-text:#0f172a}
+    body{margin:0;font:14px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
+    .container{max-width:1040px;margin:0 auto;padding:16px}
+    .header{position:sticky;top:0;z-index:10;backdrop-filter:blur(6px);background:rgba(255,255,255,.9);border-bottom:1px solid var(--line)}
+    .header-inner{display:flex;align-items:center;gap:12px;padding:12px 16px}
+    .title{font-weight:800;font-size:18px;letter-spacing:.3px;color:var(--brand)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;text-decoration:none;color:inherit}
+    .btn:hover{background:#fafafa}
+    .pill{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:var(--chip);color:var(--chip-text);font-size:12px;border:1px solid var(--line)}
+    .grid{display:grid;gap:16px}.grid-2{grid-template-columns:2fr 1fr}
+    .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px}
+    .muted{color:#6b7280}
+    .news-item{padding:10px 0;border-top:1px solid var(--line)}.news-item:first-child{border-top:0}
+    @media (max-width:900px){ .grid-2{grid-template-columns:1fr} }
+  </style>
+  <script>
+    // If someone typed /hub without .html, self-correct.
+    if (location.pathname === '/hub') location.replace('/hub.html');
+  </script>
 </head>
 <body>
-  <script>
-  if (location.pathname === '/hub') {
-    location.replace('/hub.html');
-  }
-</script>
   <div class="header">
-    <div class="title">Allstar Agent Hub</div>
-    <div style="margin-left:auto" class="muted" id="who">Loading…</div>
-    <button class="btn" id="out">Logout</button>
+    <div class="header-inner container">
+      <div class="title">ALLSTAR — Agent Hub</div>
+      <div id="me" style="margin-left:auto" class="muted">Loading…</div>
+      <button id="logout" class="btn" style="margin-left:8px">Log out</button>
+    </div>
   </div>
 
-  <div class="wrap">
-    <div class="tabs">
-      <a href="/hub">Hub</a>
-      <a href="/adherence/">Adherence</a>
-      <a href="/flowmaster/">Flowmaster</a>
-    </div>
-
-    <div class="card">
-      <div class="row">
-        <h2 style="margin:0">Team Billboard</h2>
-        <div class="muted" id="date"></div>
+  <div class="container">
+    <div class="grid grid-2">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <h2 style="margin:0">Team News &amp; Memos</h2>
+          <span id="audChip" class="pill">All</span>
+        </div>
+        <div id="news" class="muted">Loading news…</div>
       </div>
-      <div id="feed" class="muted">Loading…</div>
+
+      <div class="card">
+        <h3 style="margin:0 0 8px 0">Tools</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <a class="btn" href="/flowmaster/">Flowmaster</a>
+          <a class="btn" href="/adherence/">Adherence / Schedule</a>
+          <a class="btn" href="/export/">Exports</a>
+        </div>
+        <div style="margin-top:16px">
+          <h3 style="margin:0 0 8px 0">Account</h3>
+          <div class="muted" id="roleLine">Role: …</div>
+        </div>
+      </div>
     </div>
   </div>
 
-<script>
-(async () => {
-  try {
-    const r = await fetch('/api/whoami', { credentials: 'include' });
-    if (!r.ok) return location.replace('/');
-    const j = await r.json().catch(() => null);
-    if (!j || !j.ok) location.replace('/');
-    // else: user is allowed – continue rendering the hub
-    window.__me = j.user;
-  } catch {
-    location.replace('/');
-  }
-})();
-</script>
+  <script>
+  (async function init(){
+    try{
+      const r = await fetch('/api/whoami', { credentials:'include' });
+      console.log('[whoami] status:', r.status);
+      if (r.status === 401) { location.replace('/'); return; }
+      const me = await r.json().catch(()=>null);
+      document.getElementById('me').textContent = me?.username ? `${me.username} · ${me.role}` : 'Signed in';
+      document.getElementById('roleLine').textContent = 'Role: ' + (me?.role || 'unknown');
+      const aud = (me?.role === 'ADMIN' || me?.role === 'SUPERADMIN') ? 'ADMIN' : 'AGENT';
+      document.getElementById('audChip').textContent = (aud === 'ADMIN' ? 'Admins' : 'Agents');
 
-<script>
-function el(tag, attrs={}, ...kids){ const n=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>{ k==='class' ? n.className=v : n.setAttribute(k,v) }); kids.flat().forEach(k=> n.appendChild(typeof k==='string'?document.createTextNode(k):k)); return n; }
-async function whoami(){ const r=await fetch('/api/whoami'); if(!r.ok) return null; const j=await r.json().catch(()=>null); return j&&j.ok?j.user:null; }
-async function news(aud){ const r=await fetch('/api/news?aud='+encodeURIComponent(aud||'all')); const j=await r.json().catch(()=>({items:[]})); return j.items||[]; }
+      // Load Notion news but never break the page if it fails
+      try{
+        const r2 = await fetch('/api/news?aud='+aud, { credentials:'include' });
+        const j2 = await r2.json().catch(()=>({items:[]}));
+        const host = document.getElementById('news'); host.innerHTML='';
+        if(!Array.isArray(j2.items) || j2.items.length===0){
+          host.innerHTML = '<div class="muted">No news yet.</div>';
+        }else{
+          for(const it of j2.items){
+            const when = it.date ? new Date(it.date).toLocaleString() : '';
+            const row = document.createElement('div');
+            row.className='news-item';
+            row.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <strong>${esc(it.title||'')}</strong>
+                <span class="pill">${esc(it.audience||'all')}</span>
+              </div>
+              <div class="muted" style="font-size:12px;margin-top:2px">${when}</div>
+              <div style="margin-top:6px">${esc(it.body||'')}</div>`;
+            host.appendChild(row);
+          }
+        }
+      }catch(e){
+        console.error('news_error', e);
+        const host = document.getElementById('news');
+        host.innerHTML = '<div class="muted">News unavailable.</div>';
+      }
+    }catch(e){
+      console.error('whoami_error', e);
+      location.replace('/'); return;
+    }
 
-(async ()=>{
-  const me = await whoami();
-  if(!me){ location.replace('/'); return; }
-  document.querySelector('#who').textContent = `${me.username||'user'} · ${me.role||''}`.trim();
-  document.querySelector('#out').onclick = async ()=>{ await fetch('/api/logout',{method:'POST'}); location.replace('/'); };
+    document.getElementById('logout').onclick = ()=>{
+      document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
+      document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
+      location.replace('/');
+    };
+  })();
 
-  document.querySelector('#date').textContent = new Date().toLocaleDateString();
-  const items = await news('AGENT');
-  const host = document.querySelector('#feed'); host.innerHTML='';
-  if(!items.length){ host.textContent='No announcements.'; return; }
-  items.forEach(x=>{
-    const row = el('div',{class:'card',style:'margin:12px 0;padding:12px;background:#0b1426;border-color:#1f2a44'},
-      el('div',{}, el('strong',{}, x.title||'Untitled')),
-      el('div',{class:'muted',style:'margin-top:6px'}, x.body||'')
-    );
-    host.appendChild(row);
-  });
-})();
-</script>
+  function esc(s){return String(s).replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}
+  </script>
 </body>
 </html>
