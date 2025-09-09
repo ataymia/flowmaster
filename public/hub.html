@@ -63,20 +63,15 @@
         <h1>Welcome back<span id="welcomeName"></span> 👋</h1>
         <p class="muted">Quick links to your tools and live team updates.</p>
       </div>
-      <div class="btn-row">
-        <!-- ANCHORS STYLED AS BUTTONS (no behavior change) -->
-        <a class="btn btn-brand" href="/adherence/" role="button">Adherence / Schedule</a>
-        <a class="btn btn-ghost" href="/flowmaster/" role="button">Flowmaster</a>
-        <a id="adminToolsBtn" class="btn btn-ghost hidden" href="/admin/" role="button">Admin Tools</a>
-      </div>
+      <!-- Top quick-link buttons removed by request -->
     </div>
 
     <div class="grid grid-2">
       <div class="card">
         <div class="news-head">
           <div style="display:flex;align-items:center;gap:8px">
-            <h2 style="margin:0">Team News &amp; Memos</h2>
-            <span id="audChip" class="pill">All</span>
+            <h2 style="margin:0">Team News</h2>
+            <!-- audience chip removed -->
           </div>
           <div class="small muted" id="newsUpdated">—</div>
         </div>
@@ -87,8 +82,10 @@
         <h2>Account</h2>
         <div id="roleLine" class="muted" style="margin:6px 0 12px 0">Role: …</div>
         <div class="btn-row">
-          <a class="btn" href="/adherence/" role="button">Open Adherence</a>
+          <!-- Renamed: Open Adherence -> Open Schedule (same href) -->
+          <a class="btn" href="/adherence/" role="button">Open Schedule</a>
           <a class="btn" href="/flowmaster/" role="button">Open Flowmaster</a>
+          <a id="adminToolsBtn" class="btn hidden" href="/admin/" role="button">Open Admin Tools</a>
         </div>
       </div>
     </div>
@@ -111,7 +108,6 @@
       const isAdmin = role === 'ADMIN' || role === 'SUPERADMIN';
       const aud = isAdmin ? 'ADMIN' : 'AGENT';
       if (isAdmin) document.getElementById('adminToolsBtn').classList.remove('hidden');
-      document.getElementById('audChip').textContent = isAdmin ? 'Admins' : 'Agents';
 
       // Role line with a color badge
       const roleLine = document.getElementById('roleLine');
