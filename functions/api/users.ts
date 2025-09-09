@@ -1,29 +1,28 @@
-function readCookie(req: Request, name: string): string | null {
-  const raw = req.headers.get("Cookie") || ""; const m = raw.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`)); return m ? m[1] : null;
-}
-export const onRequest: PagesFunction = async ({ request, env }) => {
-  const token = readCookie(request, "allstar_at"); if (!token) return json({ error: "NO_SESSION" }, 401);
-  const url = new URL(request.url); const id = url.searchParams.get("id");
-  const init: RequestInit = { headers: { Cookie: `access_token=${token}` } };
+// functions/api/users.ts
+import { Env, ensureAccess, proxyWithSession } from "./_utils";
 
-  if (request.method === "GET") {
-    const r = await fetch(`${env.AUTH_BASE}/users`, init); return pass(r);
-  }
-  if (request.method === "POST") {
-    init.method = "POST"; init.headers = { ...init.headers, "content-type":"application/json" }; init.body = await request.text();
-    const r = await fetch(`${env.AUTH_BASE}/users`, init); return pass(r);
-  }
-  if (!id) return json({ error:"MISSING_ID" }, 400);
-
-  if (request.method === "PATCH") {
-    init.method = "PATCH"; init.headers = { ...init.headers, "content-type":"application/json" }; init.body = await request.text();
-    const r = await fetch(`${env.AUTH_BASE}/users/${encodeURIComponent(id)}`, init); return pass(r);
-  }
-  if (request.method === "DELETE") {
-    init.method = "DELETE";
-    const r = await fetch(`${env.AUTH_BASE}/users/${encodeURIComponent(id)}`, init); return pass(r);
-  }
-  return json({ ok:true });
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const auth = ensureAccess(request);
+  if (!auth.ok) return auth.response;
+  return proxyWithSession(request, env, `/users${new URL(request.url).search}`);
 };
-function json(o:any,s=200){ return new Response(JSON.stringify(o),{status:s,headers:{'content-type':'application/json'}}); }
-async function pass(r:Response){ const t=await r.text(); return new Response(t,{status:r.status,headers:{'content-type':'application/json'}}); }
+
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const auth = ensureAccess(request);
+  if (!auth.ok) return auth.response;
+  return proxyWithSession(request, env, `/users`);
+};
+
+export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params }) => {
+  const auth = ensureAccess(request);
+  if (!auth.ok) return auth.response;
+  const id = new URL(request.url).pathname.split('/').pop()!;
+  return proxyWithSession(request, env, `/users/${id}`);
+};
+
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params }) => {
+  const auth = ensureAccess(request);
+  if (!auth.ok) return auth.response;
+  const id = new URL(request.url).pathname.split('/').pop()!;
+  return proxyWithSession(request, env, `/users/${id}`);
+};
