@@ -29,72 +29,35 @@
   </div>
 
 <script>
-(() => {
-  const $ = (s) => document.querySelector(s);
-  const msg = $('#msg');
-  const btn = $('#go');
-  const u   = $('#u');
-  const p   = $('#p');
+async function doLogin(e){
+  e?.preventDefault?.();
+  const emailOrUser = document.querySelector('#u').value.trim();
+  const password = document.querySelector('#p').value;
 
-  async function hasSession() {
-    try {
-      const r = await fetch('/api/whoami', { credentials: 'include' });
-      if (!r.ok) return false;
-      const j = await r.json().catch(() => null);
-      if (j && j.ok) {
-        msg.textContent = `Signed in as ${j.user?.username || 'user'} — taking you to the Hub…`;
-        // client-side redirect avoids any server redirect loops
-        setTimeout(() => location.replace('/hub'), 50);
-        return true;
-      }
-    } catch {}
-    return false;
+  const body = emailOrUser.includes('@')
+    ? { email: emailOrUser, password }
+    : { username: emailOrUser, password };
+
+  const r = await fetch('/api/login', {
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify(body)
+  });
+
+  if (!r.ok) {
+    const t = await r.text().catch(()=> '');
+    alert('Login failed:\n' + t.slice(0,300));
+    return;
   }
 
-  // if a session already exists, go straight to hub
-  hasSession().then((inHub) => {
-    if (inHub) return;
-
-    // normal login flow
-    btn.addEventListener('click', async () => {
-      const username = (u.value || '').trim();
-      const password = p.value || '';
-      if (!username || !password) {
-        msg.textContent = 'Please enter username and password.';
-        return;
-      }
-      msg.textContent = 'Signing in…';
-      try {
-        const r = await fetch('/api/login', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ username, password })
-        });
-        const j = await r.json().catch(() => ({}));
-        if (r.ok && !j.error) {
-          // success — go to hub
-          location.assign('/hub');
-        } else {
-          msg.textContent = j.error || 'Sign-in failed.';
-        }
-      } catch (e) {
-        msg.textContent = 'Network error.';
-      }
-    });
-
-    // press Enter in the password box
-    p.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') btn.click();
-    });
-
-    // “Enter Hub” should still work if a background tab refreshed whoami
-    btn.addEventListener('auxclick', async () => {
-      if (await hasSession()) return;
-    });
-  });
-})();
+  // ✅ Go to the actual file that exists
+  location.assign('/hub.html');
+}
+document.querySelector('#login')?.addEventListener('click', doLogin);
+document.querySelector('#form')?.addEventListener('submit', doLogin);
 </script>
+
 
 </body>
 </html>
