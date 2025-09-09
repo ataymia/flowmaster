@@ -9,7 +9,7 @@
       --brand:#e11d48; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb; --bg:#fff;
       --card:#fff; --shadow:0 10px 25px rgba(17,24,39,.08); --radius:16px;
 
-      /* Clear, distinct status colors */
+      /* Distinct status colors */
       --st-available:#10b981;
       --st-bathroom:#d97706;
       --st-break:#f59e0b;
@@ -18,7 +18,7 @@
       --st-meeting:#3b82f6;
       --st-offline:#9ca3af;
 
-      --diff:#ef4444;   /* mismatch overlay */
+      --diff:#ef4444;
       --grid:#f3f4f6;
     }
     *{box-sizing:border-box}
@@ -81,7 +81,7 @@
 
   <div class="container">
     <div class="tabs">
-      <div id="tab-agent"  class="tab active">Agent View</div>
+      <div id="tab-agent"  class="tab">Agent View</div>
       <div id="tab-admin"  class="tab">Admin Tools</div>
     </div>
 
@@ -90,7 +90,7 @@
       <div class="card">
         <div class="row-between">
           <h2 style="margin:0">Today</h2>
-          <div class="pill" id="agent-date"></div>
+          <div class="pill" id="agent-date">—</div>
         </div>
 
         <div class="timeline-wrap" id="agent-bars"></div>
@@ -100,7 +100,7 @@
             <div class="big" id="agent-pct">100%</div>
             <div class="muted" id="agent-io">in: 0m · out: 0m</div>
           </div>
-          <div style="margin-left:auto" class="pill" id="agent-current">—</div>
+          <div style="margin-left:auto" class="pill" id="agent-current">Current: —</div>
         </div>
       </div>
 
@@ -143,7 +143,7 @@
           <div>
             <div class="row-between">
               <h3 style="margin:6px 0">Daily Overview</h3>
-              <div class="pill" id="admin-current">—</div>
+              <div class="pill" id="admin-current">Current: —</div>
             </div>
             <div id="admin-bars" class="timeline-wrap"></div>
             <div class="muted" id="admin-pct" style="margin-top:8px">Adherence: —</div>
@@ -215,7 +215,7 @@
   <div id="error" class="error"></div>
 
 <script>
-/* ======= CONFIG / STATUS MAP ======= */
+/* ===== CONFIG / STATUS MAP ===== */
 const STATUS_LIST = [
   { key:'available', label:'Available', css:'st-available' },
   { key:'bathroom',  label:'Bathroom', css:'st-bathroom'  },
@@ -240,41 +240,65 @@ const API = {
   download:(kind,from,to)=>{ const a=document.createElement('a'); a.href='/api/export?kind='+encodeURIComponent(kind)+'&from='+(from||'')+'&to='+(to||''); a.click(); }
 };
 
-/* ======= UTIL ======= */
+/* ===== UTIL ===== */
 const pad=n=>String(n).padStart(2,'0');
 const toISOdate=d=> (d instanceof Date?d:new Date(d)).toISOString().slice(0,10);
 const hms=ms=>{ const s=Math.floor(ms/1000); const hh=Math.floor(s/3600), mm=Math.floor((s%3600)/60), ss=s%60; return `${pad(hh)}:${pad(mm)}:${pad(ss)}`; };
 const label=(k)=> (STATUS_LIST.find(x=>x.key===k)?.label || k);
 const cssOf=(k)=> (STATUS_LIST.find(x=>x.key===k)?.css || 'st-offline');
 
-/* ======= STATE ======= */
-let ME=null;
+/* ===== STATE ===== */
+let ME={ username:'', role:'' };
 let AGENT={ date: toISOdate(new Date()), schedule:[], events:[] };
 let ADMIN={ user:'', date: toISOdate(new Date()), schedule:[], events:[], users:[] };
 let TICKERS=[];
 
 function setError(s){ const e=document.getElementById('error'); if(!s){ e.style.display='none'; e.textContent=''; return; } e.textContent='⚠️ '+s; e.style.display='block'; }
 
-/* ======= AUTH BOOT ======= */
+/* ===== AUTH BOOT (robust to your /api/whoami shape) ===== */
 (async function init(){
   try{
-    const who=await API.whoami(); if(!who?.authed) return location.replace('/');
-    ME = who.me || { username: who?.me?.username, role: who?.me?.role };
-    document.getElementById('hdr-meta').textContent = `${ME.username} · ${ME.role}`;
-  }catch(e){ return location.replace('/'); }
+    const who = await API.whoami();
 
-  const isAdmin = /^(ADMIN|SUPERADMIN)$/i.test(ME.role||'');
+    // Your current whoami returns: { authed:false|true, me:{id,username,role,...} }
+    if (who && who.authed === false) return location.replace('/');
+
+    const meObj = (who && who.me) ? who.me : who || {};
+    const username = meObj.username || '';
+    const role = String(meObj.role || '').toUpperCase();
+
+    if (!username || !role) {
+      // If anything essential is missing, treat as not authed.
+      return location.replace('/');
+    }
+
+    ME = { username, role };
+    document.getElementById('hdr-meta').textContent = `${ME.username} · ${ME.role}`;
+  }catch(e){
+    return location.replace('/');
+  }
+
+  // Tab visibility by role
+  const isAdmin = /^(ADMIN|SUPERADMIN)$/.test(ME.role);
   document.getElementById('tab-admin').style.display = isAdmin ? 'block' : 'none';
 
+  // Tab wiring
   document.getElementById('tab-agent').onclick = ()=>showPane('agent');
   document.getElementById('tab-admin').onclick = ()=>showPane('admin');
 
+  // Password dialog + logout
   wirePasswordDialog();
-  document.getElementById('btn-logout').onclick = ()=>{ document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax'; document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax'; location.assign('/'); };
+  document.getElementById('btn-logout').onclick = ()=>{
+    document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
+    document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
+    location.assign('/');
+  };
 
+  // Build panes
   buildAgent();
   if(isAdmin) buildAdmin();
 
+  // Default to Agent pane (unchanged behavior)
   showPane('agent');
 })();
 
@@ -289,7 +313,7 @@ function showPane(which){
 }
 function clearTickers(){ TICKERS.forEach(clearInterval); TICKERS=[]; }
 
-/* ======= AGENT VIEW ======= */
+/* ===== AGENT VIEW ===== */
 function buildAgent(){
   document.getElementById('agent-date').textContent = AGENT.date;
   const host=document.getElementById('agent-status-buttons'); host.innerHTML='';
@@ -320,7 +344,7 @@ async function refreshAgentData(){
 }
 function startAgentLoops(){
   refreshAgentData().then(renderAgent);
-  TICKERS.push(setInterval(renderAgent, 1000));               // every second redraw
+  TICKERS.push(setInterval(renderAgent, 1000));               // redraw every second
   TICKERS.push(setInterval(async ()=>{ await refreshAgentData(); renderAgent(); }, 15000)); // refresh data
 }
 function renderAgent(){
@@ -352,8 +376,9 @@ function renderAgent(){
   });
 }
 
-/* ======= ADMIN VIEW ======= */
+/* ===== ADMIN VIEW ===== */
 function buildAdmin(){
+  ADMIN.date = toISOdate(new Date());
   document.getElementById('day').value = ADMIN.date;
 
   // quick ranges
@@ -471,7 +496,7 @@ async function saveAdminSchedule(){
   }catch(e){ alert('Save failed'); }
 }
 
-/* ======= DRAWING + ADHERENCE ======= */
+/* ===== DRAWING + ADHERENCE ===== */
 function minutesAs(m){ if(m<60) return `${m}m`; const h=Math.floor(m/60), mm=m%60; return `${h}h${mm?(' '+mm+'m'):''}`; }
 function hm2mm(hm){ const [h,m]=hm.split(':').map(Number); return h*60+m; }
 function mm2hm(mm){ const h=Math.floor(mm/60), m=mm%60; return `${pad(h)}:${pad(m)}`; }
@@ -484,7 +509,7 @@ function buildDualBars(date, scheduleBlocks, events){
   const dayStart = Date.parse(date+'T00:00:00Z');
   const startMin = 0, endMin = 1440; const total = endMin - startMin;
 
-  // PROJECTED: schedule painted; rest offline
+  // PROJECTED (24h; schedule where defined, offline elsewhere)
   const proj = [];
   const blocks = [...(scheduleBlocks||[])].sort((a,b)=>a.start-b.start);
   let cur = startMin;
@@ -495,7 +520,7 @@ function buildDualBars(date, scheduleBlocks, events){
   }
   if(cur<endMin) proj.push({status:'offline', start:cur, width:endMin-cur});
 
-  // ACTUAL: up to "now"
+  // ACTUAL (from midnight up to now)
   const nowMin = Math.max(startMin, Math.min(endMin, Math.floor((Date.now()-dayStart)/60000)));
   const evs = sortEvents(events);
   const act=[];
@@ -568,7 +593,7 @@ function calcAdherence(date, blocks, events){
   }
   pushLine(cur, curStart, nowMin);
 
-  // Adherence minutes across scheduled minutes only
+  // Adherence across scheduled minutes only
   idx=0; cur=evs.length?evs[0].status:null;
   let inMin=0, outMin=0;
   for(let m=startMin;m<nowMin;m++){
@@ -587,7 +612,7 @@ function calcAdherence(date, blocks, events){
 function tag(t, cls, txt){ const el=document.createElement(t); el.className=cls||''; if(txt!=null) el.textContent=txt; return el; }
 function grow(el){ const w=document.createElement('div'); w.style.flex='1'; w.appendChild(el); return w; }
 
-/* ======= CHANGE PASSWORD ======= */
+/* ===== CHANGE PASSWORD ===== */
 function wirePasswordDialog(){
   const dlg=document.getElementById('pwDlg');
   const cur=document.getElementById('curPw');
