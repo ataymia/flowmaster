@@ -1,7 +1,7 @@
 // functions/api/_utils.ts
 
 export interface Env {
-  AUTH_BASE: string;            // e.g., https://allstar-auth.your-domain.workers.dev
+  AUTH_BASE: string;            // e.g., https://allstar-auth.your-worker.workers.dev
   NOTION_TOKEN?: string;
   NOTION_DATABASE_ID?: string;
 }
@@ -14,7 +14,7 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
   });
 }
 
-/* ---------------- Cookie helpers ---------------- */
+/* ---------------- Cookie + session helpers ---------------- */
 export function parseCookies(req: Request): Record<string, string> {
   const raw = req.headers.get('cookie') || '';
   const map: Record<string, string> = {};
@@ -31,57 +31,47 @@ export function parseCookies(req: Request): Record<string, string> {
 
 export function getAccessFromRequest(req: Request): string | null {
   const c = parseCookies(req);
-  // accept either cookie name
+  // Accept either cookie name (your hub uses "allstar_at")
   return c['access_token'] || c['allstar_at'] || null;
 }
 
 export function ensureAccess(req: Request) {
   const tok = getAccessFromRequest(req);
-  if (!tok) return { ok: false as const, response: json({ error: 'unauthorized' }, 401, { 'cache-control':'no-store' }) };
+  if (!tok) {
+    return {
+      ok: false as const,
+      response: json({ error: 'unauthorized' }, 401, { 'cache-control': 'no-store' })
+    };
+  }
   return { ok: true as const, token: tok };
 }
 
-/* ---------------- Upstream helpers ---------------- */
-
-/**
- * Build headers for upstream calls. If we have an access token, prefer
- * Authorization: Bearer <token>. For legacy hubs that only set allstar_at,
- * also add a Cookie fallback "access_token=<token>" so the auth Worker
- * can read it as a cookie if needed.
- */
+/** Build headers for upstream calls, forwarding session */
 export function buildSessionHeaders(req: Request, extra?: HeadersInit) {
   const h = new Headers(extra || {});
   const tok = getAccessFromRequest(req);
   if (tok) {
     if (!h.has('authorization')) h.set('authorization', `Bearer ${tok}`);
-    // Fallback cookie for upstreams that only read cookies
+    // Fallback cookie for upstreams that read cookies instead of Authorization
     if (!h.has('cookie')) h.set('cookie', `access_token=${encodeURIComponent(tok)}`);
   }
-  // Forward content-type for POST/patch
   const ct = req.headers.get('content-type');
   if (ct && !h.has('content-type')) h.set('content-type', ct);
   return h;
 }
 
-/**
- * Forward every Set-Cookie from an upstream Response to the caller.
- */
+/** Forward all Set-Cookie headers from upstream to caller */
 export function forwardSetCookies(up: Response, out: Headers) {
-  // CF may flatten; try to recover multiples
   const any = up.headers as any;
   if (typeof any.getSetCookie === 'function') {
-    const arr: string[] = any.getSetCookie() || [];
-    for (const line of arr) out.append('set-cookie', line);
+    (any.getSetCookie() || []).forEach((line: string) => out.append('set-cookie', line));
     return;
   }
-  // fallback
   const single = up.headers.get('set-cookie');
   if (single) out.append('set-cookie', single);
 }
 
-/**
- * Proxy request with session headers to AUTH_BASE + path.
- */
+/** Minimal proxy that also forwards Set-Cookie back */
 export async function proxyWithSession(req: Request, env: Env, path: string) {
   const url = path.startsWith('http') ? path : `${env.AUTH_BASE}${path}`;
   const up = await fetch(url, {
@@ -95,4 +85,11 @@ export async function proxyWithSession(req: Request, env: Env, path: string) {
   if (ct) outH.set('content-type', ct);
   forwardSetCookies(up, outH);
   return new Response(up.body, { status: up.status, headers: outH });
+}
+
+/** (Compat) upstream helper for any old callers still importing it */
+export function upstream(req: Request, env: Env, path: string, init: RequestInit = {}) {
+  const url = path.startsWith('http') ? path : `${env.AUTH_BASE}${path}`;
+  const headers = buildSessionHeaders(req, init.headers);
+  return fetch(url, { ...init, headers, redirect: 'manual' });
 }
