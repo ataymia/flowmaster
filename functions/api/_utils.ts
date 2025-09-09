@@ -6,7 +6,7 @@ export interface Env {
   NOTION_DATABASE_ID?: string;  // Notion DB id
 }
 
-/* ------------ JSON helper ------------ */
+/* ---------------- JSON helper ---------------- */
 export function json(data: any, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(data), {
     status,
@@ -14,7 +14,7 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
   });
 }
 
-/* ------------ Cookie helpers ------------ */
+/* ---------------- Cookie helpers ---------------- */
 type SameSite = 'Lax' | 'Strict' | 'None';
 
 export function setCookie(
@@ -72,11 +72,9 @@ export function pickCookieFromSetCookie(
 }
 
 /**
- * Read Set-Cookie headers from an upstream Response and re-emit them
- * for the current domain with safe attributes (no Domain), using Lax.
+ * Forward every Set-Cookie from an upstream Response to the caller,
+ * rewriting attributes for host-only cookies (no Domain) with Lax.
  */
-// in functions/api/_utils.ts
-
 export function forwardSetCookies(
   upstreamResp: Response,
   outHeaders: Headers,
@@ -84,13 +82,13 @@ export function forwardSetCookies(
 ) {
   let setCookies: string[] = [];
 
-  // 1) CF Workers runtime helper (preferred)
+  // 1) CF runtime helper
   const anyHeaders = upstreamResp.headers as any;
   if (typeof anyHeaders.getSetCookie === 'function') {
     setCookies = anyHeaders.getSetCookie() || [];
   }
 
-  // 2) Fallback: iterate all headers and collect each set-cookie line
+  // 2) Fallback: iterate headers (captures multiple set-cookie lines)
   if (!setCookies.length) {
     try {
       (upstreamResp.headers as any).forEach?.((value: string, key: string) => {
@@ -99,7 +97,7 @@ export function forwardSetCookies(
     } catch {}
   }
 
-  // 3) Last resort: a single header (often only the first cookie)
+  // 3) Last resort: single header
   if (!setCookies.length) {
     const single = upstreamResp.headers.get('set-cookie');
     if (single) setCookies = [single];
@@ -128,7 +126,6 @@ export function forwardSetCookies(
       if (name === 'refresh_token' && defaults.refreshMaxAge) maxAge = defaults.refreshMaxAge;
     }
 
-    // Re-emit as host-only cookies (no Domain) so they work on pages.dev and your custom domain
     setCookie(outHeaders, name, value, {
       httpOnly: true,
       secure: true,
@@ -139,25 +136,7 @@ export function forwardSetCookies(
   }
 }
 
-
-    // Optional defaults
-    if (maxAge === undefined) {
-      if (name === 'access_token' && defaults.accessMaxAge) maxAge = defaults.accessMaxAge;
-      if (name === 'refresh_token' && defaults.refreshMaxAge) maxAge = defaults.refreshMaxAge;
-    }
-
-    // Re-set cookie for our domain
-    setCookie(outHeaders, name, value, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Lax',
-      path: '/',
-      maxAge,
-    });
-  }
-}
-
-/* ------------ Token accessors ------------ */
+/* ---------------- Token accessors ---------------- */
 export function getAccessFromRequest(req: Request) {
   return parseCookies(req).get('access_token') ?? null;
 }
@@ -167,8 +146,8 @@ export function getRefreshFromRequest(req: Request) {
 
 /**
  * ensureAccess:
- * - Returns { ok:true, token } if access_token exists on the request
- * - Otherwise returns { ok:false, response: 401 JSON }
+ * - Returns { ok:true, token } if access_token exists
+ * - Else returns { ok:false, response: 401 JSON }
  */
 export function ensureAccess(req: Request) {
   const token = getAccessFromRequest(req);
@@ -176,7 +155,7 @@ export function ensureAccess(req: Request) {
   return { ok: true as const, token };
 }
 
-/* ------------ Upstream convenience ------------ */
+/* ---------------- Upstream convenience ---------------- */
 export function upstream(env: Env, path: string, init?: RequestInit) {
   const url = path.startsWith('http') ? path : `${env.AUTH_BASE}${path}`;
   return fetch(url, init);
