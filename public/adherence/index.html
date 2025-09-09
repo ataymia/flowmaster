@@ -141,13 +141,17 @@
           </div>
         </div>
       </div>
+<div class="card">
+  <h3 style="margin-top:0">Live Team</h3>
+  <div id="liveAgents" class="scroll"></div>
+</div>
 
       <div class="card">
         <h3 style="margin-top:0">Downloads</h3>
         <div class="btn-row" style="margin-bottom:10px">
           <button class="btn pill" data-range="today">Today</button>
           <button class="btn pill" data-range="thisweek">This Week</button>
-          <button class="btn pill" data-range="last7">Last 7 Days</button>
+          <button class="btn pill" data-range="last30">Last 30 Days</button>
         </div>
         <div class="row" style="gap:10px;flex-wrap:wrap">
           <div><label class="label">From</label><input id="from" type="date" class="field"></div>
@@ -393,6 +397,35 @@ function fmtAgo(ms){
   if (m) return `${m}m ${s}s`;
   return `${s}s`;
 }
+function fmtDurationSec(secs){
+  const hh = String(Math.floor(secs/3600)).padStart(2,'0');
+  const mm = String(Math.floor((secs%3600)/60)).padStart(2,'0');
+  const ss = String(secs%60).padStart(2,'0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+function renderLiveTeam(list){
+  const host = document.getElementById('liveAgents');
+  if (!host) return;
+  host.innerHTML = '';
+  if (!Array.isArray(list) || !list.length) { host.textContent = '—'; return; }
+
+  for (const row of list) {
+    const secs = row?.ts ? Math.max(0, Math.floor((Date.now() - Number(row.ts))/1000)) : 0;
+    const div = document.createElement('div');
+    div.className = 'row-between';
+    div.style.borderTop = '1px solid var(--line)';
+    div.style.padding = '6px 0';
+    div.innerHTML = `
+      <div>
+        <strong>${(row.username||'').replace(/</g,'&lt;')}</strong>
+        <span class="pill" style="margin-left:8px">${(row.status||'OFFLINE')}</span>
+        ${row.online ? '' : '<span class="pill" style="margin-left:6px">idle</span>'}
+      </div>
+      <div class="muted small">${fmtDurationSec(secs)}</div>`;
+    host.appendChild(div);
+  }
+}
 
 // example in a row renderer
 const since = item.ts ? Date.now() - item.ts : 0;
@@ -432,13 +465,19 @@ function buildAdmin(){
       const kind=btn.getAttribute('data-range');
       const today=new Date();
       let from, to;
-      if(kind==='today'){ from = toISOdate(today); to=from; }
-      else if(kind==='thisweek'){
-        const d=today; const day=(d.getUTCDay()+6)%7;
-        const start=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-day));
-        const end  =new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()+(6-day)));
-        from=toISOdate(start); to=toISOdate(end);
-      }else{ const end=today; const start=new Date(end); start.setUTCDate(end.getUTCDate()-6); from=toISOdate(start); to=toISOdate(end); }
+      if (kind === 'today') { from = toISOdate(today); to = from; }
+else if (kind === 'thisweek') {
+  const d=today; const day=(d.getUTCDay()+6)%7;
+  const start=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-day));
+  const end  =new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()+(6-day)));
+  from=toISOdate(start); to=toISOdate(end);
+} else if (kind === 'last30') {
+  const end = today;
+  const start = new Date(end);
+  start.setUTCDate(end.getUTCDate()-29);
+  from=toISOdate(start); to=toISOdate(end);
+}
+
       document.getElementById('from').value=from;
       document.getElementById('to').value=to;
     };
@@ -710,6 +749,21 @@ function wirePasswordDialog(){
     // instantly reflect in presence
     ping(newStatus);
   }
+// immediately, then every 30s
+fetch('/api/presence', { method:'POST', credentials:'include', headers:{'content-type':'application/json'}, body: '{}' })
+  .catch(()=>{});
+setInterval(() => {
+  fetch('/api/presence', { method:'POST', credentials:'include', headers:{'content-type':'application/json'}, body: '{}' })
+    .catch(()=>{});
+}, 30000);
+
+// AND when agent clicks a status button (after /api/events POST succeeds), also ping with the new status:
+await fetch('/api/presence', {
+  method:'POST',
+  credentials:'include',
+  headers:{'content-type':'application/json'},
+  body: JSON.stringify({ status:newStatus, ts: Date.now() })
+});
 
   // Wire your buttons to onStatusClick('AVAILABLE' | 'BREAK' | 'LUNCH' | etc.)
   // document.getElementById('btnAvailable').onclick = () => onStatusClick('AVAILABLE');
