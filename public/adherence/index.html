@@ -335,7 +335,7 @@ async function fetchTeamPresence(){
   await refresh();
   setInterval(refresh, 5000);
 })();
-<script>
+
   // …your existing admin code…
 
   function fmtDuration(s) {
@@ -369,7 +369,7 @@ async function fetchTeamPresence(){
   // initial + poll every 10s
   refreshWall();
   setInterval(refreshWall, 10000);
-</script>
+
 async function refreshAgentData(){
   try{
     const [sched, ev] = await Promise.all([
