@@ -1,11 +1,12 @@
 // functions/api/_utils.ts
+
 export interface Env {
-  AUTH_BASE: string;             // e.g. https://allstar-auth.yourdomain.workers.dev
+  AUTH_BASE: string;            // e.g. https://allstar-auth.ataymia.workers.dev
   NOTION_TOKEN?: string;
   NOTION_DATABASE_ID?: string;
 }
 
-/* ---------------- JSON ---------------- */
+/* ---------- JSON helper ---------- */
 export function json(data: any, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(data), {
     status,
@@ -13,11 +14,11 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
   });
 }
 
-/* ---------------- Cookies ---------------- */
+/* ---------- Cookie helpers ---------- */
+
 type SameSite = "Lax" | "Strict" | "None";
 
-export function setCookie(
-  headers: Headers,
+function buildCookie(
   name: string,
   value: string,
   opts: {
@@ -28,13 +29,28 @@ export function setCookie(
     maxAge?: number; // seconds
   } = {}
 ) {
-  const parts = [`${name}=${value}`];
+  const parts = [`${name}=${encodeURIComponent(value)}`];
   parts.push(`Path=${opts.path ?? "/"}`);
-  if (opts.httpOnly !== false) parts.push("HttpOnly");
-  if (opts.secure !== false) parts.push("Secure");
+  if (opts.httpOnly ?? true) parts.push("HttpOnly");
+  if (opts.secure ?? true) parts.push("Secure");
   parts.push(`SameSite=${opts.sameSite ?? "Lax"}`);
   if (typeof opts.maxAge === "number") parts.push(`Max-Age=${opts.maxAge}`);
-  headers.append("Set-Cookie", parts.join("; "));
+  return parts.join("; ");
+}
+
+export function setCookie(
+  headers: Headers,
+  name: string,
+  value: string,
+  opts?: {
+    path?: string;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: SameSite;
+    maxAge?: number;
+  }
+) {
+  headers.append("Set-Cookie", buildCookie(name, value, opts));
 }
 
 export function clearCookie(headers: Headers, name: string, path = "/") {
@@ -50,128 +66,60 @@ export function getCookie(req: Request, name: string): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** Cloudflare may combine multiple Set-Cookie lines into one; split & forward all. */
-export function forwardSetCookies(src: Response | Headers, outHeaders: Headers) {
-  const h = (src as any).headers ? (src as Response).headers : (src as Headers);
-  const all = h.get("set-cookie");
-  if (!all) return;
-  const parts = all.split(/,(?=[^;=]+=[^;]+)/g);
-  for (const p of parts) outHeaders.append("Set-Cookie", p.trim());
+/* Parse all Set-Cookie header lines from a Response/Headers */
+function getSetCookieLines(src: Response | Headers): string[] {
+  // CF’s Response headers sometimes expose getSetCookie(); use it if present
+  const any = src as any;
+  if (typeof any?.headers?.getSetCookie === "function") {
+    const arr = any.headers.getSetCookie() || [];
+    if (arr.length) return arr;
+  }
+  // Generic: iterate headers and collect all set-cookie lines
+  const h = (src instanceof Response) ? src.headers : src;
+  const lines: string[] = [];
+  try {
+    (h as any).forEach?.((v: string, k: string) => {
+      if (k?.toLowerCase() === "set-cookie" && v) lines.push(v);
+    });
+  } catch {}
+  if (!lines.length) {
+    const single = h.get("set-cookie");
+    if (single) {
+      // If multiple cookies were flattened into one header, split on comma before a k=v
+      const parts = single.split(/,(?=[^;]+?=)/g);
+      return parts.map(s => s.trim());
+    }
+  }
+  return lines;
 }
 
-/** Extract a specific cookie VALUE from upstream Set-Cookie headers. */
-export function pickCookieFromSetCookie(h: Headers, cookieName: string): string | null {
-  const all = h.get("set-cookie");
-  if (!all) return null;
-  const parts = all.split(/,(?=[^;=]+=[^;]+)/g);
-  for (const p of parts) {
-    const first = p.split(";", 1)[0] || "";
-    const [k, ...v] = first.split("=");
-    if (k?.trim().toLowerCase() === cookieName.toLowerCase()) return v.join("=");
+/**
+ * Forward every Set-Cookie from upstream `src` to outgoing `dst` (no rewriting).
+ */
+export function forwardSetCookies(src: Response | Headers, dst: Headers) {
+  for (const line of getSetCookieLines(src)) {
+    dst.append("Set-Cookie", line);
+  }
+}
+
+/**
+ * Extract the **cookie value** (not the whole line) for a cookie name
+ * from the upstream Set-Cookie headers.
+ */
+export function pickCookieFromSetCookie(src: Response | Headers, name: string): string | null {
+  for (const line of getSetCookieLines(src)) {
+    const [pair] = line.split(";", 1);
+    if (!pair) continue;
+    const [k, ...rest] = pair.split("=");
+    if (k?.trim().toLowerCase() === name.toLowerCase()) {
+      return (rest.join("=") || "").trim(); // raw value only
+    }
   }
   return null;
 }
 
-/* ---------------- Access control ---------------- */
-function getSessionToken(req: Request): string | null {
-  // Accept either cookie name (your app has used both at various points)
-  return getCookie(req, "allstar_at") || getCookie(req, "access_token");
-}
-
-/** Ensure we have a session; return token if present. */
-export function ensureAccess(req: Request) {
-  const token = getSessionToken(req);
-  if (token) return { ok: true as const, token };
-  return { ok: false as const, response: json({ error: "unauthorized" }, 401) };
-}
-
-/* ---------------- Upstream base fetch ---------------- */
+/* ---------- Upstream helper ---------- */
 export function upstream(env: Env, path: string, init?: RequestInit) {
   const url = path.startsWith("http") ? path : `${env.AUTH_BASE}${path}`;
   return fetch(url, init);
-}
-
-/* ---------------- Proxies used by your routes ---------------- */
-
-/**
- * proxyWithAuth: call the auth Worker path with Authorization: Bearer <token>.
- * Also forwards request body/method and returns upstream response (incl. headers).
- */
-export async function proxyWithAuth(
-  req: Request,
-  env: Env,
-  path: string,
-  init: RequestInit = {}
-) {
-  const acc = ensureAccess(req);
-  if (!acc.ok) return acc.response;
-
-  const headers = new Headers(init.headers || {});
-  headers.set("authorization", `Bearer ${acc.token}`);
-  // preserve content-type if caller posted JSON/form
-  const ct = req.headers.get("content-type");
-  if (ct && !headers.has("content-type")) headers.set("content-type", ct);
-
-  const res = await upstream(env, path, {
-    method: init.method || req.method,
-    body: init.body ?? (req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined),
-    headers,
-    redirect: "manual",
-  });
-
-  // pass through body + headers (and any Set-Cookie)
-  const outHeaders = new Headers(res.headers);
-  // If CF collapsed Set-Cookie into one header, re-append correctly:
-  const combined = outHeaders.get("set-cookie");
-  if (combined) {
-    outHeaders.delete("set-cookie");
-    forwardSetCookies(res, outHeaders);
-  }
-
-  return new Response(res.body, { status: res.status, headers: outHeaders });
-}
-
-/**
- * proxyWithSession: similar to proxyWithAuth, but also sends Cookie header with access_token=
- * (useful for upstream endpoints that read Cookie instead of Authorization).
- */
-export async function proxyWithSession(
-  req: Request,
-  env: Env,
-  path: string,
-  init: RequestInit = {}
-) {
-  const acc = ensureAccess(req);
-  if (!acc.ok) return acc.response;
-
-  const headers = new Headers(init.headers || {});
-  // Set Authorization too (safe & convenient)
-  if (!headers.has("authorization")) headers.set("authorization", `Bearer ${acc.token}`);
-
-  // Build Cookie header, ensuring access_token is present
-  const incomingCookie = req.headers.get("cookie") || "";
-  let cookieHeader = incomingCookie;
-  if (!/(^|;\s*)access_token=/.test(cookieHeader)) {
-    cookieHeader = (cookieHeader ? cookieHeader + "; " : "") + `access_token=${acc.token}`;
-  }
-  headers.set("cookie", cookieHeader);
-
-  const ct = req.headers.get("content-type");
-  if (ct && !headers.has("content-type")) headers.set("content-type", ct);
-
-  const res = await upstream(env, path, {
-    method: init.method || req.method,
-    body: init.body ?? (req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined),
-    headers,
-    redirect: "manual",
-  });
-
-  const outHeaders = new Headers(res.headers);
-  const combined = outHeaders.get("set-cookie");
-  if (combined) {
-    outHeaders.delete("set-cookie");
-    forwardSetCookies(res, outHeaders);
-  }
-
-  return new Response(res.body, { status: res.status, headers: outHeaders });
 }
