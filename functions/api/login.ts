@@ -1,42 +1,65 @@
-// functions/api/login.ts
-import { Env, json, upstream, forwardSetCookies, setCookie } from './_utils';
+// Proxies login to the Auth Worker. Mirrors cookies and also includes a
+// one-time URL handoff to guarantee session on /hub even if Set-Cookie is missed.
+// For AJAX requests, it also echoes the token in JSON ("at") so you can test manually.
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  let body: any = null;
-  try { body = await request.json(); } catch { return json({ error: 'bad_json' }, 400); }
-  if (!body?.username && !body?.email) return json({ error: 'missing_username_or_email' }, 400);
-  if (!body?.password) return json({ error: 'missing_password' }, 400);
+function wantsHTML(req: Request): boolean {
+  const accept = req.headers.get("accept") || "";
+  return accept.includes("text/html") && !req.headers.get("x-ajax");
+}
 
-  // Send through to your auth worker
-  const up = await upstream(env, '/auth/login', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+async function parseBody(req: Request): Promise<{ email?: string; username?: string; password?: string; }> {
+  const ct = req.headers.get("content-type") || "";
+  if (ct.startsWith("application/json")) {
+    try { return await req.json(); } catch { return {}; }
+  }
+  const raw = await req.text();
+  try {
+    const p = new URLSearchParams(raw);
+    return { email: p.get("email") || undefined, username: p.get("username") || undefined, password: p.get("password") || undefined };
+  } catch { return {}; }
+}
+
+export const onRequestPost: PagesFunction = async ({ request, env }) => {
+  const body = await parseBody(request);
+
+  const r = await fetch(`${env.AUTH_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 
-  const hdr = new Headers();
+  const headers = new Headers({ "content-type": "application/json" });
 
-  // Forward upstream cookies (if any) onto our domain
-  forwardSetCookies(up, hdr, {
-    accessMaxAge: 60 * 15,
-    refreshMaxAge: 60 * 60 * 24 * 30,
-  });
-
-  // Also, if upstream returns tokens in JSON body, set them explicitly
-  let data: any = null;
-  try { data = await up.clone().json(); } catch {}
-  if (data) {
-    const access = data.access || data.access_token;
-    const refresh = data.refresh || data.refresh_token;
-    if (access) setCookie(hdr, 'access_token', access, { httpOnly: true, secure: true, sameSite: 'Lax', path:'/', maxAge: 60*15 });
-    if (refresh) setCookie(hdr, 'refresh_token', refresh, { httpOnly: true, secure: true, sameSite: 'Lax', path:'/', maxAge: 60*60*24*30 });
+  if (!r.ok) {
+    const txt = await r.text();
+    if (wantsHTML(request)) {
+      const code = (() => { try { return JSON.parse(txt).error; } catch { return "login_error"; } })();
+      const back = new URL("/", request.url); back.searchParams.set("err", code);
+      return Response.redirect(back, 303);
+    }
+    return new Response(txt, { status: r.status, headers });
   }
 
-  if (!up.ok) {
-    // pass upstream status/body for debugging
-    const txt = await up.text().catch(() => '');
-    return json({ error: 'auth_failed', detail: txt }, up.status);
+  const data = await r.json(); // { ok, username, role, mustChangePassword, access, refresh }
+
+  const access  = data.access  || "";
+  const refresh = data.refresh || "";
+
+  if (access)  headers.append("Set-Cookie", `allstar_at=${access}; Path=/; HttpOnly; Secure; SameSite=Lax`);
+  if (refresh) headers.append("Set-Cookie", `allstar_rt=${refresh}; Path=/; HttpOnly; Secure; SameSite=Lax`);
+
+  if (wantsHTML(request)) {
+    const to = new URL("/hub", request.url);
+    if (access) to.searchParams.set("at", access); // handoff in case cookie is dropped
+    headers.set("Location", to.toString());
+    return new Response(null, { status: 303, headers });
   }
 
-  return json({ ok: true }, 200, hdr);
+  return new Response(JSON.stringify({
+    ok: true,
+    username: data.username,
+    role: data.role,
+    mustChangePassword: data.mustChangePassword,
+    at: access
+  }), { headers });
 };
