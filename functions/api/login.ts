@@ -1,53 +1,49 @@
 import {
-  Env, json, upstream, forwardSetCookies, pickCookieFromSetCookie, setCookie,
+  Env, json, upstream, forwardSetCookies,
+  pickCookieFromSetCookie, setCookie
 } from "./_utils";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  // Pass through body/headers to the auth worker
+  // pass through body as-is (supports JSON or form)
+  const body = await request.text();
+  const headers = new Headers();
+  const ct = request.headers.get("content-type");
+  if (ct) headers.set("content-type", ct);
+
   const up = await upstream(env, "/auth/login", {
     method: "POST",
-    headers: { "content-type": request.headers.get("content-type") || "application/json" },
-    body: request.body,
+    headers,
+    body,
     redirect: "manual",
   });
 
-  // Prepare outgoing headers, forward upstream Set-Cookie as-is
-  const outHeaders = new Headers({ "content-type": up.headers.get("content-type") || "application/json" });
-  forwardSetCookies(up, outHeaders);
+  // Forward upstream cookies + also mirror for Pages usage.
+  const out = new Headers({ "cache-control": "no-store" });
+  forwardSetCookies(up, out);
 
-  // Mirror tokens to Pages host cookies so our site can see them
-  const access = pickCookieFromSetCookie(up.headers, "access_token");
-  const refresh = pickCookieFromSetCookie(up.headers, "refresh_token");
-
+  // Mirror access_token -> allstar_at (HttpOnly, path=/)
+  const access = pickCookieFromSetCookie(up, "access_token");
   if (access) {
-    // Keep backwards-compat for /api/whoami (reads allstar_at)
-    setCookie(outHeaders, "allstar_at", access, {
+    setCookie(out, "allstar_at", access, {
+      maxAge: 60 * 60 * 24 * 7, // keep a week; actual JWT still expires but we’ll refresh
       path: "/",
       httpOnly: true,
       secure: true,
       sameSite: "Lax",
-      maxAge: 60 * 15, // 15m (match worker default)
-    });
-    // Also mirror access_token at host level so newer code can read it
-    setCookie(outHeaders, "access_token", access, {
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-      maxAge: 60 * 15,
-    });
-  }
-  if (refresh) {
-    // Important: keep a host-level copy so /api/refresh can send it upstream
-    setCookie(outHeaders, "refresh_token", refresh, {
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-      maxAge: 60 * 60 * 24 * 7, // 7d
     });
   }
 
-  const body = await up.text().catch(() => "");
-  return new Response(body, { status: up.status, headers: outHeaders });
+  // Mirror refresh_token -> rt (HttpOnly, path=/), so Pages Functions can refresh
+  const refresh = pickCookieFromSetCookie(up, "refresh_token");
+  if (refresh) {
+    setCookie(out, "rt", refresh, {
+      maxAge: 60 * 60 * 24 * 7,
+      path: "/",
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+    });
+  }
+
+  return new Response(up.body, { status: up.status, headers: out });
 };
