@@ -1,112 +1,99 @@
 // functions/api/whoami.ts
-import { Env, json, forwardSetCookies } from "./_utils";
+// Robust "who am I" that supports legacy allstar_at OR access_token,
+// refreshes if needed, and returns user fields at TOP LEVEL so the hub works.
+
+import { Env, json } from "./_utils";
 
 function readCookieVal(header: string, name: string): string | null {
   const m = (header || "").match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
   return m ? m[1] : null;
 }
 
-function buildCookieHeader(srcCookieHeader: string): string | null {
-  // Support legacy 'allstar_at' or modern 'access_token' + 'refresh_token'
-  const access = readCookieVal(srcCookieHeader, "access_token") ||
-                 readCookieVal(srcCookieHeader, "allstar_at");
-  const refresh = readCookieVal(srcCookieHeader, "refresh_token");
-  const parts: string[] = [];
-  if (access) parts.push(`access_token=${access}`);
-  if (refresh) parts.push(`refresh_token=${refresh}`);
-  return parts.length ? parts.join("; ") : null;
-}
+// Forward *all* Set-Cookie lines from an upstream Response to the outgoing headers
+function forwardSetCookiesFromResponse(up: Response, out: Headers) {
+  const h: any = up.headers;
+  let setCookies: string[] = [];
 
-// Try to extract a cookie value from an upstream Response
-function getCookieFromUpstream(res: Response, name: string): string | null {
-  const anyH = res.headers as any;
-  let all: string[] = [];
-  if (typeof anyH.getSetCookie === "function") {
-    all = anyH.getSetCookie() || [];
+  if (typeof h.getSetCookie === "function") {
+    setCookies = h.getSetCookie() || [];
   }
-  if (!all.length) {
-    const single = res.headers.get("set-cookie");
-    if (single) all = [single];
+  if (!setCookies.length) {
+    const single = up.headers.get("set-cookie");
+    if (single) setCookies = [single];
   }
-  if (!all.length) return null;
-  const re = new RegExp(`(?:^|,\\s*)${name}=([^;]+)`);
-  for (const line of all) {
-    const m = line.match(new RegExp(`${name}=([^;]+)`));
-    if (m) return m[1];
+  if (!setCookies.length) return;
+
+  // Cloudflare may flatten multiple cookies; split safely on a cookie boundary
+  const lines: string[] = [];
+  for (const raw of setCookies) {
+    lines.push(...raw.split(/,(?=[^;=]+=[^;]+)/g).map(s => s.trim()).filter(Boolean));
   }
-  return null;
+  for (const line of lines) out.append("set-cookie", line);
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const clientCookie = request.headers.get("cookie") || "";
+  const cookieHdr = request.headers.get("cookie") || "";
+  const legacy = readCookieVal(cookieHdr, "allstar_at");
+  const access = readCookieVal(cookieHdr, "access_token") || legacy;
+  const refresh = readCookieVal(cookieHdr, "refresh_token");
 
-  // Build the cookie header we’ll send to the auth worker
-  let upstreamCookie = buildCookieHeader(clientCookie);
-  if (!upstreamCookie) {
+  if (!access && !refresh) {
+    // Not signed in
     return json({ authed: false, error: "no_cookie" }, 401, { "cache-control": "no-store" });
   }
 
-  // 1) Call /me
-  let res = await fetch(`${env.AUTH_BASE}/me`, {
-    headers: { cookie: upstreamCookie },
-    redirect: "manual",
-  });
+  // Helper to call /me with a given access token
+  const getMe = async (acc: string) =>
+    fetch(`${env.AUTH_BASE}/me`, { headers: { cookie: `access_token=${acc}` }, redirect: "manual" });
 
-  // 2) If unauthorized but we have refresh_token, attempt refresh and retry once
-  if (res.status === 401 && /refresh_token=/.test(upstreamCookie)) {
-    const refreshOnly = readCookieVal(upstreamCookie, "refresh_token");
-    if (refreshOnly) {
-      const rf = await fetch(`${env.AUTH_BASE}/auth/refresh`, {
-        method: "POST",
-        headers: { cookie: `refresh_token=${refreshOnly}` },
-        redirect: "manual",
-      });
-
-      // Forward any Set-Cookie (new access_token, etc.) back to browser
-      const outH = new Headers();
-      forwardSetCookies(rf, outH);
-
-      // If we received a new access_token, use it for a second /me call
-      const newAccess = getCookieFromUpstream(rf, "access_token");
-      if (newAccess) {
-        upstreamCookie = `access_token=${newAccess}; refresh_token=${refreshOnly}`;
-        res = await fetch(`${env.AUTH_BASE}/me`, {
-          headers: { cookie: upstreamCookie },
-          redirect: "manual",
-        });
-      }
-
-      // Merge Set-Cookie from /me (if any) into headers we’ll return
-      const outH2 = new Headers(outH);
-      forwardSetCookies(res, outH2);
-
-      if (!res.ok) {
-        return new Response(await res.text(), {
-          status: 401,
-          headers: outH2,
-        });
-      }
-
-      const me = await res.json();
-      // Return user fields at the top level for hub compatibility
+  // 1) Try with whatever access token we have
+  if (access) {
+    const r = await getMe(access);
+    if (r.ok) {
+      const me = await r.json();
+      // Return user fields at the TOP LEVEL for hub compatibility
       return new Response(JSON.stringify({ authed: true, ...me, _raw: me }), {
         status: 200,
-        headers: outH2,
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
       });
     }
   }
 
-  // Normal success path
-  if (res.ok) {
-    const outH = new Headers();
-    forwardSetCookies(res, outH); // in case /me also sets/extends cookies
-    const me = await res.json();
-    return new Response(JSON.stringify({ authed: true, ...me, _raw: me }), {
-      status: 200,
+  // 2) If unauthorized and we have refresh, refresh once and retry
+  if (refresh) {
+    const rf = await fetch(`${env.AUTH_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { cookie: `refresh_token=${refresh}` },
+      redirect: "manual",
+    });
+
+    const outH = new Headers({ "content-type": "application/json", "cache-control": "no-store" });
+    forwardSetCookiesFromResponse(rf, outH);
+
+    // Try /me again if we appear to have a new access cookie
+    const refreshedAccess =
+      readCookieVal(outH.get("set-cookie") || "", "access_token") ||
+      readCookieVal(rf.headers.get("set-cookie") || "", "access_token");
+
+    if (refreshedAccess) {
+      const r2 = await getMe(refreshedAccess);
+      forwardSetCookiesFromResponse(r2, outH); // just in case /me also sets something
+      if (r2.ok) {
+        const me = await r2.json();
+        return new Response(JSON.stringify({ authed: true, ...me, _raw: me }), {
+          status: 200,
+          headers: outH,
+        });
+      }
+    }
+
+    // Refresh failed
+    return new Response(JSON.stringify({ authed: false, error: "refresh_failed" }), {
+      status: 401,
       headers: outH,
     });
   }
 
-  // Still unauthorized (or other error)
-  return json({ authed: false, status: res.status }, 401, { "cache-control": "no-store" });
+  // Fallthrough unauthorized
+  return json({ authed: false, error: "unauthorized" }, 401, { "cache-control": "no-store" });
 };
