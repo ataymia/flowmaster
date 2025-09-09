@@ -91,3 +91,12 @@ export async function proxyWithAuth(req: Request, env: Env, path: string, init: 
   const out = new Response(res.body, { status: res.status, headers: new Headers(res.headers) });
   return out;
 }
+// Alias for older code that still imports proxyWithSession
+export async function proxyWithSession(
+  req: Request,
+  env: Env,
+  path: string,
+  init: RequestInit = {}
+) {
+  return proxyWithAuth(req, env, path, init);
+}
