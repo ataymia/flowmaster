@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Allstar Agent Hub — Home</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <style>
     :root{
       --brand:#e11d48; --brand-ink:#fff;
@@ -36,10 +37,11 @@
     .news-item:first-child{border-top:0}
     .muted{color:var(--muted)}
     .hidden{display:none!important}
+    .centerbox{max-width:560px;margin:40px auto}
     @media (max-width:1000px){ .grid-2{grid-template-columns:1fr} .hero{flex-direction:column;gap:12px} }
   </style>
   <script>
-    // If someone typed /hub without .html, self-correct (keeps your working routing).
+    // If someone typed /hub without .html, correct it once (no loop).
     if (location.pathname === '/hub') location.replace('/hub.html');
   </script>
 </head>
@@ -52,110 +54,131 @@
     </div>
   </div>
 
-  <div class="container">
-    <div class="hero">
-      <div>
-        <h1>Welcome back<span id="welcomeName"></span> 👋</h1>
-        <p class="muted">Quick links to your tools and live team updates.</p>
-      </div>
-      <div class="btn-row">
-        <!-- Real buttons, not anchors. Navigation is handled in JS to avoid changing your working routes. -->
-        <button class="btn btn-brand" type="button" data-nav="/adherence/">Adherence / Schedule</button>
-        <button class="btn btn-ghost" type="button" data-nav="/flowmaster/">Flowmaster</button>
-        <button id="adminToolsBtn" class="btn btn-ghost hidden" type="button" data-nav="/admin/">Admin Tools</button>
-      </div>
-    </div>
-
-    <div class="grid grid-2">
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
-          <h2>Team News &amp; Memos</h2>
-          <span id="audChip" class="pill">All</span>
-        </div>
-        <div id="news" class="muted">Loading news…</div>
-      </div>
-
-      <div class="card">
-        <h2>Account</h2>
-        <div id="roleLine" class="muted" style="margin:4px 0 12px 0">Role: …</div>
-        <div class="btn-row">
-          <button class="btn" type="button" data-nav="/adherence/">Open Adherence</button>
-          <button class="btn" type="button" data-nav="/flowmaster/">Open Flowmaster</button>
-        </div>
-      </div>
-    </div>
+  <div id="content" class="container">
+    <!-- Filled by JS -->
   </div>
 
   <script>
   (function(){
     const $ = s => document.querySelector(s);
 
-    // Nav buttons
+    // Single navigation handler for "buttons"
     document.addEventListener('click', (e)=>{
       const el = e.target.closest('[data-nav]');
       if(!el) return;
       const to = el.getAttribute('data-nav');
       if(!to) return;
-      // Keep your working routes; we just navigate without changing functionality.
       location.assign(to);
     });
 
+    function esc(s){return String(s).replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}
+
+    function renderSignedOut(){
+      $('#me').textContent = 'Not signed in';
+      const host = $('#content');
+      host.innerHTML = '';
+      const card = document.createElement('div');
+      card.className = 'card centerbox';
+      card.innerHTML = `
+        <h2>Session required</h2>
+        <p class="muted" style="margin:6px 0 14px 0">You’re not signed in. Please sign in to access the Hub.</p>
+        <div class="btn-row">
+          <button class="btn btn-brand" type="button" data-nav="/">Go to sign-in</button>
+        </div>`;
+      host.appendChild(card);
+    }
+
+    function renderHub(me, items){
+      $('#me').textContent = me?.username ? `${me.username} · ${me.role}` : 'Signed in';
+
+      const aud = (me?.role === 'ADMIN' || me?.role === 'SUPERADMIN') ? 'ADMIN' : 'AGENT';
+      const adminBtn = (aud === 'ADMIN') ? '' : ' hidden';
+
+      const content = `
+        <div class="hero">
+          <div>
+            <h1>Welcome back${me?.username ? `, ${esc(me.username)}` : ''} 👋</h1>
+            <p class="muted">Quick links to your tools and live team updates.</p>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-brand" type="button" data-nav="/adherence/">Adherence / Schedule</button>
+            <button class="btn btn-ghost" type="button" data-nav="/flowmaster/">Flowmaster</button>
+            <button id="adminToolsBtn" class="btn btn-ghost${adminBtn}" type="button" data-nav="/admin/">Admin Tools</button>
+          </div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+              <h2>Team News &amp; Memos</h2>
+              <span id="audChip" class="pill">${aud === 'ADMIN' ? 'Admins' : 'Agents'}</span>
+            </div>
+            <div id="news" class="muted">${renderNewsHTML(items)}</div>
+          </div>
+
+          <div class="card">
+            <h2>Account</h2>
+            <div id="roleLine" class="muted" style="margin:4px 0 12px 0">Role: ${esc(me?.role||'unknown')}</div>
+            <div class="btn-row">
+              <button class="btn" type="button" data-nav="/adherence/">Open Adherence</button>
+              <button class="btn" type="button" data-nav="/flowmaster/">Open Flowmaster</button>
+            </div>
+          </div>
+        </div>
+      `;
+      const host = $('#content');
+      host.innerHTML = content;
+    }
+
+    function renderNewsHTML(items){
+      if (!Array.isArray(items) || items.length === 0) {
+        return '<div class="muted">No news yet.</div>';
+      }
+      return items.map(it=>{
+        const when = it.date ? new Date(it.date).toLocaleString() : '';
+        return `
+          <div class="news-item">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <strong>${esc(it.title||'')}</strong>
+              <span class="pill">${esc(it.audience||'all')}</span>
+            </div>
+            <div class="muted" style="font-size:12px;margin-top:2px">${when}</div>
+            <div style="margin-top:8px">${esc(it.body||'')}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
     async function boot(){
+      // Do not auto-redirect; show state instead. This prevents refresh loops.
       try{
         const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store' });
-        if (r.status === 401) { location.replace('/'); return; }
+        if (r.status === 401) { renderSignedOut(); return; }
         const me = await r.json().catch(()=>null);
-        $('#me').textContent = me?.username ? `${me.username} · ${me.role}` : 'Signed in';
-        $('#welcomeName').textContent = me?.username ? `, ${me.username}` : '';
-        $('#roleLine').textContent = 'Role: ' + (me?.role || 'unknown');
-        const aud = (me?.role === 'ADMIN' || me?.role === 'SUPERADMIN') ? 'ADMIN' : 'AGENT';
-        $('#audChip').textContent = (aud === 'ADMIN' ? 'Admins' : 'Agents');
-        if (aud === 'ADMIN') $('#adminToolsBtn').classList.remove('hidden');
 
-        // Load Notion news, but never break the page if it fails
+        // Load news, but don’t block the shell.
+        let items = [];
         try{
+          const aud = (me?.role === 'ADMIN' || me?.role === 'SUPERADMIN') ? 'ADMIN' : 'AGENT';
           const r2 = await fetch('/api/news?aud='+aud, { credentials:'include', cache:'no-store' });
           const j2 = await r2.json().catch(()=>({items:[]}));
-          renderNews(Array.isArray(j2.items) ? j2.items : []);
-        }catch(e){
-          console.error('news_error', e);
-          renderNews([]);
-        }
+          items = Array.isArray(j2.items) ? j2.items : [];
+        }catch{}
+        renderHub(me, items);
+
       }catch(e){
+        // Network error: also avoid hard redirects; show signed-out state.
         console.error('whoami_error', e);
-        location.replace('/');
+        renderSignedOut();
       }
 
+      // Logout clears cookies client-side and returns to sign-in
       $('#logout').onclick = ()=>{
         document.cookie='access_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
         document.cookie='refresh_token=; Path=/; Max-Age=0; Secure; SameSite=Lax';
-        location.replace('/');
+        location.assign('/');
       };
     }
-
-    function renderNews(items){
-      const host = $('#news');
-      host.innerHTML = '';
-      if (!items.length) {
-        host.innerHTML = '<div class="muted">No news yet.</div>';
-        return;
-      }
-      for (const it of items) {
-        const when = it.date ? new Date(it.date).toLocaleString() : '';
-        const row = document.createElement('div');
-        row.className='news-item';
-        row.innerHTML = `
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <strong>${esc(it.title||'')}</strong>
-            <span class="pill">${esc(it.audience||'all')}</span>
-          </div>
-          <div class="muted" style="font-size:12px;margin-top:2px">${when}</div>
-          <div style="margin-top:8px">${esc(it.body||'')}</div>`;
-        host.appendChild(row);
-      }
-    }
-
-    function esc(s){return String(s).replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}
 
     boot();
   })();
