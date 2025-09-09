@@ -2,527 +2,493 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Allstar Agent Adherence</title>
-  <link rel="stylesheet" href="/theme.css">
+  <title>Allstar — Agent Adherence</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    .kpi { font-weight:800; font-size:32px; }
-    .kpi-sub { color: var(--muted); }
-    .toast { position: fixed; right: 16px; bottom: 16px; background: var(--surface); border:1px solid var(--border); padding:10px 12px; border-radius:10px; display:none; }
-    .mode-toggle { margin-left:auto; }
+    :root{
+      /* brand (hub-matched) */
+      --brand:#e11d48; --brand-ink:#fff;
+
+      /* light theme palette (dark mode later) */
+      --bg:#ffffff; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb; --card:#ffffff;
+      --shadow:0 10px 25px rgba(17,24,39,.08);
+      --radius:18px;
+
+      /* status colors (more distinct oranges/yellows) */
+      --st-available:#10b981;  /* green */
+      --st-bathroom:#d97706;   /* amber-600 (darker than break) */
+      --st-break:#f59e0b;      /* amber-500 */
+      --st-lunch:#fb923c;      /* orange-400 */
+      --st-training:#8b5cf6;   /* violet-500 */
+      --st-meeting:#3b82f6;    /* blue-500 */
+      --st-offline:#9ca3af;    /* gray-400 */
+
+      --diff:rgba(239,68,68,.35); /* red-500 overlay for mismatch */
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--ink)}
+    a{color:var(--brand);text-decoration:none}
+    .header{position:sticky;top:0;z-index:10;backdrop-filter:blur(6px);background:rgba(255,255,255,.9);border-bottom:1px solid var(--line)}
+    .header-inner{display:flex;align-items:center;gap:14px;padding:14px 20px}
+    .logo{font-weight:900;letter-spacing:.3px;color:var(--brand);font-size:18px}
+    .me{margin-left:auto;color:var(--muted)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer;color:inherit;text-decoration:none;box-shadow:var(--shadow)}
+    .btn:hover{background:#fafafa}
+    .btn-brand{background:var(--brand);border-color:transparent;color:var(--brand-ink)}
+    .container{max-width:1150px;margin:0 auto;padding:22px}
+    .grid{display:grid;gap:20px}
+    .grid-2{grid-template-columns:2fr 1fr}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+    .muted{color:var(--muted)}
+    .title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .h1{font-size:22px;font-weight:800;margin:0}
+    .h2{font-size:16px;font-weight:700;margin:0}
+    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:#f8fafc;font-size:12px}
+    .row{display:flex;align-items:center;gap:10px}
+    .btns{display:flex;flex-wrap:wrap;gap:10px}
+    .status-btn{border:0;color:#fff;border-radius:12px;padding:8px 12px;cursor:pointer;box-shadow:var(--shadow)}
+    .status-btn:hover{filter:brightness(.97)}
+    .small{font-size:12px}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    .list{max-height:220px;overflow:auto;border-top:1px solid var(--line);margin-top:8px}
+    .li{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+    .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:8px}
+
+    /* dual bars */
+    .timeline-wrap{position:relative;display:grid;gap:10px}
+    .bar-row{display:flex;align-items:center;gap:12px}
+    .rowlabel{width:7.2rem;color:var(--muted);font-size:12px}
+    .gridbar{height:22px;border-radius:10px;overflow:hidden;background:#f3f4f6;flex:1;position:relative}
+    .seg{height:100%;display:inline-block;position:relative}
+    .seg.diff::after{content:"";position:absolute;inset:0;background:var(--diff)} /* red overlay for mismatch */
+    .nowline{position:absolute;top:-6px;bottom:-6px;width:2px;background:#111827}
+    .stat-big{font-size:32px;font-weight:800}
+    .stat-sub{color:var(--muted)}
+
+    /* status classes for segments & buttons */
+    .st-available{background:var(--st-available)}
+    .st-bathroom{background:var(--st-bathroom)}
+    .st-break{background:var(--st-break)}
+    .st-lunch{background:var(--st-lunch)}
+    .st-training{background:var(--st-training)}
+    .st-meeting{background:var(--st-meeting)}
+    .st-offline{background:var(--st-offline)}
+
+    @media (max-width: 1000px){
+      .grid-2{grid-template-columns:1fr}
+    }
   </style>
 </head>
 <body>
-  <div id="error" class="error-banner"></div>
-  <div id="toast" class="toast"></div>
-
-  <header class="appbar">
-    <a href="/hub" class="brand" style="color:var(--brand); text-decoration:none;">ALLSTAR</a>
-    <div class="brand">Allstar Agent Adherence</div>
-    <div id="hdr-meta" class="muted" style="margin-left:16px">Loading…</div>
-    <div class="mode-toggle row" style="gap:8px;">
-      <button id="btn-agent" class="btn">View as Agent</button>
-      <button id="btn-admin" class="btn btn-brand" style="display:none;">Admin Tools</button>
-      <button id="btn-logout" class="btn" style="margin-left:8px;">Logout</button>
+  <div class="header">
+    <div class="header-inner">
+      <div class="logo">ALLSTAR — Adherence</div>
+      <a class="btn" href="/hub.html">← Back to Hub</a>
+      <div id="me" class="me">Loading…</div>
     </div>
-  </header>
+  </div>
 
-  <main id="app" class="container" style="padding-top:16px;"></main>
+  <div class="container">
+    <div class="grid grid-2">
+      <!-- Left: Today -->
+      <div class="card">
+        <div class="title-row">
+          <div class="row">
+            <h1 class="h1">Today</h1>
+            <span id="today" class="pill"></span>
+          </div>
+          <div class="row">
+            <div class="stat-big" id="adhPct">100%</div>
+            <div class="stat-sub" id="adhBreakdown">in: 0m · out: 0m</div>
+          </div>
+        </div>
 
-<script>
-/* =========================
-   Config & Status Palette
-========================= */
-const STATUSES = [
-  { key:'available', label:'Available', color:'st-available' },
-  { key:'bathroom',  label:'Bathroom',  color:'st-bathroom'  },
-  { key:'break',     label:'Break',     color:'st-break'     },
-  { key:'lunch',     label:'Lunch',     color:'st-lunch'     },
-  { key:'training',  label:'Training',  color:'st-training'  },
-  { key:'meeting',   label:'Meeting',   color:'st-meeting'   },
-  { key:'offline',   label:'Offline',   color:'st-offline'   },
-];
+        <div id="bars" class="timeline-wrap" style="margin-top:6px"></div>
 
-/* =========================
-   Utilities
-========================= */
-const $ = (s, el)=> (el||document).querySelector(s);
-const pad = (n)=> String(n).padStart(2,'0');
-const isoDate = (d)=> (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10);
-const toHM = (m)=> `${pad(Math.floor(m/60))}:${pad(m%60)}`;
-const fmtDur = (mins)=> mins<60 ? mins+'m' : `${Math.floor(mins/60)}h ${mins%60? (mins%60)+'m' : ''}`;
-const fmtTS  = (ms)=> { const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
-const statusByKey = (k)=> STATUSES.find(s=>s.key===k) || { label:k, color:'st-offline' };
-function toast(msg, ms=2200){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
-function showError(msg){ const b=$('#error'); if(!b) return; b.style.display='block'; b.textContent='⚠️ '+msg; console.error('[Allstar]', msg); }
+        <div class="card" style="margin-top:16px">
+          <div class="row" style="justify-content:space-between">
+            <h2 class="h2">Set status</h2>
+            <div class="small muted mono" id="since">Status: — · 00:00:00</div>
+          </div>
+          <div class="btns" id="statusBtns" style="margin-top:10px"></div>
 
-/* =========================
-   API Proxies (Pages)
-========================= */
-async function jfetch(url, opts={}) {
-  const r = await fetch(url, { ...opts, headers:{ 'content-type':'application/json', ...(opts.headers||{}) } });
-  if (r.status===204) return null;
-  const ct = r.headers.get('content-type')||'';
-  const body = ct.includes('application/json') ? await r.json() : await r.text();
-  if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
-  return body;
-}
-const whoami = ()=> jfetch('/api/whoami');
-const logout = ()=> jfetch('/api/logout', { method:'POST' });
+          <div style="margin-top:14px">
+            <div class="h2" style="margin-bottom:6px">Recent switches</div>
+            <div id="recent" class="list small"></div>
+          </div>
+        </div>
+      </div>
 
-async function listUsers(){ return jfetch('/api/users'); }
-async function createUser(username,password,role){ return jfetch('/api/users', { method:'POST', body: JSON.stringify({ username,password,role }) }); }
-async function patchUser(id,patch){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'PATCH', body: JSON.stringify(patch) }); }
-async function deleteUserApi(id){ return jfetch(`/api/users?id=${encodeURIComponent(id)}`, { method:'DELETE' }); }
+      <!-- Right: My overview (fast glance) -->
+      <div class="card">
+        <div class="title-row">
+          <h2 class="h2">My Overview</h2>
+          <span class="muted small" id="lastSync">—</span>
+        </div>
+        <div class="small muted">Live adherence and timeline update every second; server sync every 15s.</div>
+        <div id="aux" class="small" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
 
-async function getSchedule(user,date){ const q=new URLSearchParams({user,date}).toString(); return jfetch('/api/schedule?'+q); }
-async function saveSchedule(user,date,blocks){ return jfetch('/api/schedule', { method:'POST', body: JSON.stringify({ username:user, date, blocks }) }); }
-async function postEvent(status,ts){ return jfetch('/api/events', { method:'POST', body: JSON.stringify(ts?{status,ts}:{status}) }); }
-async function listEvents(user,from,to){ const q=new URLSearchParams({user,from,to}).toString(); return jfetch('/api/events?'+q); }
+  <script>
+  // -------- CONFIG / STATUS SET --------
+  const STATUS = [
+    { key:'available', label:'Available', cls:'st-available' },
+    { key:'bathroom',  label:'Bathroom',  cls:'st-bathroom'  },
+    { key:'break',     label:'Break',     cls:'st-break'     },
+    { key:'lunch',     label:'Lunch',     cls:'st-lunch'     },
+    { key:'training',  label:'Training',  cls:'st-training'  },
+    { key:'meeting',   label:'Meeting',   cls:'st-meeting'   },
+    { key:'offline',   label:'Offline',   cls:'st-offline'   },
+  ];
+  const STATUS_MAP = Object.fromEntries(STATUS.map(s=>[s.key,s]));
 
-/* =========================
-   App State
-========================= */
-let ME=null;
-let MODE='admin'; // 'admin' | 'agent'
-let timers=[];    // per-mode
-function clearTimers(){ timers.forEach(clearInterval); timers=[]; }
-
-function renderHeader(){
-  const meta=$('#hdr-meta');
-  $('#btn-agent').style.display = MODE==='admin' ? '' : 'none';
-  $('#btn-admin').style.display = MODE==='agent' ? '' : 'none';
-  if(ME){
-    meta.textContent = `${ME.username} · ${ME.role}`;
-  }else{
-    meta.textContent = 'Not signed in';
+  // -------- API HELPERS --------
+  async function api(path, init={}){
+    const res = await fetch(path, { credentials:'include', cache:'no-store', ...init });
+    if (res.status===204) return null;
+    const ct = res.headers.get('content-type')||'';
+    const body = ct.includes('application/json') ? await res.json() : await res.text();
+    if (!res.ok) throw new Error((body && body.error) || ('HTTP '+res.status));
+    return body;
   }
-}
+  const apiWhoami   = ()=> api('/api/whoami');
+  const apiSchedule = (u,d)=> api(`/api/schedules?user=${encodeURIComponent(u)}&date=${encodeURIComponent(d)}`);
+  const apiEvents   = (u,from,to)=> api(`/api/events?user=${encodeURIComponent(u)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  const apiPostEvent= (status)=> api('/api/events',{ method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ status }) });
 
-/* =========================
-   Dual Bars (Projected vs Actual)
-========================= */
-function buildDualBars(date, scheduleBlocks, events){
-  const wrap=document.createElement('div'); wrap.className='timeline-wrap';
-  const has=Array.isArray(scheduleBlocks)&&scheduleBlocks.length;
-  const startMin = has ? Math.min(...scheduleBlocks.map(b=>b.start)) : 480;
-  const endMin   = has ? Math.max(...scheduleBlocks.map(b=>b.end))   : 1020;
-  const total = Math.max(1, endMin - startMin);
-  const dayStart = Date.parse(date+'T00:00:00');
+  // -------- UTIL --------
+  const pad=n=>String(n).padStart(2,'0');
+  const toISODate = (d)=> (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10);
+  const fmtDur = (mins)=> (mins<60) ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60? (mins%60+'m') : ''}`;
+  const fmtTS = (ms)=>{ const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
 
-  const proj = (scheduleBlocks||[]).map(b=>({ status:b.status, start:b.start, width:b.end-b.start }));
+  function statusLabel(k){ return (STATUS_MAP[k]||{}).label || k || '—'; }
+  function statusClass(k){ return (STATUS_MAP[k]||{}).cls || 'st-offline'; }
 
-  function eventsToSegs(evts){
-    const segs=[]; let cur=evts.length?evts[0].status:null;
-    const pts=evts.map(ev=> Math.max(startMin, Math.min(endMin, Math.floor((Number(ev.ts)-dayStart)/60000))));
-    let cursor=startMin;
-    for(let i=0;i<pts.length;i++){ const p=pts[i]; if(p>cursor) segs.push({status:cur,start:cursor,width:p-cursor}); cursor=p; cur=evts[i].status; }
-    if(cursor<endMin) segs.push({status:cur,start:cursor,width:endMin-cursor});
-    return segs;
-  }
-  const act = eventsToSegs(events||[]);
+  function minuteOfDay(msUTC){ const d=new Date(msUTC); return d.getUTCHours()*60 + d.getUTCMinutes(); }
 
-  function row(label, segs, compare){
-    const row = document.createElement('div'); row.className='row'; row.style.marginBottom = label==='Projected' ? '6px':'0';
-    const lab = document.createElement('div'); lab.className='rowlabel'; lab.textContent = label;
-    const bar = document.createElement('div'); bar.className = 'gridbar'; bar.style.flex='1';
-    segs.forEach(s=>{
-      const seg = document.createElement('div');
-      seg.className = 'seg ' + (s.status ? statusByKey(s.status).color : '');
-      const w = (s.width/total*100).toFixed(4)+'%';
-      seg.style.width = w;
-      if (compare) {
-        const probe = s.start + Math.max(1, Math.floor(s.width/2));
-        const exp = (scheduleBlocks||[]).find(b => probe>=b.start && probe<b.end);
-        if (exp && s.status && exp.status !== s.status) seg.classList.add('diff');
+  // Compute adherence up to "now" (UTC minutes), only where schedule defines expected
+  function calcAdherence(dateISO, blocks, events){
+    if (!blocks.length) return { pct:100, inMin:0, outMin:0, byStatus:{}, lines:[] };
+
+    const dayStart = Date.parse(dateISO + 'T00:00:00Z');
+    const startMin = Math.min(...blocks.map(b=>b.start));
+    const endMin   = Math.max(...blocks.map(b=>b.end));
+    const nowMin   = Math.min(endMin, Math.max(startMin, minuteOfDay(Date.now())));
+
+    // walk events → (minute -> current status)
+    const evSorted = [...events].sort((a,b)=> Number(a.ts)-Number(b.ts));
+    let idx=0, cur = evSorted.length ? evSorted[0].status : null;
+
+    // timeline lines & totals by status (actual)
+    const lines=[], byStatus={};
+    let spanStatus = cur, spanStart = startMin;
+
+    let inMin=0, outMin=0;
+    for (let m=startMin; m<=nowMin; m++){
+      const ms = dayStart + m*60000;
+      while (idx+1 < evSorted.length && Number(evSorted[idx+1].ts) <= ms) {
+        // close previous span at this minute
+        if (spanStatus && spanStart < m){
+          const dur = m - spanStart;
+          byStatus[spanStatus] = (byStatus[spanStatus]||0) + dur;
+          lines.push(`${fmtTS(dayStart + spanStart*60000)} ${statusLabel(spanStatus)} ${fmtDur(dur)}`);
+        }
+        idx++; cur = evSorted[idx].status;
+        spanStatus = cur; spanStart = m;
       }
-      bar.appendChild(seg);
-    });
-    row.appendChild(lab); row.appendChild(bar);
-    return row;
+      // adherence minute-by-minute
+      const exp = blocks.find(b=> m>=b.start && m<b.end);
+      if (!exp) continue; // unscheduled minutes don't count
+      if (cur && cur===exp.status) inMin++;
+      else outMin++;
+    }
+    // close last span to endMin for display purposes
+    if (spanStatus && spanStart < endMin){
+      const dur = (Math.max(nowMin,spanStart)) - spanStart;
+      if (dur > 0) {
+        byStatus[spanStatus] = (byStatus[spanStatus]||0) + dur;
+        lines.push(`${fmtTS(dayStart + spanStart*60000)} ${statusLabel(spanStatus)} ${fmtDur(dur)}`);
+      }
+    }
+    const total = inMin + outMin;
+    const pct = total ? (inMin/total*100) : 100;
+    return { pct, inMin, outMin, byStatus, lines };
   }
 
-  wrap.appendChild(row('Projected', proj, false));
-  wrap.appendChild(row('Actual',    act,  true));
+  // Build the two bars + a red overlay on Actual segments that differ from the scheduled status
+  function buildDualBars(dateISO, blocks, events){
+    const wrap = document.createElement('div');
+    wrap.className='timeline-wrap';
 
-  const now=Date.now(); const nowMin=Math.floor((now-dayStart)/60000);
-  const nowPct=Math.max(0, Math.min(100, ((nowMin-startMin)/total)*100));
-  const nl=document.createElement('div'); nl.className='nowline'; nl.style.left = nowPct+'%';
-  wrap.appendChild(nl);
+    if (!blocks.length){
+      wrap.innerHTML = `<div class="muted small">No schedule for today.</div>`;
+      return wrap;
+    }
 
-  return wrap;
+    const dayStart = Date.parse(dateISO + 'T00:00:00Z');
+    const startMin = Math.min(...blocks.map(b=>b.start));
+    const endMin   = Math.max(...blocks.map(b=>b.end));
+    const total    = endMin - startMin || 1;
 
-  function row(lbl, segs, cmp){ return row.__impl ? row.__impl(lbl, segs, cmp) : (row.__impl=(label, segs, compare)=>{ const r=document.createElement('div'); r.className='row'; r.style.marginBottom = label==='Projected' ? '6px':'0'; const lab=document.createElement('div'); lab.className='rowlabel'; lab.textContent=label; const bar=document.createElement('div'); bar.className='gridbar'; bar.style.flex='1'; segs.forEach(s=>{ const el=document.createElement('div'); el.className='seg '+(s.status?statusByKey(s.status).color:''); el.style.width=(s.width/total*100).toFixed(4)+'%'; if(compare){ const probe=s.start+Math.max(1,Math.floor(s.width/2)); const exp=(scheduleBlocks||[]).find(b=> probe>=b.start && probe<b.end); if(exp && s.status && exp.status!==s.status) el.classList.add('diff'); } bar.appendChild(el); }); r.append(lab,bar); return r; })(lbl,segs,cmp); }
-}
+    function blocksToSegs() {
+      return blocks.map(b => ({ status:b.status, start:b.start, width:b.end-b.start }));
+    }
 
-/* =========================
-   Adherence Calculations
-========================= */
-function calcAdherence(date, blocks, events){
-  if(!blocks || !blocks.length) return { pct: 100, inMin:0, outMin:0, lines:[], byStatus:{} };
-  const dayStart=Date.parse(date+'T00:00:00');
-  const startMin=Math.min(...blocks.map(b=>b.start));
-  const endMin=Math.max(...blocks.map(b=>b.end));
-  let idx=0, cur=events.length?events[0].status:null, curStart=startMin;
-  let inMin=0, outMin=0;
-  const lines=[]; const byStatus={};
+    function eventsToSegs() {
+      const segs=[];
+      const sorted = [...events].sort((a,b)=> Number(a.ts)-Number(b.ts));
+      let cur = sorted.length ? sorted[0].status : null;
+      let cursor = startMin;
+      for (let i=0; i<sorted.length; i++){
+        const p = Math.max(startMin, Math.min(endMin, Math.floor((Number(sorted[i].ts)-dayStart)/60000)));
+        if (p>cursor){ segs.push({ status:cur, start:cursor, width:p-cursor }); }
+        cursor = p; cur = sorted[i].status;
+      }
+      if (cursor<endMin) segs.push({ status:cur, start:cursor, width:endMin-cursor });
+      return segs;
+    }
 
-  function pushLine(st, sM, eM){
-    const startTS=dayStart + sM*60000; const dur=Math.max(0,eM-sM);
-    if(st){ lines.push(`${fmtTS(startTS)} ${statusByKey(st).label} ${fmtDur(dur)}`); byStatus[st]=(byStatus[st]||0)+dur; }
+    const proj = blocksToSegs();
+    const act  = eventsToSegs();
+
+    function row(segs, compare){
+      const bar = document.createElement('div'); bar.className='gridbar';
+      segs.forEach(s=>{
+        const w = (s.width/total*100).toFixed(4)+'%';
+        const div = document.createElement('div');
+        let diff=false;
+        if (compare){
+          // probe mid-point to decide mismatch; only count if schedule expects something
+          const probe = s.start + Math.max(1, Math.floor(s.width/2));
+          const exp = blocks.find(b => probe>=b.start && probe<b.end);
+          diff = !!(exp && s.status && exp.status !== s.status) || (!!exp && !s.status);
+        }
+        div.className = `seg ${s.status ? statusClass(s.status) : 'st-offline'} ${compare && diff ? 'diff' : ''}`;
+        div.style.width = w;
+        bar.appendChild(div);
+      });
+      return bar;
+    }
+
+    const top = document.createElement('div'); top.className='bar-row';
+    top.appendChild(el('div',{class:'rowlabel'},'Projected'));
+    top.appendChild(row(proj,false));
+    wrap.appendChild(top);
+
+    const bottom = document.createElement('div'); bottom.className='bar-row';
+    bottom.appendChild(el('div',{class:'rowlabel'},'Actual'));
+    bottom.appendChild(row(act,true));
+    wrap.appendChild(bottom);
+
+    // nowline
+    const now = Date.now();
+    const nowMin = Math.floor((now - dayStart)/60000);
+    const nowPct = Math.max(0, Math.min(100, ((nowMin-startMin)/(total))*100));
+    const nl = document.createElement('div');
+    nl.className='nowline';
+    nl.style.left = nowPct+'%';
+    bottom.lastChild.appendChild(nl);
+
+    return wrap;
   }
 
-  for(let m=startMin;m<=endMin;m++){
-    const ms=dayStart + m*60000;
-    if(idx+1<events.length && Number(events[idx+1].ts) <= ms){
-      pushLine(cur, curStart, m); idx++; cur=events[idx].status; curStart=m;
+  // tiny element helper
+  function el(tag, attrs, ...children){
+    const n=document.createElement(tag);
+    if (attrs) for (const [k,v] of Object.entries(attrs)){
+      if (k==='class') n.className=v;
+      else if (k==='style') Object.assign(n.style,v);
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k,v);
+    }
+    children.flat().forEach(c=> n.appendChild(c.nodeType?c:document.createTextNode(String(c))));
+    return n;
+  }
+
+  // -------- PAGE STATE --------
+  const STATE = {
+    me:null,
+    date: toISODate(new Date()),
+    schedule: [],   // [{status, start, end}]
+    events: [],     // [{status, ts}]
+    timers: []
+  };
+  function clearTimers(){ STATE.timers.forEach(id=>clearInterval(id)); STATE.timers=[]; }
+
+  // -------- RENDER --------
+  function renderHeader(){
+    const meEl = document.getElementById('me');
+    meEl.textContent = STATE.me?.username ? `${STATE.me.username} · ${STATE.me.role}` : 'Signed in';
+    document.getElementById('today').textContent = STATE.date;
+  }
+
+  function renderBars(){
+    const host = document.getElementById('bars');
+    host.innerHTML='';
+    host.appendChild(buildDualBars(STATE.date, STATE.schedule, STATE.events));
+  }
+
+  function renderStats(){
+    const d = calcAdherence(STATE.date, STATE.schedule, STATE.events);
+    document.getElementById('adhPct').textContent = Math.round(d.pct)+'%';
+    document.getElementById('adhBreakdown').textContent = `in: ${fmtDur(d.inMin)} · out: ${fmtDur(d.outMin)}`;
+
+    // AUX breakdown
+    const aux = document.getElementById('aux');
+    aux.innerHTML = '<div class="h2" style="margin:0 0 6px">AUX breakdown (actual)</div>';
+    if (!Object.keys(d.byStatus).length) {
+      aux.innerHTML += '<div class="muted small">No activity yet.</div>';
+    } else {
+      for (const [k,mins] of Object.entries(d.byStatus)){
+        const row = el('div',{class:'row',style:{margin:'4px 0'}},
+          el('span',{class:'dot',style:{background:getComputedStyleColor(statusClass(k))}}),
+          el('span',{}, `${statusLabel(k)} — ${fmtDur(mins)}`)
+        );
+        aux.appendChild(row);
+      }
+    }
+
+    // live "since"
+    const last = [...STATE.events].sort((a,b)=>Number(b.ts)-Number(a.ts))[0];
+    if (last){
+      const sinceEl = document.getElementById('since');
+      const tick = ()=>{
+        const secs = Math.floor((Date.now() - Number(last.ts))/1000);
+        const h=pad(Math.floor(secs/3600)), m=pad(Math.floor((secs%3600)/60)), s=pad(secs%60);
+        sinceEl.textContent = `Status: ${statusLabel(last.status)} · ${h}:${m}:${s}`;
+      };
+      tick();
+    } else {
+      document.getElementById('since').textContent = 'Status: — · 00:00:00';
     }
   }
-  pushLine(cur, curStart, endMin);
-
-  idx=0; cur=events.length?events[0].status:null;
-  const nowMin=Math.min(Math.max(startMin, Math.floor((Date.now()-dayStart)/60000)), endMin);
-  for(let m=startMin;m<nowMin;m++){
-    const ms=dayStart + m*60000;
-    while(idx+1<events.length && Number(events[idx+1].ts) <= ms){ idx++; cur=events[idx].status; }
-    const expected=(blocks||[]).find(b=> m>=b.start && m<b.end);
-    if(!expected) continue;
-    if(!cur) outMin++; else if(cur===expected.status) inMin++; else outMin++;
-  }
-  const total=inMin+outMin; const pct = total ? (inMin/total*100) : 100;
-  return { pct, inMin, outMin, lines, byStatus };
-}
-
-/* =========================
-   Agent View (for selected agent)
-========================= */
-function renderAgentView(ctx){
-  clearTimers();
-  const app=$('#app'); app.innerHTML='';
-
-  const whoUser = ctx.username;
-  const date = isoDate(new Date());
-
-  const grid = document.createElement('div'); grid.className='grid grid-2';
-
-  // LEFT: Bars + KPIs
-  const left = document.createElement('div'); left.className='card';
-  const head = document.createElement('div'); head.className='row-between';
-  head.innerHTML = `<h2>Today — ${whoUser}</h2><div class="muted">${date}</div>`;
-  const bars = document.createElement('div'); bars.style.marginTop='12px';
-  const krow = document.createElement('div'); krow.className='row'; krow.style.marginTop='12px';
-  krow.innerHTML = `<div class="kpi" id="pct">100%</div><div class="kpi-sub" id="inout">in: 0m · out: 0m</div>`;
-  left.append(head,bars,krow);
-
-  // RIGHT: Status buttons + recent
-  const right = document.createElement('div'); right.className='card';
-  right.innerHTML = `<h3>Set status</h3><div id="statusBtns" class="row" style="flex-wrap:wrap; margin-top:8px;"></div><div class="muted" style="margin-top:14px;">Recent switches</div><div id="recent" class="scroll" style="margin-top:6px;"></div>`;
-
-  grid.append(left,right); app.appendChild(grid);
-
-  function getColor(cls){ const map={ 'st-available':'#10b981','st-bathroom':'#f59e0b','st-break':'#fbbf24','st-lunch':'#fb923c','st-training':'#a78bfa','st-meeting':'#60a5fa','st-offline':'#9ca3af' }; return map[cls]||'#9ca3af'; }
-
-  // state
-  const S={ blocks:[], events:[] };
-
-  // buttons
-  const host = $('#statusBtns'); host.innerHTML='';
-  STATUSES.forEach(s=>{
-    const b=document.createElement('button');
-    b.className='btn'; b.style.color='#fff'; b.style.background=getColor(s.color);
-    b.textContent=s.label;
-    b.onclick = async ()=>{
-      const ev={ status:s.key, ts: Date.now() };
-      S.events.push(ev); draw();
-      try{ await postEvent(s.key); }catch{}
-    };
-    host.appendChild(b);
-  });
 
   function renderRecent(){
-    const r=$('#recent'); r.innerHTML='';
-    S.events.slice(-10).reverse().forEach(ev=>{
-      const row=document.createElement('div'); row.className='row-between'; row.style.cssText='border-top:1px solid var(--border); padding:6px 0';
-      const l=document.createElement('div'); const dot=document.createElement('span'); dot.className='status-dot '+statusByKey(ev.status).color; l.append(dot, document.createTextNode(' '+statusByKey(ev.status).label));
-      const when=document.createElement('div'); when.className='muted'; when.textContent=fmtTS(ev.ts);
-      row.append(l,when); r.appendChild(row);
+    const host = document.getElementById('recent');
+    host.innerHTML='';
+    const items = [...STATE.events].sort((a,b)=>Number(b.ts)-Number(a.ts)).slice(0,12);
+    if (!items.length){
+      host.innerHTML = '<div class="muted small" style="padding:8px 0">No switches yet.</div>';
+      return;
+    }
+    items.forEach(ev=>{
+      const row = el('div',{class:'li'},
+        el('div',{}, el('span',{class:'dot',style:{background:getComputedStyleColor(statusClass(ev.status))}}), statusLabel(ev.status)),
+        el('div',{class:'muted mono'}, fmtTS(Number(ev.ts)))
+      );
+      host.appendChild(row);
     });
   }
 
-  function draw(){
-    bars.innerHTML=''; bars.appendChild(buildDualBars(date, S.blocks, S.events));
-    const k=calcAdherence(date, S.blocks, S.events);
-    $('#pct').textContent=Math.round(k.pct)+'%';
-    $('#inout').textContent='in: '+fmtDur(k.inMin)+' · out: '+fmtDur(k.outMin);
-    renderRecent();
+  function renderStatusButtons(){
+    const host = document.getElementById('statusBtns');
+    host.innerHTML='';
+    STATUS.forEach(s=>{
+      const b = document.createElement('button');
+      b.className = `status-btn ${s.cls}`;
+      b.textContent = s.label;
+      b.onclick = async ()=>{
+        // optimistic local add
+        STATE.events.push({ status:s.key, ts: Date.now() });
+        renderBars(); renderStats(); renderRecent();
+        try{ await apiPostEvent(s.key); }catch(e){ console.warn('postEvent failed', e); }
+      };
+      host.appendChild(b);
+    });
   }
 
-  // initial load
-  (async()=>{
+  function getComputedStyleColor(cls){
+    const map={
+      'st-available':'var(--st-available)',
+      'st-bathroom':'var(--st-bathroom)',
+      'st-break':'var(--st-break)',
+      'st-lunch':'var(--st-lunch)',
+      'st-training':'var(--st-training)',
+      'st-meeting':'var(--st-meeting)',
+      'st-offline':'var(--st-offline)',
+    };
+    // Compute to actual value:
+    const probe = document.createElement('div');
+    probe.style.display='none';
+    probe.className=cls;
+    document.body.appendChild(probe);
+    const c = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    // fallback to CSS var if computed isn't resolved
+    return c || map[cls] || '#9ca3af';
+  }
+
+  // -------- BOOT --------
+  (async function init(){
     try{
-      const sched = await getSchedule(whoUser, date); S.blocks = (sched&&sched.blocks)||[];
-      const ev    = await listEvents(whoUser, date, date); S.events = Array.isArray(ev)?ev:[];
-    }catch{}
-    draw();
+      const who = await apiWhoami();
+      if (!who?.authed && who?.me) { STATE.me = who.me; }
+      if (who?.me) STATE.me = who.me;
+      // support both shapes: {authed:true,me:{...}} or direct {id,username,role}
+      if (!STATE.me?.username && who?.username) STATE.me = who;
+
+      if (!STATE.me?.username) { location.replace('/'); return; }
+      renderHeader();
+
+      document.getElementById('today').textContent = STATE.date;
+
+      // load schedule + events
+      const [sched, ev] = await Promise.all([
+        apiSchedule(STATE.me.username, STATE.date),
+        apiEvents(STATE.me.username, STATE.date, STATE.date),
+      ]);
+
+      // Normalize schedule shape
+      const blocks = (sched?.blocks||[]).map(b=>({
+        status: b.status,
+        start:  typeof b.start === 'number' ? b.start : hhmmToMinute(b.start),
+        end:    typeof b.end   === 'number' ? b.end   : hhmmToMinute(b.end),
+      })).sort((a,b)=> a.start-b.start);
+
+      STATE.schedule = blocks;
+      STATE.events   = Array.isArray(ev) ? ev : [];
+
+      renderStatusButtons();
+      renderBars(); renderStats(); renderRecent();
+      document.getElementById('lastSync').textContent = 'Synced now';
+
+      // 1s UI tick
+      STATE.timers.push(setInterval(()=>{
+        renderBars(); renderStats();
+      }, 1000));
+
+      // 15s data refresh
+      STATE.timers.push(setInterval(async()=>{
+        try{
+          const [sched2, ev2] = await Promise.all([
+            apiSchedule(STATE.me.username, STATE.date),
+            apiEvents(STATE.me.username, STATE.date, STATE.date),
+          ]);
+          STATE.schedule = (sched2?.blocks||[]).map(b=>({
+            status:b.status,
+            start: typeof b.start === 'number' ? b.start : hhmmToMinute(b.start),
+            end:   typeof b.end   === 'number' ? b.end   : hhmmToMinute(b.end),
+          })).sort((a,b)=> a.start-b.start);
+          STATE.events = Array.isArray(ev2) ? ev2 : [];
+          document.getElementById('lastSync').textContent =
+            'Synced ' + new Date().toLocaleTimeString();
+        }catch(e){ /* never hard-fail UI */ }
+      }, 15000));
+
+    }catch(e){
+      console.error(e);
+      location.replace('/');
+    }
   })();
 
-  // live ticks + refresh
-  timers.push(setInterval(draw, 1000));
-  timers.push(setInterval(async()=>{ try{ const ev=await listEvents(whoUser, date, date); S.events=Array.isArray(ev)?ev:S.events; }catch{} }, 15000));
-}
-
-/* =========================
-   Admin View
-========================= */
-function renderAdminView(){
-  clearTimers();
-  const app=$('#app'); app.innerHTML='';
-
-  const adminCard=document.createElement('div'); adminCard.className='card';
-
-  adminCard.innerHTML = `
-    <div class="row" style="flex-wrap:wrap; gap:12px; align-items:flex-end;">
-      <div>
-        <div class="label">Agent</div>
-        <select id="selUser" class="field" style="min-width:200px"><option value="">Pick a user</option></select>
-      </div>
-      <div>
-        <div class="label">Date</div>
-        <input id="day" class="field" type="date" value="${isoDate(new Date())}">
-      </div>
-      <div style="margin-left:auto">
-        <button id="addBlock" class="btn btn-brand">+ Block</button>
-        <button id="saveSched" class="btn" disabled>Save to Server</button>
-      </div>
-    </div>
-
-    <div class="grid grid-2" style="margin-top:16px;">
-      <div class="card">
-        <h3>Schedule Blocks</h3>
-        <div id="blocks"></div>
-      </div>
-
-      <div class="card">
-        <h3>Daily Overview</h3>
-        <div id="bars"></div>
-        <div id="pct" class="muted" style="margin-top:10px;"></div>
-        <div style="margin-top:12px;">
-          <h4>AUX breakdown (durations)</h4>
-          <ul id="byStatus"></ul>
-        </div>
-        <div style="margin-top:12px;">
-          <h4>Timeline (IMED style)</h4>
-          <div id="lines" class="scroll card"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <h3>Users</h3>
-      <div class="row" style="flex-wrap:wrap; gap:8px; align-items:flex-end; margin-bottom:12px;">
-        <input id="newU" class="field" placeholder="Username" style="max-width:200px">
-        <input id="newP" class="field" type="password" placeholder="Temp password" value="Welcome123" style="max-width:200px">
-        <select id="newR" class="field" style="max-width:140px">
-          <option value="AGENT">AGENT</option>
-          <option value="ADMIN">ADMIN</option>
-        </select>
-        <button id="createU" class="btn btn-brand">Create</button>
-      </div>
-      <div id="usersTblWrap"></div>
-    </div>
-
-    <div class="row" style="margin-top:16px;">
-      <button id="dle" class="btn">Download Events (month)</button>
-      <button id="dls" class="btn">Download Schedules (month)</button>
-      <button id="dla" class="btn">Download Adherence (month)</button>
-    </div>
-  `;
-  app.appendChild(adminCard);
-
-  // state
-  const DAY={ value: isoDate(new Date()) }; const SELECTED={ value:'' }; const BLOCKS={ list:[] }; const EVENTS={ list:[] }; const USERS={ list:[] };
-
-  function sanitizeBlocks(list){
-    // coerce to ints, filter invalid, sort, optional merge adjacency
-    let arr = (list||[]).map(b=>{
-      let s = typeof b.start==='number'?b.start : parseHM(b.start);
-      let e = typeof b.end==='number'  ?b.end   : parseHM(b.end);
-      return { status:b.status, start: s|0, end: e|0 };
-    }).filter(b=> b && b.status && b.start>=0 && b.end>0 && b.end>b.start);
-    arr.sort((a,b)=> a.start-b.start || a.end-b.end);
-    // clamp 0..1440, merge exact-adjacent with same status
-    const out=[];
-    for(const b of arr){
-      b.start=Math.max(0,Math.min(1440,b.start));
-      b.end=Math.max(0,Math.min(1440,b.end));
-      const last=out[out.length-1];
-      if(last && last.status===b.status && last.end===b.start){ last.end=b.end; }
-      else out.push({...b});
-    }
-    return out;
+  function hhmmToMinute(s){
+    if (typeof s === 'number') return s|0;
+    const [h,m] = String(s||'').split(':').map(Number);
+    return ((h|0)*60 + (m|0))|0;
   }
-  function parseHM(v){ if(!v) return 0; if(typeof v==='number') return v; const [h,m]=String(v).split(':').map(x=>parseInt(x,10)||0); return (h*60+m)|0; }
-
-  function refreshUsersUI(){
-    const sel=$('#selUser'); sel.innerHTML='<option value="">Pick a user</option>';
-    (USERS.list||[]).forEach(u=> sel.appendChild(new Option(`${u.username} · ${u.role}`, u.username)));
-  }
-
-  function renderBlocksUI(){
-    const host=$('#blocks'); host.innerHTML='';
-    BLOCKS.list.forEach((b,i)=>{
-      const row=document.createElement('div'); row.className='row'; row.style.marginBottom = '8px';
-      const sel=document.createElement('select'); sel.className='field'; sel.style.maxWidth='160px';
-      STATUSES.forEach(s=> sel.appendChild(new Option(s.label, s.key, false, s.key===b.status)));
-      sel.onchange = e=>{ b.status=e.target.value; };
-      const t1=document.createElement('input'); t1.type='time'; t1.className='field'; t1.style.maxWidth='140px'; t1.value=toHM(b.start);
-      const t2=document.createElement('input'); t2.type='time'; t2.className='field'; t2.style.maxWidth='140px'; t2.value=toHM(b.end);
-      t1.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.start=(parseInt(hh)*60+parseInt(mm))|0; };
-      t2.onchange=e=>{ const [hh,mm]=e.target.value.split(':'); b.end  =(parseInt(hh)*60+parseInt(mm))|0; };
-      const rm=document.createElement('button'); rm.className='btn'; rm.textContent='Remove';
-      rm.onclick=()=>{ BLOCKS.list.splice(i,1); renderBlocksUI(); updateDayUI(); enableSave(); };
-      row.append(sel, t1, document.createTextNode('to'), t2, rm); host.appendChild(row);
-    });
-  }
-
-  function updateDayUI(){
-    const bars=$('#bars'); bars.innerHTML=''; bars.appendChild(buildDualBars(DAY.value, BLOCKS.list, EVENTS.list));
-    const d=calcAdherence(DAY.value, BLOCKS.list, EVENTS.list);
-    $('#pct').textContent = `Adherence: ${Math.round(d.pct)}% · in ${fmtDur(d.inMin)} / out ${fmtDur(d.outMin)}`;
-    const by=$('#byStatus'); by.innerHTML='';
-    Object.keys(d.byStatus||{}).forEach(k=> by.appendChild(el('li',{}, `${statusByKey(k).label}: ${fmtDur(d.byStatus[k])}`)));
-    const lines=$('#lines'); lines.innerHTML='';
-    (d.lines.length?d.lines:['No events for this day']).forEach(t=> lines.appendChild(el('div',{style:{padding:'6px 0', borderTop:'1px solid var(--border)'}}, t)));
-  }
-
-  function updateMonthButtons(){
-    const dt=new Date(DAY.value+'T00:00:00');
-    const y=dt.getUTCFullYear(); const m=('0'+(dt.getUTCMonth()+1)).slice(-2);
-    const monthStart=`${y}-${m}-01`; const monthEnd=new Date(Date.UTC(y, parseInt(m), 0)).toISOString().slice(0,10);
-    function dl(path,name){ fetch(path).then(r=>r.blob()).then(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); }); }
-    $('#dle').onclick=()=>dl(`/api/export/events?from=${monthStart}&to=${monthEnd}`, `events_${y}${m}.csv`);
-    $('#dls').onclick=()=>dl(`/api/export/schedules?from=${monthStart}&to=${monthEnd}`, `schedules_${y}${m}.csv`);
-    $('#dla').onclick=()=>dl(`/api/export/adherence?from=${monthStart}&to=${monthEnd}`, `adherence_${y}${m}.csv`);
-  }
-
-  function enableSave(){ $('#saveSched').disabled = !SELECTED.value || !BLOCKS.list.length; }
-
-  // load users + table
-  (async()=>{ try{ USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); }catch(e){} })();
-
-  // selections
-  $('#selUser').onchange = async (e)=>{
-    SELECTED.value=e.target.value; enableSave();
-    if(!SELECTED.value) return;
-    try{
-      const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
-      const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
-    }catch{ BLOCKS.list=[]; EVENTS.list=[]; }
-    renderBlocksUI(); updateDayUI(); updateMonthButtons();
-  };
-  $('#day').onchange = async (e)=>{
-    DAY.value=e.target.value; if(!SELECTED.value) return;
-    try{
-      const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
-      const ev=await listEvents(SELECTED.value, DAY.value, DAY.value); EVENTS.list=Array.isArray(ev)?ev:[];
-    }catch{ BLOCKS.list=[]; EVENTS.list=[]; }
-    renderBlocksUI(); updateDayUI(); updateMonthButtons();
-  };
-  $('#addBlock').onclick = ()=>{ BLOCKS.list.push({ status:'available', start:480, end:540 }); renderBlocksUI(); updateDayUI(); enableSave(); };
-
-  $('#saveSched').onclick = async ()=>{
-    if(!SELECTED.value){ toast('Pick an agent first'); return; }
-    const cleaned = sanitizeBlocks(BLOCKS.list);
-    if(!cleaned.length){ toast('Add at least one block'); return; }
-    try{
-      await saveSchedule(SELECTED.value, DAY.value, cleaned);
-      toast('Saved ✓');
-      // re-read to confirm
-      const s=await getSchedule(SELECTED.value, DAY.value); BLOCKS.list=(s&&s.blocks)||[];
-      renderBlocksUI(); updateDayUI();
-    }catch(e){
-      const msg=String(e.message||e);
-      if(/403/.test(msg)) showError('Save failed (403). You must be ADMIN or SUPERADMIN to save schedules.');
-      else showError('Save failed: '+msg);
-    }
-  };
-
-  function renderUsersTable(){
-    const wrap=$('#usersTblWrap'); wrap.innerHTML='';
-    const t=el('table',{class:'table'});
-    t.appendChild(el('thead',{}, el('tr',{}, el('th',{},'Username'), el('th',{},'Role'), el('th',{},'Force Reset'), el('th',{}))));
-    const tb=el('tbody');
-    (USERS.list||[]).forEach(u=>{
-      const tr=el('tr',{},
-        el('td',{}, u.username),
-        el('td',{}, u.role),
-        el('td',{}, (function(){
-          const lab=el('label',{class:'row'},
-            (function(){ const c=el('input',{type:'checkbox'}); c.checked=!!u.must_change_password; c.onchange=async()=>{ try{ await patchUser(u.id, { mustChangePassword: !u.must_change_password }); USERS.list=await listUsers()||[]; renderUsersTable(); }catch(e){ alert('Update failed'); } }; return c; })(),
-            el('span',{class:'muted'},'must change on next login')
-          ); return lab;
-        })()),
-        el('td',{}, (function(){ const b=el('button',{class:'btn'},'Delete'); b.onclick=async()=>{ if(!confirm('Delete '+u.username+'?')) return; try{ await deleteUserApi(u.id); USERS.list=await listUsers()||[]; refreshUsersUI(); renderUsersTable(); }catch(e){ alert('Delete failed'); } }; return b; })())
-      );
-      tb.appendChild(tr);
-    });
-    t.appendChild(tb);
-    wrap.appendChild(t);
-  }
-
-  // Live tick for overview
-  timers.push(setInterval(()=>{ if(BLOCKS.list.length) updateDayUI(); }, 1000));
-  // Periodic refresh events for selected user/day
-  timers.push(setInterval(async()=>{
-    try{
-      if(!SELECTED.value) return;
-      const ev=await listEvents(SELECTED.value, DAY.value, DAY.value);
-      EVENTS.list=Array.isArray(ev)?ev:EVENTS.list;
-      updateDayUI();
-    }catch{}
-  }, 15000));
-}
-
-/* =========================
-   Helper: tiny element factory
-========================= */
-function el(tag, attrs, ...children){
-  const n=document.createElement(tag);
-  if(attrs) Object.keys(attrs).forEach(k=>{
-    if(k==='class') n.className=attrs[k];
-    else if(k==='style') Object.assign(n.style, attrs[k]);
-    else if(k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]);
-    else n.setAttribute(k, attrs[k]);
-  });
-  children.flat().forEach(c=>{ if(c==null) return; if(c.nodeType) n.appendChild(c); else n.appendChild(document.createTextNode(String(c))); });
-  return n;
-}
-
-/* =========================
-   Boot
-========================= */
-(async function init(){
-  try{
-    const w = await whoami();
-    if (!w.authed) { location.href='/'; return; }
-    ME = w.me;
-  }catch(e){ location.href='/'; return; }
-
-  // header buttons
-  $('#btn-logout').onclick = async ()=>{ await logout().catch(()=>{}); location.href='/'; };
-  $('#btn-agent').onclick  = ()=>{
-    MODE='agent'; renderHeader();
-    // if an agent is selected in Admin, preview that agent; otherwise preview self
-    const sel = $('#selUser'); const uname = sel && sel.value ? sel.value : ME.username;
-    renderAgentView({ username: uname });
-  };
-  $('#btn-admin').onclick  = ()=>{ MODE='admin'; renderHeader(); renderAdminView(); };
-
-  renderHeader();
-  // default land in Admin if you have rights; otherwise land in Agent (self)
-  if (ME.role==='ADMIN' || ME.role==='SUPERADMIN'){ renderAdminView(); }
-  else { MODE='agent'; renderHeader(); renderAgentView({ username: ME.username }); }
-})();
-</script>
+  </script>
 </body>
 </html>
