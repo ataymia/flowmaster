@@ -1,7 +1,5 @@
-// functions/api/_utils.ts
-
 export interface Env {
-  AUTH_BASE: string;            // e.g. https://allstar-auth.ataymia.workers.dev
+  AUTH_BASE: string;            // e.g. https://allstar-auth.yourdomain.workers.dev
   NOTION_TOKEN?: string;
   NOTION_DATABASE_ID?: string;
 }
@@ -15,7 +13,6 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
 }
 
 /* ---------- Cookie helpers ---------- */
-
 type SameSite = "Lax" | "Strict" | "None";
 
 function buildCookie(
@@ -70,7 +67,6 @@ export function parseCookies(req: Request): Record<string, string> {
   }
   return out;
 }
-
 export function getCookie(req: Request, name: string): string | null {
   const m = (req.headers.get("cookie") || "").match(
     new RegExp(`(?:^|;\\s*)${name}=([^;]+)`)
@@ -79,7 +75,6 @@ export function getCookie(req: Request, name: string): string | null {
 }
 
 /* ---------- Set-Cookie parsing/forwarding ---------- */
-
 function getSetCookieLines(src: Response | Headers): string[] {
   const any = src as any;
   if (typeof any?.headers?.getSetCookie === "function") {
@@ -101,12 +96,9 @@ function getSetCookieLines(src: Response | Headers): string[] {
 }
 
 export function forwardSetCookies(src: Response | Headers, dst: Headers) {
-  for (const line of getSetCookieLines(src)) {
-    dst.append("Set-Cookie", line);
-  }
+  for (const line of getSetCookieLines(src)) dst.append("Set-Cookie", line);
 }
 
-/** Return just the cookie VALUE for `name` from upstream Set-Cookie headers. */
 export function pickCookieFromSetCookie(
   src: Response | Headers,
   name: string
@@ -123,7 +115,6 @@ export function pickCookieFromSetCookie(
 }
 
 /* ---------- Access guard ---------- */
-
 export function ensureAccess(request: Request) {
   const c = parseCookies(request);
   if (c["access_token"] || c["allstar_at"]) return { ok: true as const };
@@ -134,13 +125,12 @@ export function ensureAccess(request: Request) {
 }
 
 /* ---------- Upstream helpers ---------- */
-
 export function upstream(env: Env, path: string, init?: RequestInit) {
   const url = path.startsWith("http") ? path : `${env.AUTH_BASE}${path}`;
   return fetch(url, init);
 }
 
-/** Proxy while sending Authorization: Bearer <access_token> from cookies. */
+/** Proxy with Authorization: Bearer <access_token> read from cookies. */
 export async function proxyWithAuth(
   req: Request,
   env: Env,
@@ -153,6 +143,7 @@ export async function proxyWithAuth(
 
   const headers = new Headers(init.headers || {});
   headers.set("authorization", `Bearer ${token}`);
+
   if (req.headers.get("content-type") && !headers.has("content-type")) {
     headers.set("content-type", req.headers.get("content-type")!);
   }
@@ -171,7 +162,7 @@ export async function proxyWithAuth(
   return new Response(up.body, { status: up.status, headers: out });
 }
 
-/** Proxy while forwarding the incoming Cookie header (session-based). */
+/** Proxy while forwarding the incoming Cookie header (session-style). */
 export async function proxyWithSession(
   req: Request,
   env: Env,
