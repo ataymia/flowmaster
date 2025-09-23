@@ -2,9 +2,7 @@ import { Env, upstream, forwardSetCookies, pickCookieFromSetCookie, setCookie } 
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const body = await request.text();
-  const headers = new Headers();
-  const ct = request.headers.get("content-type");
-  if (ct) headers.set("content-type", ct);
+  const headers = new Headers(); const ct = request.headers.get("content-type"); if (ct) headers.set("content-type", ct);
 
   const up = await upstream(env, "/auth/login", { method: "POST", headers, body, redirect: "manual" });
 
