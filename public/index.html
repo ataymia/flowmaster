@@ -19,6 +19,7 @@
     .msg{margin-top:10px;font-size:13px;color:var(--muted)}
     .error{color:#fca5a5}
     .top-left{position:fixed;top:8px;left:8px;color:#f43f5e;font-size:14px}
+    pre.diag{white-space:pre-wrap;background:#0b1020;border:1px solid var(--border);border-radius:10px;padding:10px;font-size:12px;color:#e5e7eb;margin-top:12px;display:none}
   </style>
 </head>
 <body>
@@ -35,13 +36,14 @@
     }
     const whoami = ()=> jfetch('/api/whoami');
     const logout  = ()=> jfetch('/api/logout', { method:'POST' });
+    const debugAuth = ()=> jfetch('/api/debug-auth');
 
     const root = document.getElementById('root');
     const el = (h)=>{ const d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstElementChild; }
 
-    function renderLoginForm(message){
+    function renderLoginForm(message, diag){
       root.innerHTML='';
-      root.appendChild(el(`
+      const section = el(`
         <section class="card">
           <div class="title">ALLSTAR</div>
           <div class="subtitle">sign in</div>
@@ -51,22 +53,32 @@
           <input id="password" type="password" placeholder="••••••••" autocomplete="current-password"/>
           <button class="primary" id="btn">Sign in</button>
           <div class="msg ${message?'error':''}">${message||"You'll stay signed in for 7 days on this device."}</div>
+          <pre class="diag" id="diag"></pre>
         </section>
-      `));
-      document.getElementById('btn').addEventListener('click', async ()=>{
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
-        if(!email || !password) return renderLoginForm('Email and password are required.');
-        try {
-          // Send both 'email' and 'username' to satisfy either worker schema.
-          await jfetch('/api/login',{ method:'POST', body: JSON.stringify({ email, username: email, password }) });
-          const next = new URL(location.href).searchParams.get('next') || '/flowmaster/index.html';
-          location.href = next;
-        } catch (e) {
-          const reason = e?.body?.error || e?.body?.message || `Sign in failed (${e.status||'?'})`;
-          renderLoginForm(reason);
-        }
-      });
+      `);
+      root.appendChild(section);
+      if (diag) {
+        const dEl = section.querySelector('#diag'); dEl.style.display='block';
+        dEl.textContent = typeof diag === 'string' ? diag : JSON.stringify(diag, null, 2);
+      }
+      section.querySelector('#btn').addEventListener('click', onSubmit);
+    }
+
+    async function onSubmit(){
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      if(!email || !password) return renderLoginForm('Email and password are required.');
+      try {
+        // Send both keys to satisfy different worker schemas
+        const res = await jfetch('/api/login', { method:'POST', body: JSON.stringify({ email, username: email, password }) });
+        const next = new URL(location.href).searchParams.get('next') || '/flowmaster/index.html';
+        location.href = next;
+      } catch (e) {
+        let diag;
+        try { diag = await debugAuth(); } catch { /* ignore */ }
+        const reason = e?.body?.error || e?.body?.message || `Sign in failed (${e.status||'?'})`;
+        renderLoginForm(reason, diag);
+      }
     }
 
     function renderAlreadySignedIn(me){
