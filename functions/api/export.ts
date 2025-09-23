@@ -1,9 +1,18 @@
-import { Env, proxyWithAuth } from "./_utils";
+import { Env, ensureAccess, proxyWithAuth, json } from "./_utils";
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const url = new URL(request.url);
-  // /api/export?type=events|schedules|adherence&from=...&to=...&user=...
-  const type = url.searchParams.get("type") || "events";
-  const qs = url.search || "";
-  return proxyWithAuth(request, env, `/export/${type}${qs.replace(/^\?/, '?')}`, { method:"GET" });
+  const g = ensureAccess(request); if (!g.ok) return g.response;
+  const u = new URL(request.url);
+  const kind = (u.searchParams.get("kind") || "").toLowerCase();
+  const from = u.searchParams.get("from") || "";
+  const to   = u.searchParams.get("to") || "";
+
+  const path =
+    kind === "events"    ? `/export/events?from=${from}&to=${to}` :
+    kind === "schedules" ? `/export/schedules?from=${from}&to=${to}` :
+    kind === "adherence" ? `/export/adherence?from=${from}&to=${to}` :
+    null;
+
+  if (!path) return json({ error: "bad kind" }, 400);
+  return proxyWithAuth(request, env, path);
 };
