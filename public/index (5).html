@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Allstar Agent Hub — Sign in</title>
+  <link rel="stylesheet" href="/theme.css">
+  <style>
+    .wrap { min-height: 100dvh; display:grid; place-items:center; padding: 24px; }
+    .subtitle { color: var(--muted); }
+    .inline-banner {
+      background:#1f2937; border:1px solid var(--border);
+      color:var(--text); padding:10px 12px; border-radius:10px; display:none;
+      margin-bottom:10px;
+      .container{max-width:1200px;margin:0 auto;padding:24px}
+  .card{max-width:460px;margin:60px auto;border-radius:18px;box-shadow:0 10px 25px rgba(17,24,39,.08)}
+  .btn{padding:12px 16px;border-radius:12px}
+    }
+  </style>
+</head>
+<body>
+  <header class="appbar">
+    <div class="brand" style="color:var(--brand)">Allstar Agent Hub</div>
+  </header>
+
+  <main class="wrap">
+    <div id="card" class="card" style="width:min(460px, 100%);"></div>
+  </main>
+
+  <script>
+    const $ = (s)=>document.querySelector(s);
+
+    async function jfetch(url, opts={}) {
+      const r = await fetch(url, { ...opts, headers:{ 'content-type':'application/json', ...(opts.headers||{, credentials: 'include', mode: 'cors'}) } });
+      const ct = r.headers.get('content-type') || '';
+      const body = ct.includes('application/json') ? await r.json() : await r.text();
+      if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
+      return body;
+    }
+    const whoami = ()=> jfetch('/api/whoami');
+    const logout  = ()=> jfetch('/api/logout', { method:'POST' , credentials: 'include', mode: 'cors'});
+
+    function renderLoginForm(message){
+      const c = $('#card');
+      c.innerHTML = `
+        <div class="row" style="margin-bottom:12px;">
+          <div class="brand" style="color:var(--brand)">ALLSTAR</div>
+          <div class="subtitle">sign in</div>
+        </div>
+        <div id="msg" class="inline-banner"${message ? '' : ' style="display:none"'}>${message||''}</div>
+        <label class="label">Email (or username)</label>
+        <input id="idp" class="field" placeholder="you@company.com">
+        <label class="label" style="margin-top:10px">Password</label>
+        <input id="pw" type="password" class="field" placeholder="••••••••">
+        <div class="row" style="margin-top:14px;">
+          <button id="login" class="btn btn-brand" style="width:100%;">Sign in</button>
+        </div>
+        <div class="muted" style="margin-top:12px; font-size:12px;">
+          You’ll stay signed in for 7 days on this device.
+        </div>
+      `;
+      $('#login').addEventListener('click', doLogin);
+      document.addEventListener('keydown', onEnterOnce);
+    }
+
+    function renderAlreadySignedIn(me){
+      const c = $('#card');
+      c.innerHTML = `
+        <div class="row" style="margin-bottom:12px;">
+          <div class="brand" style="color:var(--brand)">ALLSTAR</div>
+          <div class="subtitle">you’re signed in</div>
+        </div>
+        <div class="inline-banner" style="display:block">Signed in as <b>${escapeHtml(me.username)}</b> (${me.role})</div>
+        <div class="row" style="margin-top:6px; gap:8px;">
+          <a class="btn btn-brand" href="/hub" style="flex:1; text-align:center;">Continue to Hub</a>
+          <button id="switch" class="btn" style="flex:1;">Sign in as different user</button>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <button id="signout" class="btn btn-danger" style="width:100%;">Sign out</button>
+        </div>
+      `;
+      $('#switch').addEventListener('click', async ()=>{
+        await logout();
+        renderLoginForm();
+        $('#idp').focus();
+      });
+      $('#signout').addEventListener('click', async ()=>{
+        await logout();
+        renderLoginForm('Signed out.');
+      });
+    }
+
+    function onEnterOnce(e){
+      if(e.key === 'Enter'){
+        document.removeEventListener('keydown', onEnterOnce);
+        doLogin();
+      }
+    }
+
+    async function doLogin(){
+      const msg = (t)=>{ const m=$('#msg'); if(!m) return; m.textContent=t||''; m.style.display = t ? 'block' : 'none'; };
+      msg('');
+      const idp = $('#idp')?.value?.trim();
+      const pw  = $('#pw')?.value;
+      if (!idp || !pw) { msg('Enter email/username and password'); return; }
+      try {
+        await jfetch('/api/login', {
+          method:'POST',
+          body: JSON.stringify(idp.includes('@') ? { email:idp, password:pw } : { username:idp, password:pw })
+        });
+        location.href = '/hub';
+      } catch(e) {
+        msg('Invalid email/username or password');
+      }
+    }
+
+    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    // initial render: DO NOT auto-redirect; show state.
+    (async ()=>{
+      try {
+        const w = await whoami();
+        if (w.authed) renderAlreadySignedIn(w.me);
+        else renderLoginForm();
+      } catch {
+        renderLoginForm();
+      }
+    })();
+  </script>
+</body>
+</html>
