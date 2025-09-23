@@ -1,3 +1,4 @@
+// functions/api/logout.ts
 import { Env, upstream, clearCookie, forwardSetCookies } from "./_utils";
 
 export const onRequestPost: PagesFunction<Env> = async ({ env }) => {
