@@ -1,10 +1,9 @@
 export interface Env {
-  AUTH_BASE: string;            // e.g. https://allstar-auth.ataymia.workers.dev
+  AUTH_BASE: string;              // e.g. https://allstar-auth.ataymia.workers.dev
   NOTION_TOKEN?: string;
   NOTION_DATABASE_ID?: string;
 }
 
-/* ---------- JSON ---------- */
 export function json(data: any, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(data), {
     status,
@@ -12,107 +11,45 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
   });
 }
 
-/* ---------- Cookies ---------- */
 type SameSite = "Lax" | "Strict" | "None";
 
-function buildCookie(
-  name: string,
-  value: string,
-  opts: { path?: string; httpOnly?: boolean; secure?: boolean; sameSite?: SameSite; maxAge?: number } = {}
-) {
-  const parts = [`${name}=${encodeURIComponent(value)}`];
-  parts.push(`Path=${opts.path ?? "/"}`);
-  if (opts.httpOnly ?? true) parts.push("HttpOnly");
-  if (opts.secure ?? true) parts.push("Secure");
-  parts.push(`SameSite=${opts.sameSite ?? "Lax"}`);
-  if (typeof opts.maxAge === "number") parts.push(`Max-Age=${opts.maxAge}`);
-  return parts.join("; ");
-}
-
-export function setCookie(h: Headers, name: string, value: string, opts?: Parameters<typeof buildCookie>[2]) {
-  h.append("Set-Cookie", buildCookie(name, value, opts));
-}
-export function clearCookie(h: Headers, name: string, path = "/") {
-  h.append("Set-Cookie", `${name}=; Path=${path}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
-}
-export function parseCookies(req: Request): Record<string, string> {
-  const out: Record<string, string> = {};
-  (req.headers.get("cookie") || "").split(";").forEach(p => {
-    const [k, ...rest] = p.trim().split("=");
-    if (k) out[k] = decodeURIComponent(rest.join("="));
-  });
-  return out;
-}
 export function getCookie(req: Request, name: string): string | null {
-  const m = (req.headers.get("cookie") || "").match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  const c = req.headers.get("cookie") || "";
+  const m = c.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/* ---------- Set-Cookie helpers ---------- */
-function getSetCookieLines(src: Response | Headers): string[] {
-  const any = src as any;
-  if (typeof any?.headers?.getSetCookie === "function") {
-    const arr = any.headers.getSetCookie() || [];
-    if (arr.length) return arr;
-  }
-  const h = src instanceof Response ? src.headers : src;
-  const lines: string[] = [];
-  try { (h as any).forEach?.((v: string, k: string) => { if (k?.toLowerCase() === "set-cookie" && v) lines.push(v); }); } catch {}
-  if (!lines.length) {
-    const single = h.get("set-cookie");
-    if (single) return single.split(/,(?=[^;]+?=)/g).map(s => s.trim());
-  }
-  return lines;
+export function setCookie(headers: Headers, name: string, value: string, opts: {
+  maxAge?: number; path?: string; sameSite?: SameSite; secure?: boolean; httpOnly?: boolean; domain?: string;
+} = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+  if (opts.maxAge !== undefined) parts.push(`Max-Age=${opts.maxAge}`);
+  parts.push(`Path=${opts.path || "/"}`);
+  if (opts.sameSite) parts.push(`SameSite=${opts.sameSite}`);
+  if (opts.secure ?? true) parts.push("Secure");
+  if (opts.httpOnly ?? true) parts.push("HttpOnly");
+  if (opts.domain) parts.push(`Domain=${opts.domain}`);
+  headers.append("set-cookie", parts.join("; "));
 }
-export function forwardSetCookies(src: Response | Headers, dst: Headers) {
-  for (const line of getSetCookieLines(src)) dst.append("Set-Cookie", line);
+
+export function clearCookie(headers: Headers, name: string, path = "/") {
+  headers.append("set-cookie", `${name}=; Max-Age=0; Path=${path}; SameSite=Lax; Secure; HttpOnly`);
 }
-export function pickCookieFromSetCookie(src: Response | Headers, name: string): string | null {
-  for (const line of getSetCookieLines(src)) {
-    const [pair] = line.split(";", 1);
-    if (!pair) continue;
-    const [k, ...rest] = pair.split("=");
-    if (k?.trim().toLowerCase() === name.toLowerCase()) return (rest.join("=") || "").trim();
-  }
+
+export function getAllSetCookie(h: Headers): string[] {
+  const anyH = h as any; if (typeof anyH.getAll === "function") return anyH.getAll("set-cookie") || [];
+  const one = h.get("set-cookie"); return one ? [one] : [];
+}
+export function forwardSetCookies(from: Response | Headers, to: Headers) {
+  const src = "headers" in from ? (from as Response).headers : (from as Headers);
+  for (const v of getAllSetCookie(src)) to.append("set-cookie", v);
+}
+export function pickCookieFromSetCookie(src: Headers, name: string): string | null {
+  for (const v of getAllSetCookie(src)) { const m = v.match(new RegExp(`(?:^|; )${name}=([^;]*)`)); if (m) return decodeURIComponent(m[1]); }
   return null;
 }
 
-/* ---------- Guards ---------- */
-export function ensureAccess(request: Request) {
-  const c = parseCookies(request);
-  if (c["access_token"] || c["allstar_at"]) return { ok: true as const };
-  return { ok: false as const, response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }) };
-}
-
-/* ---------- Upstream & proxies ---------- */
-export function upstream(env: Env, path: string, init?: RequestInit) {
+export async function upstream(env: Env, path: string, init: RequestInit = {}) {
   const url = path.startsWith("http") ? path : `${env.AUTH_BASE}${path}`;
   return fetch(url, init);
-}
-
-export async function proxyWithAuth(req: Request, env: Env, path: string, init: RequestInit = {}) {
-  const c = parseCookies(req);
-  const token = c["access_token"] || c["allstar_at"];
-  if (!token) return json({ error: "unauthorized" }, 401);
-
-  const headers = new Headers(init.headers || {});
-  headers.set("authorization", `Bearer ${token}`);
-  const ct = req.headers.get("content-type");
-  if (ct && !headers.has("content-type")) headers.set("content-type", ct);
-
-  const up = await upstream(env, path, { method: req.method, body: req.body, headers, redirect: "manual" });
-  const out = new Headers(); const upCT = up.headers.get("content-type"); if (upCT) out.set("content-type", upCT);
-  forwardSetCookies(up, out);
-  return new Response(up.body, { status: up.status, headers: out });
-}
-
-export async function proxyWithSession(req: Request, env: Env, path: string, init: RequestInit = {}) {
-  const headers = new Headers(init.headers || {});
-  const cookie = req.headers.get("cookie"); if (cookie) headers.set("cookie", cookie);
-  const ct = req.headers.get("content-type"); if (ct && !headers.has("content-type")) headers.set("content-type", ct);
-
-  const up = await upstream(env, path, { method: req.method, body: req.body, headers, redirect: "manual" });
-  const out = new Headers(); const upCT = up.headers.get("content-type"); if (upCT) out.set("content-type", upCT);
-  forwardSetCookies(up, out);
-  return new Response(up.body, { status: up.status, headers: out });
 }
