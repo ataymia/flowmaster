@@ -80,19 +80,22 @@ export async function upstream(
   path: string,
   init: RequestInit = {}
 ): Promise<Response> {
-  const url = path.startsWith("http") ? path : `${env.AUTH_BASE}${path}`;
+  // Fallback so login works even if AUTH_BASE isn’t configured yet
+  const FALLBACK = "https://allstar-auth.ataymia.workers.dev";
+  const base = (env && (env as any).AUTH_BASE) ? (env as any).AUTH_BASE : FALLBACK;
+  const url = path.startsWith("http") ? path : `${base}${path}`;
   return fetch(url, init);
 }
 
 /* ---------------- Access enforcement ---------------- */
 /**
  * Returns an access token from first-party cookies, or throws a 401 Response.
- * Expected by routes that import `ensureAccess` from _utils.ts.
+ * (Several existing routes import this.)
  */
 export function ensureAccess(req: Request): string {
   const token =
-    getCookie(req, "allstar_at") || // site’s first-party access cookie
-    getCookie(req, "access_token"); // passthrough cookie name from worker
+    getCookie(req, "allstar_at") ||
+    getCookie(req, "access_token");
   if (!token) {
     throw json({ error: "unauthorized" }, 401, { "cache-control": "no-store" });
   }
@@ -102,9 +105,7 @@ export function ensureAccess(req: Request): string {
 /* ---------------- Proxies ---------------- */
 /**
  * Proxy to the Auth Worker *requiring* a valid session.
- * Attaches the caller’s access token as a Cookie understood by the worker.
- *
- * Used by existing routes that `import { proxyWithAuth } from "./_utils"`.
+ * (Matches existing imports `proxyWithAuth`.)
  */
 export async function proxyWithAuth(
   req: Request,
@@ -114,10 +115,8 @@ export async function proxyWithAuth(
 ) {
   const token = ensureAccess(req); // throws 401 if missing
   const headers = new Headers(init.headers || {});
-  // Pass the token as the worker expects (cookie-based session)
   headers.set("cookie", `access_token=${token}`);
 
-  // Preserve content-type when forwarding a body
   const ct = req.headers.get("content-type");
   if (ct && !headers.has("content-type")) headers.set("content-type", ct);
 
@@ -138,8 +137,8 @@ export async function proxyWithAuth(
 }
 
 /**
- * Proxy that forwards the caller’s entire Cookie header (does not enforce).
- * Handy for feeds like /news or /schedules when the upstream does its own auth.
+ * Proxy that forwards the caller’s entire Cookie header (non-enforcing).
+ * (Kept for compatibility if any route uses it.)
  */
 export async function proxyWithSession(
   req: Request,
