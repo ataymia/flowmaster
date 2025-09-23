@@ -1,10 +1,4 @@
-import { Env, ensureAccess, proxyWithSession } from "./_utils";
+import { Env, proxyWithAuth } from "./_utils";
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const g = ensureAccess(request); if (!g.ok) return g.response;
-  return proxyWithSession(request, env, "/schedules");
-};
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const g = ensureAccess(request); if (!g.ok) return g.response;
-  return proxyWithSession(request, env, "/schedules");
-};
+export const onRequestGet: PagesFunction<Env>  = async (c) => proxyWithAuth(c.request, c.env, "/schedules");
+export const onRequestPost: PagesFunction<Env> = async (c) => proxyWithAuth(c.request, c.env, "/schedules");
