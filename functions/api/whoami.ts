@@ -1,65 +1,38 @@
-import {
-  Env, json, getCookie, upstream, forwardSetCookies,
-  pickCookieFromSetCookie, setCookie
-} from "./_utils";
+import { Env, json, getCookie, upstream, forwardSetCookies, setCookie } from "./_utils";
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  // Accept either cookie; prefer our mirror
-  let at = getCookie(request, "allstar_at") || getCookie(request, "access_token");
-  let res = await tryMe(env, at);
-  const out = new Headers({ "cache-control": "no-store" });
+  const out = new Headers({ "cache-control":"no-store" });
 
-  if (res.ok) {
-    return new Response(JSON.stringify({ authed: true, me: await res.json() }), {
-      status: 200, headers: out
-    });
-  }
+  const at = getCookie(request, "allstar_at") || getCookie(request, "access_token");
+  const first = await tryMe(env, at);
+  if (first.ok) return new Response(JSON.stringify({ authed:true, me: await first.json() }), { status:200, headers:out });
 
-  // Try a silent refresh using our mirrored refresh cookie
+  // silent refresh using mirrored refresh cookie
   const rt = getCookie(request, "rt");
-  if (!rt) {
-    return json({ authed: false, reason: "no tokens" }, 200, out);
-  }
+  if (!rt) return json({ authed:false, reason:"no tokens" }, 200, out);
 
   const ref = await upstream(env, "/auth/refresh", {
-    method: "POST",
-    headers: { cookie: `refresh_token=${encodeURIComponent(rt)}` },
-    redirect: "manual",
+    method:"POST",
+    headers:{ cookie:`refresh_token=${encodeURIComponent(rt)}` },
+    redirect:"manual",
   });
   forwardSetCookies(ref, out);
 
-  if (ref.status !== 204) {
-    return json({ authed: false, reason: "refresh_failed", status: ref.status }, 200, out);
-  }
+  if (ref.status !== 204) return json({ authed:false, reason:"refresh_failed", status:ref.status }, 200, out);
 
-  // Update our mirror cookie from refresh
-  const newAccess = pickCookieFromSetCookie(ref, "access_token");
-  if (newAccess) {
-    setCookie(out, "allstar_at", newAccess, {
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-    });
-    at = newAccess;
-  }
+  // If auth worker also returns the JWT body, mirror; if not, /me will still use the new Set-Cookie
+  try {
+    const j = await ref.clone().json();
+    if (j?.access) setCookie(out, "allstar_at", j.access, { path:"/", httpOnly:true, secure:true, sameSite:"Lax", maxAge:60*60*24*7 });
+  } catch {}
 
-  // Try /me again with the new token
-  res = await tryMe(env, at);
-  if (!res.ok) {
-    return json({ authed: false, reason: "me_failed_after_refresh", status: res.status }, 200, out);
-  }
+  const second = await tryMe(env, getCookie(new Request("http://x",{headers:out}), "allstar_at") || at);
+  if (!second.ok) return json({ authed:false, reason:"me_failed_after_refresh", status:second.status }, 200, out);
 
-  return new Response(JSON.stringify({ authed: true, me: await res.json() }), {
-    status: 200, headers: out
-  });
+  return new Response(JSON.stringify({ authed:true, me: await second.json() }), { status:200, headers:out });
 };
 
 async function tryMe(env: Env, access?: string | null) {
-  if (!access) return new Response(null, { status: 401 });
-  return upstream(env, "/me", {
-    method: "GET",
-    headers: { cookie: `access_token=${encodeURIComponent(access)}` },
-  });
+  if (!access) return new Response(null, { status:401 });
+  return upstream(env, "/me", { headers:{ cookie:`access_token=${encodeURIComponent(access)}` } });
 }
