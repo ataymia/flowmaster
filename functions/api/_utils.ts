@@ -29,20 +29,18 @@ function buildCookie(
   return parts.join("; ");
 }
 
-export function setCookie(h: Headers, name: string, value: string, opts?: { path?: string; httpOnly?: boolean; secure?: boolean; sameSite?: SameSite; maxAge?: number }) {
+export function setCookie(h: Headers, name: string, value: string, opts?: Parameters<typeof buildCookie>[2]) {
   h.append("Set-Cookie", buildCookie(name, value, opts));
 }
 export function clearCookie(h: Headers, name: string, path = "/") {
   h.append("Set-Cookie", `${name}=; Path=${path}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
 }
 export function parseCookies(req: Request): Record<string, string> {
-  const raw = req.headers.get("cookie") || "";
   const out: Record<string, string> = {};
-  for (const part of raw.split(";")) {
-    const [k, ...rest] = part.trim().split("=");
-    if (!k) continue;
-    out[k] = decodeURIComponent(rest.join("="));
-  }
+  (req.headers.get("cookie") || "").split(";").forEach(p => {
+    const [k, ...rest] = p.trim().split("=");
+    if (k) out[k] = decodeURIComponent(rest.join("="));
+  });
   return out;
 }
 export function getCookie(req: Request, name: string): string | null {
@@ -50,7 +48,7 @@ export function getCookie(req: Request, name: string): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/* ---------- Set-Cookie forwarding ---------- */
+/* ---------- Set-Cookie helpers ---------- */
 function getSetCookieLines(src: Response | Headers): string[] {
   const any = src as any;
   if (typeof any?.headers?.getSetCookie === "function") {
@@ -59,11 +57,7 @@ function getSetCookieLines(src: Response | Headers): string[] {
   }
   const h = src instanceof Response ? src.headers : src;
   const lines: string[] = [];
-  try {
-    (h as any).forEach?.((v: string, k: string) => {
-      if (k?.toLowerCase() === "set-cookie" && v) lines.push(v);
-    });
-  } catch {}
+  try { (h as any).forEach?.((v: string, k: string) => { if (k?.toLowerCase() === "set-cookie" && v) lines.push(v); }); } catch {}
   if (!lines.length) {
     const single = h.get("set-cookie");
     if (single) return single.split(/,(?=[^;]+?=)/g).map(s => s.trim());
@@ -90,32 +84,35 @@ export function ensureAccess(request: Request) {
   return { ok: false as const, response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }) };
 }
 
-/* ---------- Upstream ---------- */
+/* ---------- Upstream & proxies ---------- */
 export function upstream(env: Env, path: string, init?: RequestInit) {
   const url = path.startsWith("http") ? path : `${env.AUTH_BASE}${path}`;
   return fetch(url, init);
 }
 
-/** Bearer proxy (reads cookie -> Authorization header). */
 export async function proxyWithAuth(req: Request, env: Env, path: string, init: RequestInit = {}) {
-  const token = parseCookies(req)["allstar_at"] || parseCookies(req)["access_token"];
+  const c = parseCookies(req);
+  const token = c["access_token"] || c["allstar_at"];
   if (!token) return json({ error: "unauthorized" }, 401);
+
   const headers = new Headers(init.headers || {});
   headers.set("authorization", `Bearer ${token}`);
-  if (req.headers.get("content-type") && !headers.has("content-type")) headers.set("content-type", req.headers.get("content-type")!);
+  const ct = req.headers.get("content-type");
+  if (ct && !headers.has("content-type")) headers.set("content-type", ct);
+
   const up = await upstream(env, path, { method: req.method, body: req.body, headers, redirect: "manual" });
-  const out = new Headers(); const ct = up.headers.get("content-type"); if (ct) out.set("content-type", ct);
+  const out = new Headers(); const upCT = up.headers.get("content-type"); if (upCT) out.set("content-type", upCT);
   forwardSetCookies(up, out);
   return new Response(up.body, { status: up.status, headers: out });
 }
 
-/** Session proxy (forwards Cookie header). */
 export async function proxyWithSession(req: Request, env: Env, path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
   const cookie = req.headers.get("cookie"); if (cookie) headers.set("cookie", cookie);
-  if (req.headers.get("content-type") && !headers.has("content-type")) headers.set("content-type", req.headers.get("content-type")!);
+  const ct = req.headers.get("content-type"); if (ct && !headers.has("content-type")) headers.set("content-type", ct);
+
   const up = await upstream(env, path, { method: req.method, body: req.body, headers, redirect: "manual" });
-  const out = new Headers(); const ct = up.headers.get("content-type"); if (ct) out.set("content-type", ct);
+  const out = new Headers(); const upCT = up.headers.get("content-type"); if (upCT) out.set("content-type", upCT);
   forwardSetCookies(up, out);
   return new Response(up.body, { status: up.status, headers: out });
 }
