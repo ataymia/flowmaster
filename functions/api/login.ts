@@ -1,19 +1,23 @@
-import { Env, upstream, forwardSetCookies, pickCookieFromSetCookie, setCookie } from "./_utils";
+import { Env, upstream, setCookie, forwardSetCookies, pickCookieFromSetCookie } from "./_utils";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const body = await request.text();
-  const headers = new Headers(); const ct = request.headers.get("content-type"); if (ct) headers.set("content-type", ct);
+  const up = await upstream(env, "/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+    redirect: "manual",
+  });
 
-  const up = await upstream(env, "/auth/login", { method: "POST", headers, body, redirect: "manual" });
-
-  const out = new Headers({ "cache-control": "no-store" });
+  const out = new Headers({ "content-type": "application/json" });
   forwardSetCookies(up, out);
 
-  const access = pickCookieFromSetCookie(up, "access_token");
-  if (access) setCookie(out, "allstar_at", access, { path: "/", httpOnly: true, secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 7 });
+  // Mirror tokens into first-party cookies so pages.dev can read them
+  const access = pickCookieFromSetCookie(up.headers, "access_token");
+  if (access) setCookie(out, "allstar_at", access, { maxAge: 60 * 15, path: "/", sameSite: "Lax", secure: true, httpOnly: true });
+  const refresh = pickCookieFromSetCookie(up.headers, "refresh_token");
+  if (refresh) setCookie(out, "allstar_rt", refresh, { maxAge: 60 * 60 * 24 * 7, path: "/", sameSite: "Lax", secure: true, httpOnly: true });
 
-  const refresh = pickCookieFromSetCookie(up, "refresh_token");
-  if (refresh) setCookie(out, "rt", refresh, { path: "/", httpOnly: true, secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 7 });
-
-  return new Response(up.body, { status: up.status, headers: out });
+  const text = await up.text().catch(()=>"{}");
+  return new Response(text, { status: up.status, headers: out });
 };
