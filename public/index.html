@@ -34,12 +34,20 @@
       if (!r.ok) { const e = new Error('Request failed'); e.status=r.status; e.body=body; throw e; }
       return body;
     }
-    const whoami = ()=> jfetch('/api/whoami');
-    const logout  = ()=> jfetch('/api/logout', { method:'POST' });
-    const debugAuth = ()=> jfetch('/api/debug-auth');
+    const whoami   = ()=> jfetch('/api/whoami');
+    const logout   = ()=> jfetch('/api/logout', { method:'POST' });
+    const debugAuth= ()=> jfetch('/api/debug-auth');
 
     const root = document.getElementById('root');
     const el = (h)=>{ const d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstElementChild; }
+
+    // Default destination after login: HUB (not FlowMaster)
+    function getPostLoginUrl(){
+      const next = new URL(location.href).searchParams.get('next');
+      // Respect ?next= if present (e.g., when a protected page bounced us here)
+      // Otherwise default to the Hub:
+      return next || '/hub.html';
+    }
 
     function renderLoginForm(message, diag){
       root.innerHTML='';
@@ -69,13 +77,11 @@
       const password = document.getElementById('password').value;
       if(!email || !password) return renderLoginForm('Email and password are required.');
       try {
-        // Send both keys to satisfy different worker schemas
-        const res = await jfetch('/api/login', { method:'POST', body: JSON.stringify({ email, username: email, password }) });
-        const next = new URL(location.href).searchParams.get('next') || '/flowmaster/index.html';
-        location.href = next;
+        // send both email and username to satisfy worker schema
+        await jfetch('/api/login', { method:'POST', body: JSON.stringify({ email, username: email, password }) });
+        location.href = getPostLoginUrl();
       } catch (e) {
-        let diag;
-        try { diag = await debugAuth(); } catch { /* ignore */ }
+        let diag; try { diag = await debugAuth(); } catch {}
         const reason = e?.body?.error || e?.body?.message || `Sign in failed (${e.status||'?'})`;
         renderLoginForm(reason, diag);
       }
@@ -91,7 +97,7 @@
           <div class="msg"><a id="logout" href="#">Sign out</a></div>
         </section>
       `));
-      document.getElementById('go').addEventListener('click', ()=> location.href='/flowmaster/index.html');
+      document.getElementById('go').addEventListener('click', ()=> location.href=getPostLoginUrl());
       document.getElementById('logout').addEventListener('click', async (e)=>{ e.preventDefault(); await logout(); renderLoginForm('You have been signed out.'); });
     }
 
