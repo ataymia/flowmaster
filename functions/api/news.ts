@@ -1,83 +1,83 @@
-import { Env, json, ensureAccess } from "./_utils";
+// functions/api/news.ts
+import { Env, json, ensureSession } from "./_utils";
+
 const NOTION_VERSION = "2022-06-28";
 
-type Page = { properties: Record<string, any> };
-
-const byType = (props: Record<string, any>, type: string) =>
-  Object.entries(props||{}).find(([,v]) => v?.type === type)?.[0] || null;
-
-const getTitle = (p:any,k:string|null)=> k? (p[k]?.title||[]).map((t:any)=>t?.plain_text||"").join("").trim() : "";
-const getRT    = (p:any,k:string|null)=> k? (p[k]?.rich_text||[]).map((t:any)=>t?.plain_text||"").join("").trim() : "";
-const getDate  = (p:any,k:string|null)=> {
-  if(!k) return null; const d=p[k]?.date; return d?.start || d?.end || null;
-};
-const getSel   = (p:any,k:string|null)=> k? (p[k]?.select?.name||null) : null;
-const getChk   = (p:any,k:string|null)=> k? !!p[k]?.checkbox : false;
+function keyByType(props: Record<string, any>, type: string, preferred?: string) {
+  if (preferred && props[preferred]?.type === type) return preferred;
+  for (const [k,v] of Object.entries(props||{})) if (v?.type === type) return k;
+  return null;
+}
+const readTitle = (p:any,k:string|null)=> k ? (p[k]?.title||[]).map((t:any)=>t?.plain_text||"").join("").trim() : "";
+const readRT    = (p:any,k:string|null)=> k ? (p[k]?.rich_text||[]).map((t:any)=>t?.plain_text||"").join("").trim() : "";
+const readDate  = (p:any,k:string|null)=> k ? (p[k]?.date?.start || p[k]?.date?.end || null) : null;
+const readSel   = (p:any,k:string|null)=> k ? (p[k]?.select?.name || null) : null;
+const readCB    = (p:any,k:string|null)=> k ? !!p[k]?.checkbox : true;
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const acc = ensureAccess(request); if (!acc.ok) return acc.response;
+  const session = ensureSession(request);
+  if (!session.ok) return session.response;
 
   if (!env.NOTION_TOKEN || !env.NOTION_DATABASE_ID) {
-    return json({ items: [], note: "notion_missing_env" }, 200, { "cache-control":"no-store" });
+    return json({ items: [], error: "missing_notion_config" }, 200, { "cache-control":"no-store" });
   }
 
-  const audParam = (new URL(request.url).searchParams.get("aud") || "ALL").toUpperCase();
+  const audience = (new URL(request.url).searchParams.get("audience") || "ALL").toUpperCase();
+  const nowISO = new Date().toISOString();
 
-  // Pull pages (sort hints are best-effort; Notion ignores unknown props gracefully)
-  const q = await fetch(`https://api.notion.com/v1/databases/${env.NOTION_DATABASE_ID}/query`, {
-    method:"POST",
-    headers:{
-      "authorization": `Bearer ${env.NOTION_TOKEN}`,
-      "notion-version": NOTION_VERSION,
-      "content-type":"application/json",
+  // Query Notion database
+  const r = await fetch("https://api.notion.com/v1/databases/" + env.NOTION_DATABASE_ID + "/query", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+      "Notion-Version": NOTION_VERSION,
+      "content-type": "application/json",
     },
     body: JSON.stringify({
-      page_size: 25,
-      sorts: [{ property:"PublishedAt", direction:"descending" }]
+      page_size: 50,
+      sorts: [{ property: "PublishedAt", direction: "descending" }],
+      // Filters live in post-processing to be resilient to schema differences
     }),
   });
 
-  if (!q.ok) {
-    const text = await q.text().catch(()=> "");
-    return json({ items: [], note: "notion_error", status: q.status, detail: text }, 200, { "cache-control":"no-store" });
+  if (!r.ok) {
+    const txt = await r.text().catch(()=> "");
+    return json({ items: [], error: "notion_error", status: r.status, body: txt }, 200, { "cache-control":"no-store" });
   }
 
-  const data = await q.json();
-  const pages: Page[] = Array.isArray(data?.results) ? data.results : [];
+  const data = await r.json().catch(()=> ({} as any));
+  const props = (data?.results?.[0]?.properties) || {};
 
-  const nowISO = new Date().toISOString();
+  const kTitle = keyByType(props, "title", "Title");
+  const kBody  = keyByType(props, "rich_text", "Body");
+  const kPub   = keyByType(props, "date", "PublishedAt");
+  const kExp   = keyByType(props, "date", "ExpiresAt");
+  const kAud   = keyByType(props, "select", "Audience");
+  const kPin   = keyByType(props, "checkbox", "Pinned");
 
-  const items = pages.map(pg => {
-    const props = pg.properties || {};
-
-    // discover keys by type, but prefer common names when present
-    const titleKey = props["Title"]?.type==="title" ? "Title" : byType(props,"title");
-    const bodyKey  = props["Body"]?.type==="rich_text" ? "Body" : byType(props,"rich_text");
-
-    const pubKey   = props["PublishedAt"]?.type==="date" ? "PublishedAt" : (props["Date"]?.type==="date" ? "Date" : byType(props,"date"));
-    const expKey   = props["ExpiresAt"]?.type==="date" ? "ExpiresAt" : null;
-
-    const audKey   = props["Audience"]?.type==="select" ? "Audience" : byType(props,"select");
-    const pinKey   = props["Pinned"]?.type==="checkbox" ? "Pinned" : byType(props,"checkbox"); // optional
-
-    const title    = getTitle(props, titleKey);
-    const body     = getRT(props, bodyKey);
-    const publishedAt = getDate(props, pubKey);
-    const expiresAt   = getDate(props, expKey);
-    const audience    = (getSel(props, audKey) || "all").toLowerCase();
-    const pinned      = getChk(props, pinKey);
-
-    // show rule: pinned OR (publishedAt <= now AND (no expiry or expires >= now))
-    const show = pinned || ((publishedAt ? publishedAt <= nowISO : true) && (expiresAt ? expiresAt >= nowISO : true));
-    return { title, body, date: publishedAt, audience, pinned, show };
+  const items = (data?.results||[]).map((page:any) => {
+    const p = page.properties || {};
+    return {
+      id: page.id,
+      title: readTitle(p, kTitle),
+      body: readRT(p, kBody),
+      publishedAt: readDate(p, kPub),
+      expiresAt: readDate(p, kExp),
+      audience: (readSel(p, kAud) || "all").toLowerCase(),
+      pinned: readCB(p, kPin),
+      url: (page?.url || null),
+    };
   })
-  .filter(it => it.show)
+  // visibility: must be "published" and not expired
+  .filter(it => !!it.publishedAt && (!it.expiresAt || it.expiresAt >= nowISO))
+  // audience filter
   .filter(it => {
-    if (audParam === "ALL") return true;
+    if (audience === "ALL") return true;
     if (!it.audience || it.audience === "all") return true;
-    return it.audience === audParam.toLowerCase();
+    return it.audience.toUpperCase() === audience;
   })
-  .sort((a,b)=> (Number(b.pinned)-Number(a.pinned)) || Date.parse(b.date||0) - Date.parse(a.date||0));
+  // sort pinned first, then newest
+  .sort((a,b) => (Number(!!b.pinned) - Number(!!a.pinned)) || (Date.parse(b.publishedAt) - Date.parse(a.publishedAt)));
 
   return json({ items }, 200, { "cache-control":"no-store" });
 };
