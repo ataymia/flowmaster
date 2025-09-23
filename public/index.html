@@ -7,26 +7,34 @@
   <link rel="stylesheet" href="/theme.css" />
   <style>
     :root { --bg:#0b1220; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --pink:#e11d48; --border:#1f2937; }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     .wrap{min-height:100dvh;display:grid;place-items:center;padding:24px}
     .card{width:100%;max-width:460px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:24px}
-    .title{font-weight:700;letter-spacing:.5px} .subtitle{color:var(--muted);margin-top:4px;font-size:14px}
+    .title{font-weight:700;letter-spacing:.5px}
+    .subtitle{color:var(--muted);margin-top:4px;font-size:14px}
     label{display:block;font-size:13px;color:var(--muted);margin-top:16px;margin-bottom:8px}
     input{width:100%;background:#0f172a;color:var(--text);border:1px solid var(--border);outline:none;border-radius:10px;padding:12px 14px;font-size:14px}
     button.primary{margin-top:16px;width:100%;border:none;border-radius:12px;padding:12px 14px;font-weight:600;background:var(--pink);color:#fff;cursor:pointer}
-    .msg{margin-top:10px;font-size:13px;color:var(--muted)} .error{color:#fca5a5} .top-left{position:fixed;top:8px;left:8px;color:#f43f5e;font-size:14px}
+    .msg{margin-top:10px;font-size:13px;color:var(--muted)}
+    .error{color:#fca5a5}
+    .top-left{position:fixed;top:8px;left:8px;color:#f43f5e;font-size:14px}
   </style>
 </head>
 <body>
   <div class="top-left">Allstar Agent Hub</div>
   <main class="wrap"><div id="root"></div></main>
+
   <script>
     async function jfetch(url, opts = {}) {
       const r = await fetch(url, { ...opts, headers: { 'content-type':'application/json', ...(opts.headers||{}) } });
-      const ct = r.headers.get('content-type') || ''; const body = ct.includes('application/json') ? await r.json() : await r.text();
-      if (!r.ok) { const e = new Error('fail'); e.status=r.status; e.body=body; throw e; } return body;
+      const ct = r.headers.get('content-type') || '';
+      const body = ct.includes('application/json') ? await r.json() : await r.text();
+      if (!r.ok) { const e = new Error('Request failed'); e.status=r.status; e.body=body; throw e; }
+      return body;
     }
-    const whoami = ()=> jfetch('/api/whoami'); const logout = ()=> jfetch('/api/logout',{method:'POST'});
+    const whoami = ()=> jfetch('/api/whoami');
+    const logout  = ()=> jfetch('/api/logout', { method:'POST' });
 
     const root = document.getElementById('root');
     const el = (h)=>{ const d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstElementChild; }
@@ -37,19 +45,30 @@
         <section class="card">
           <div class="title">ALLSTAR</div>
           <div class="subtitle">sign in</div>
-          <label>Email (or username)</label><input id="email" type="text" placeholder="you@company.com" autocomplete="username"/>
-          <label>Password</label><input id="password" type="password" placeholder="••••••••" autocomplete="current-password"/>
+          <label>Email (or username)</label>
+          <input id="email" type="text" placeholder="you@company.com" autocomplete="username"/>
+          <label>Password</label>
+          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password"/>
           <button class="primary" id="btn">Sign in</button>
           <div class="msg ${message?'error':''}">${message||"You'll stay signed in for 7 days on this device."}</div>
-        </section>`));
+        </section>
+      `));
       document.getElementById('btn').addEventListener('click', async ()=>{
-        const email=document.getElementById('email').value.trim(); const password=document.getElementById('password').value;
-        if(!email||!password) return renderLoginForm('Email and password are required.');
-        try{ await jfetch('/api/login',{method:'POST',body:JSON.stringify({email,password})});
-             const next=new URL(location.href).searchParams.get('next')||'/flowmaster/index.html'; location.href=next;
-        }catch(e){ renderLoginForm(e?.body?.error||e?.body?.message||`Sign in failed (${e.status||'?'})`); }
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        if(!email || !password) return renderLoginForm('Email and password are required.');
+        try {
+          // Send both 'email' and 'username' to satisfy either worker schema.
+          await jfetch('/api/login',{ method:'POST', body: JSON.stringify({ email, username: email, password }) });
+          const next = new URL(location.href).searchParams.get('next') || '/flowmaster/index.html';
+          location.href = next;
+        } catch (e) {
+          const reason = e?.body?.error || e?.body?.message || `Sign in failed (${e.status||'?'})`;
+          renderLoginForm(reason);
+        }
       });
     }
+
     function renderAlreadySignedIn(me){
       root.innerHTML='';
       root.appendChild(el(`
@@ -58,11 +77,16 @@
           <div class="subtitle">Welcome back${me?.name?', '+me.name:''}.</div>
           <button class="primary" id="go">Open Hub</button>
           <div class="msg"><a id="logout" href="#">Sign out</a></div>
-        </section>`));
+        </section>
+      `));
       document.getElementById('go').addEventListener('click', ()=> location.href='/flowmaster/index.html');
       document.getElementById('logout').addEventListener('click', async (e)=>{ e.preventDefault(); await logout(); renderLoginForm('You have been signed out.'); });
     }
-    (async()=>{ try{ const w=await whoami(); w.authed?renderAlreadySignedIn(w.me):renderLoginForm(); }catch{ renderLoginForm(); } })();
+
+    (async ()=>{
+      try { const w = await whoami(); w.authed ? renderAlreadySignedIn(w.me) : renderLoginForm(); }
+      catch { renderLoginForm(); }
+    })();
   </script>
 </body>
 </html>
