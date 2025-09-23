@@ -76,13 +76,14 @@ export function pickCookieFromSetCookie(src: Headers, name: string): string | nu
 
 /* ---------------- Upstream (Auth Worker) ---------------- */
 export async function upstream(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
+  // Fallback so login works even if AUTH_BASE isn’t configured yet
   const FALLBACK = "https://allstar-auth.ataymia.workers.dev";
   const base = (env as any)?.AUTH_BASE || FALLBACK;
   const url = path.startsWith("http") ? path : `${base}${path}`;
   return fetch(url, init);
 }
 
-/* ---------------- Session/Access checks (shape matches working zip) ---------------- */
+/* ---------------- Session/Access checks (contract matches prior routes) ---------------- */
 
 /** Lightweight check used by some routes to gate access. */
 export function ensureSession(req: Request): { ok: true } | { ok: false; response: Response } {
@@ -92,11 +93,9 @@ export function ensureSession(req: Request): { ok: true } | { ok: false; respons
   return { ok: false as const, response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }) };
 }
 
-/** Stronger check used by /users and similar routes in the working repo. */
+/** Stronger check used by /users and similar routes. */
 export function ensureAccess(req: Request): { ok: true; token: string } | { ok: false; response: Response } {
-  const token =
-    getCookie(req, "allstar_at") ||
-    getCookie(req, "access_token");
+  const token = getCookie(req, "allstar_at") || getCookie(req, "access_token");
   if (!token) return { ok: false as const, response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }) };
   return { ok: true as const, token };
 }
@@ -162,7 +161,16 @@ export async function proxyWithSession(
   return new Response(res.body, { status: res.status, headers: outHeaders });
 }
 
-/* ---------------- Utilities ---------------- */
+/* ---------------- Helpers ---------------- */
+export async function safeJson<T = any>(res: Response): Promise<T | null> {
+  try {
+    // Use a clone so callers can still read the original body if needed.
+    return (await res.clone().json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 export function parseCookieHeader(h: string | null): Record<string, string> {
   const out: Record<string, string> = {};
   if (!h) return out;
