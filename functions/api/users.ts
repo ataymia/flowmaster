@@ -1,22 +1,11 @@
-import { Env, ensureAccess, proxyWithSession, json } from "./_utils";
+import { Env, ensureAccess, proxyWithAuth } from "./_utils";
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const g = ensureAccess(request); if (!g.ok) return g.response;
-  return proxyWithSession(request, env, "/users");
+export const onRequestGet: PagesFunction<Env> = async (c) => {
+  const acc = ensureAccess(c.request); if (!acc.ok) return acc.response;
+  return proxyWithAuth(c.request, c.env, "/users");
 };
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const g = ensureAccess(request); if (!g.ok) return g.response;
-  return proxyWithSession(request, env, "/users");
-};
-export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params }) => {
-  const g = ensureAccess(request); if (!g.ok) return g.response;
-  const id = (params as any)?.id || request.url.split("/").pop();
-  if (!id) return json({ error: "missing id" }, 400);
-  return proxyWithSession(request, env, `/users/${id}`);
-};
-export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params }) => {
-  const g = ensureAccess(request); if (!g.ok) return g.response;
-  const id = (params as any)?.id || request.url.split("/").pop();
-  if (!id) return json({ error: "missing id" }, 400);
-  return proxyWithSession(request, env, `/users/${id}`);
-};
+export const onRequestPost: PagesFunction<Env> = async (c) => proxyWithAuth(c.request, c.env, "/users");
+export const onRequestPatch: PagesFunction<Env> = async (c) =>
+  proxyWithAuth(c.request, c.env, `/users/${c.params["*"] || c.request.url.split("/").pop()}`);
+export const onRequestDelete: PagesFunction<Env> = async (c) =>
+  proxyWithAuth(c.request, c.env, `/users/${c.params["*"] || c.request.url.split("/").pop()}`);
