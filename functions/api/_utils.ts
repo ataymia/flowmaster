@@ -88,10 +88,6 @@ export async function upstream(
 }
 
 /* ---------------- Access enforcement ---------------- */
-/**
- * Returns an access token from first-party cookies, or throws a 401 Response.
- * (Several existing routes import this.)
- */
 export function ensureAccess(req: Request): string {
   const token =
     getCookie(req, "allstar_at") ||
@@ -103,20 +99,15 @@ export function ensureAccess(req: Request): string {
 }
 
 /* ---------------- Proxies ---------------- */
-/**
- * Proxy to the Auth Worker *requiring* a valid session.
- * (Matches existing imports `proxyWithAuth`.)
- */
 export async function proxyWithAuth(
   req: Request,
   env: Env,
   path: string,
   init: RequestInit = {}
 ) {
-  const token = ensureAccess(req); // throws 401 if missing
+  const token = ensureAccess(req);
   const headers = new Headers(init.headers || {});
   headers.set("cookie", `access_token=${token}`);
-
   const ct = req.headers.get("content-type");
   if (ct && !headers.has("content-type")) headers.set("content-type", ct);
 
@@ -132,14 +123,9 @@ export async function proxyWithAuth(
   const upCT = up.headers.get("content-type");
   if (upCT) out.set("content-type", upCT);
   forwardSetCookies(up, out);
-
   return new Response(up.body, { status: up.status, headers: out });
 }
 
-/**
- * Proxy that forwards the caller’s entire Cookie header (non-enforcing).
- * (Kept for compatibility if any route uses it.)
- */
 export async function proxyWithSession(
   req: Request,
   env: Env,
@@ -164,6 +150,10 @@ export async function proxyWithSession(
   const upCT = up.headers.get("content-type");
   if (upCT) out.set("content-type", upCT);
   forwardSetCookies(up, out);
-
   return new Response(up.body, { status: up.status, headers: out });
+}
+
+/* ---------------- Helpers: token mirroring ---------------- */
+export async function safeJson<T=any>(res: Response): Promise<T | null> {
+  try { return await res.clone().json(); } catch { return null; }
 }
