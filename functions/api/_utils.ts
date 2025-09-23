@@ -1,7 +1,7 @@
 // functions/api/_utils.ts
 
 export interface Env {
-  AUTH_BASE: string;              // e.g. https://allstar-auth.ataymia.workers.dev
+  AUTH_BASE: string;            // e.g., https://allstar-auth.ataymia.workers.dev
   NOTION_TOKEN?: string;
   NOTION_DATABASE_ID?: string;
 }
@@ -75,43 +75,51 @@ export function pickCookieFromSetCookie(src: Headers, name: string): string | nu
 }
 
 /* ---------------- Upstream (Auth Worker) ---------------- */
-export async function upstream(
-  env: Env,
-  path: string,
-  init: RequestInit = {}
-): Promise<Response> {
-  // Fallback so login works even if AUTH_BASE isn’t configured yet
+export async function upstream(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
   const FALLBACK = "https://allstar-auth.ataymia.workers.dev";
-  const base = (env && (env as any).AUTH_BASE) ? (env as any).AUTH_BASE : FALLBACK;
+  const base = (env as any)?.AUTH_BASE || FALLBACK;
   const url = path.startsWith("http") ? path : `${base}${path}`;
   return fetch(url, init);
 }
 
-/* ---------------- Access enforcement ---------------- */
-export function ensureAccess(req: Request): string {
+/* ---------------- Session/Access checks (shape matches working zip) ---------------- */
+
+/** Lightweight check used by some routes to gate access. */
+export function ensureSession(req: Request): { ok: true } | { ok: false; response: Response } {
+  const access = getCookie(req, "access_token");
+  const pageAT = getCookie(req, "allstar_at");
+  if (access || pageAT) return { ok: true as const };
+  return { ok: false as const, response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }) };
+}
+
+/** Stronger check used by /users and similar routes in the working repo. */
+export function ensureAccess(req: Request): { ok: true; token: string } | { ok: false; response: Response } {
   const token =
     getCookie(req, "allstar_at") ||
     getCookie(req, "access_token");
-  if (!token) {
-    throw json({ error: "unauthorized" }, 401, { "cache-control": "no-store" });
-  }
-  return token;
+  if (!token) return { ok: false as const, response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }) };
+  return { ok: true as const, token };
 }
 
 /* ---------------- Proxies ---------------- */
+
+/** Proxy requiring a valid session; sends token as cookie to the worker. */
 export async function proxyWithAuth(
   req: Request,
   env: Env,
   path: string,
   init: RequestInit = {}
 ) {
-  const token = ensureAccess(req);
+  const access = ensureAccess(req);
+  if (!access.ok) return access.response;
+
   const headers = new Headers(init.headers || {});
-  headers.set("cookie", `access_token=${token}`);
+  headers.set("cookie", `access_token=${access.token}`);
+
   const ct = req.headers.get("content-type");
   if (ct && !headers.has("content-type")) headers.set("content-type", ct);
 
-  const up = await upstream(env, path, {
+  const res = await upstream(env, path, {
     ...init,
     method: init.method || req.method,
     body: init.body ?? req.body,
@@ -119,13 +127,14 @@ export async function proxyWithAuth(
     redirect: "manual",
   });
 
-  const out = new Headers();
-  const upCT = up.headers.get("content-type");
-  if (upCT) out.set("content-type", upCT);
-  forwardSetCookies(up, out);
-  return new Response(up.body, { status: up.status, headers: out });
+  const outHeaders = new Headers();
+  const resCT = res.headers.get("content-type");
+  if (resCT) outHeaders.set("content-type", resCT);
+  forwardSetCookies(res, outHeaders);
+  return new Response(res.body, { status: res.status, headers: outHeaders });
 }
 
+/** Proxy that forwards the caller’s entire Cookie header (non-enforcing). */
 export async function proxyWithSession(
   req: Request,
   env: Env,
@@ -138,7 +147,7 @@ export async function proxyWithSession(
   const ct = req.headers.get("content-type");
   if (ct && !headers.has("content-type")) headers.set("content-type", ct);
 
-  const up = await upstream(env, path, {
+  const res = await upstream(env, path, {
     ...init,
     method: init.method || req.method,
     body: init.body ?? req.body,
@@ -146,14 +155,23 @@ export async function proxyWithSession(
     redirect: "manual",
   });
 
-  const out = new Headers();
-  const upCT = up.headers.get("content-type");
-  if (upCT) out.set("content-type", upCT);
-  forwardSetCookies(up, out);
-  return new Response(up.body, { status: up.status, headers: out });
+  const outHeaders = new Headers();
+  const resCT = res.headers.get("content-type");
+  if (resCT) outHeaders.set("content-type", resCT);
+  forwardSetCookies(res, outHeaders);
+  return new Response(res.body, { status: res.status, headers: outHeaders });
 }
 
-/* ---------------- Helpers: token mirroring ---------------- */
-export async function safeJson<T=any>(res: Response): Promise<T | null> {
-  try { return await res.clone().json(); } catch { return null; }
+/* ---------------- Utilities ---------------- */
+export function parseCookieHeader(h: string | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!h) return out;
+  for (const part of h.split(";")) {
+    const i = part.indexOf("=");
+    if (i === -1) continue;
+    const k = part.slice(0, i).trim();
+    const v = part.slice(i + 1).trim();
+    if (k) out[k] = decodeURIComponent(v);
+  }
+  return out;
 }
