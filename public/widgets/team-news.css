@@ -1,0 +1,22 @@
+/* You can delete this file if you prefer the inline styles in team-news.html */
+:root{ --bg:#0b1220; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --accent:#e11d48 }
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
+.wrap{padding:10px}
+.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.hdr .title{font-weight:700}
+.hdr .meta{color:var(--muted);font-size:12px}
+.list{display:grid;gap:10px}
+.card{border:1px solid var(--border); border-radius:12px; padding:12px; background:var(--card)}
+.card .t{font-weight:600}
+.card .sub{color:var(--muted);font-size:12px;margin-top:4px}
+.card .body{color:#cbd5e1;font-size:14px;margin-top:8px;line-height:1.35}
+.pin{display:inline-block;margin-right:6px;color:var(--accent)}
+.empty{color:var(--muted);font-size:14px;border:1px dashed var(--border);border-radius:12px;padding:16px;text-align:center}
+.row{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.pill{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:11px;color:#cbd5e1}
+.right{margin-left:auto}
+.link{color:#93c5fd;text-decoration:none}
+.link:hover{text-decoration:underline}
+.toolbar{display:flex;gap:8px;align-items:center}
+.btn{font-size:12px;border:1px solid var(--border);background:#0f172a;color:#e5e7eb;border-radius:8px;padding:6px 8px;cursor:pointer}
+.btn:hover{filter:brightness(1.1)}
