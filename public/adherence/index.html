@@ -51,9 +51,9 @@
     .bar .now{position:absolute;top:0;bottom:0;width:2px;background:#0f172a}
 
     /* NEW: give the ticks more bottom room, and add bigger gap before the second bar */
-    .ticks{position:relative;height:18px; margin-top:8px}
-    .tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
-    .tick-label{position:absolute;top:18px;transform:translateX(-50%);font-size:10px;color:#64748b}
+.ticks{position:relative;height:18px; margin-top:8px}
+.tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
+.tick-label{position:absolute;top:18px;transform:translateX(-50%);font-size:10px;color:#64748b}
 
     .legend{display:flex;flex-wrap:wrap;gap:10px}
     .chip{display:flex;align-items:center;gap:6px;font-size:12px}
@@ -216,6 +216,34 @@
       return full.map(x=>({startMs: minuteToMs(x.start, dateStr), endMs: minuteToMs(x.end, dateStr), status:x.status}));
     }
 
+    // Build Actual segments only up to "now" (no future painting)
+function assembleActualBlocksPastOnly(events, dayStartMs, dayEndMs, nowMs){
+  const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
+  const until = Math.min(dayEndMs, nowMs);
+  // What was active at start of day? (default to offline)
+  let cur = (()=>{
+    let c=null;
+    for (let i=0;i<ev.length;i++){ if (ev[i].ts <= dayStartMs) c=ev[i].status; else break; }
+    return c || 'offline';
+  })();
+  let curStart = dayStartMs;
+  const out=[];
+  for (let i=0;i<ev.length;i++){
+    const e=ev[i];
+    if (e.ts < dayStartMs) continue;
+    if (e.ts > until) break;
+    if (curStart < e.ts){
+      out.push({start:curStart,end:e.ts,status:cur});
+      curStart = e.ts;
+    }
+    cur = e.status || 'offline';
+  }
+  if (curStart < until){
+    out.push({start:curStart,end:until,status:cur});
+  }
+  return out;
+}
+
     // NEW: Actual blocks only up to "now" (no future painting)
     function assembleActualBlocksPastOnly(events, dayStartMs, dayEndMs, nowMs){
       const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
@@ -275,82 +303,95 @@
       </div>
     );
 
-    const DualBars = ({schedule, events, dateStr})=>{
-      const [, setTick] = useState(0);
-      useEffect(()=>{ const id=setInterval(()=>setTick(t=>t+1),1000); return ()=>clearInterval(id); },[]);
+const DualBars = ({schedule, events, dateStr})=>{
+  const [, setTick] = React.useState(0);
+  React.useEffect(()=>{ const id=setInterval(()=>setTick(t=>t+1),1000); return ()=>clearInterval(id); },[]);
 
-      const dayStart = minuteToMs(0, dateStr), dayEnd=minuteToMs(1440, dateStr);
-      const expectedBlocks = assembleExpectedBlocks24h(schedule, dateStr);
+  const dayStart = minuteToMs(0, dateStr);
+  const dayEnd   = minuteToMs(1440, dateStr);
+  const now      = Date.now();
 
-      const now = Date.now();
-      const actualPast = assembleActualBlocksPastOnly(events, dayStart, dayEnd, now);
+  // Projected: full 24h with gaps filled as 'offline'
+  const expectedBlocks = (function assembleExpectedBlocks24h(){
+    const segs = (schedule||[]).map(b=>({start:hhmmToMinutes(b.start), end:hhmmToMinutes(b.end), status:b.status}));
+    segs.sort((a,b)=>a.start-b.start);
+    const full=[];
+    let cursor=0;
+    for (const s of segs){
+      if (s.start>cursor){ full.push({start:cursor,end:s.start,status:'offline'}); }
+      full.push({start:s.start,end:s.end,status:s.status});
+      cursor = Math.max(cursor, s.end);
+    }
+    if (cursor<1440) full.push({start:cursor,end:1440,status:'offline'});
+    return full.map(x=>({startMs: minuteToMs(x.start, dateStr), endMs: minuteToMs(x.end, dateStr), status:x.status}));
+  })();
 
-      const pct = (l,r)=> ((r-l)/(dayEnd-dayStart))*100;
-      const leftPctMs=(ms)=> ((ms-dayStart)/(dayEnd-dayStart))*100;
+  // Actual: only up to now (no future fill)
+  const actualPast = assembleActualBlocksPastOnly(events, dayStart, dayEnd, now);
 
-      const hours = new Array(25).fill(0).map((_,i)=>i);
-      const labelFor = (h)=> new Date(dayStart + h*3600000).toLocaleTimeString([], {hour:'2-digit'});
+  const pct       = (l,r)=> ((r-l)/(dayEnd-dayStart))*100;
+  const leftPctMs = (ms)=> ((ms-dayStart)/(dayEnd-dayStart))*100;
 
-      return (
-        <div className="bar-wrap">
-          {/* Projected (24h continuous) */}
-          <div className="row" style={{gap:10}}>
-            <div style={{width:80,fontSize:12,color:"#374151"}}>Projected</div>
-            <div style={{flex:1}}>
-              <div className="bar">
-                {expectedBlocks.map((b,i)=>{
-                  const l=leftPctMs(b.startMs), w=pct(b.startMs, b.endMs);
-                  return <div key={i} className="seg" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color, opacity:b.status==='offline'? .35:.35}} />;
-                })}
-                {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
-              </div>
-              <div className="ticks">
-                {hours.map(h=>{
-                  const x=leftPctMs(dayStart + h*3600000);
-                  return (
-                    <React.Fragment key={h}>
-                      <div className="tick" style={{left:`${x}%`}}></div>
-                      {(h%2===0) && <div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            </div>
+  const hours = new Array(25).fill(0).map((_,i)=>i); // 0..24
+  const labelFor = (h)=> new Date(dayStart + h*3600000).toLocaleTimeString([], {hour:'2-digit'});
+
+  return (
+    <div className="bar-wrap">
+      {/* Projected */}
+      <div className="row" style={{gap:10}}>
+        <div style={{width:80,fontSize:12,color:"#374151"}}>Projected</div>
+        <div style={{flex:1}}>
+          <div className="bar">
+            {expectedBlocks.map((b,i)=>{
+              const l=leftPctMs(b.startMs), w=pct(b.startMs, b.endMs);
+              return <div key={i} className="seg" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color, opacity:.35}} />;
+            })}
+            {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
           </div>
-
-          {/* Actual (24h) — background offline full width, then ONLY past segments up to now */}
-          <div className="row" style="
-            gap:10;
-            margin-top:26px;  /* NEW: extra spacing so it won't overlap the first bar's tick labels */
-          ">
-            <div style={{width:80,fontSize:12,color:"#374151"}}>Actual</div>
-            <div style={{flex:1}}>
-              <div className="bar">
-                {/* background offline layer across the whole day */}
-                <div className="seg actual" style="left:0;right:0;width:100%;background:#9ca3af;opacity:.18"></div>
-                {/* paint only the past blocks up to 'now' */}
-                {actualPast.map((b,i)=>{
-                  const l=leftPctMs(b.start), w=pct(b.start, b.end);
-                  return <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}} />;
-                })}
-                {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
-              </div>
-              <div className="ticks">
-                {hours.map(h=>{
-                  const x=leftPctMs(dayStart + h*3600000);
-                  return (
-                    <React.Fragment key={h}>
-                      <div className="tick" style={{left:`${x}%`}}></div>
-                      {(h%2===0) && <div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            </div>
+          <div className="ticks">
+            {hours.map(h=>{
+              const x=leftPctMs(dayStart + h*3600000);
+              return (
+                <React.Fragment key={h}>
+                  <div className="tick" style={{left:`${x}%`}}></div>
+                  {(h%2===0) && <div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
-      );
-    };
+      </div>
+
+      {/* Actual (spaced further down so labels don’t overlap) */}
+      <div className="row" style={{gap:10, marginTop:26}}>
+        <div style={{width:80,fontSize:12,color:"#374151"}}>Actual</div>
+        <div style={{flex:1}}>
+          <div className="bar">
+            {/* faint offline background across the full 24h */}
+            <div className="seg actual" style={{left:0, width:'100%', background:'#9ca3af', opacity:.18}} />
+            {/* draw only past segments up to 'now' */}
+            {actualPast.map((b,i)=>{
+              const l=leftPctMs(b.start), w=pct(b.start, b.end);
+              return <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}} />;
+            })}
+            {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
+          </div>
+          <div className="ticks">
+            {hours.map(h=>{
+              const x=leftPctMs(dayStart + h*3600000);
+              return (
+                <React.Fragment key={h}>
+                  <div className="tick" style={{left:`${x}%`}}></div>
+                  {(h%2===0) && <div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
     /*********** Screens ***********/
     function AgentView({ me, dateStr, schedule, events, onSetStatus }){
