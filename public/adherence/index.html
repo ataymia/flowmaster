@@ -89,11 +89,9 @@
     const isoDate = (d)=> new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0,10);
     const todayStr = ()=> isoDate(new Date());
     const hhmmToMinutes = (hhmm)=>{ const [h,m]=hhmm.split(":").map(Number); return h*60+m; };
-    const minutesToHHMM = (mins)=> `${String(Math.floor(mins/60)).padStart(2,"0")}:${String(mins%60).padStart(2,"0")}`;
     const minuteToMs = (minuteOfDay, dateStr)=> new Date(`${dateStr}T00:00:00`).getTime() + minuteOfDay*60000;
     const getBounds = (dateStr)=>{ const s=new Date(`${dateStr}T00:00:00`).getTime(); return {start:s,end:s+86400000}; };
     const fmtHm = (d)=> new Date(d).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
-    const fmtDur = (mins)=> mins>=60?`${Math.floor(mins/60)}h ${Math.round(mins%60)}m`:`${Math.round(mins)}m`;
 
     /*********** API ***********/
     async function api(path, opts={}){
@@ -106,12 +104,10 @@
     const whoami = ()=> api("/api/whoami").catch(()=>({authed:false}));
     const getSchedule = (user,date)=> api(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`);
     const saveSchedule = (user,date,blocks)=> api(`/api/schedules`, {method:"POST", body: JSON.stringify({ user, date, blocks })});
-    // events: prefer /api/events; fall back to /api/presence if that’s what the worker exposes
     async function listEvents(user, fromMs, toMs){
       try{
         return await api(`/api/events?user=${encodeURIComponent(user)}&from=${fromMs}&to=${toMs}`);
       }catch(e){
-        // fallback – some builds name it /presence
         return api(`/api/presence?user=${encodeURIComponent(user)}&from=${fromMs}&to=${toMs}`);
       }
     }
@@ -130,6 +126,14 @@
         if (m>=s && m<e) return blk.status;
       }
       return null;
+    }
+    function statusAtTs(events, tsMs){
+      const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
+      let cur = null;
+      for (let i=0;i<ev.length;i++){
+        if (ev[i].ts<=tsMs) cur = ev[i].status; else break;
+      }
+      return cur;
     }
 
     function computeAdherenceRange(schedule, events, startMin, endMin, dateStr){
@@ -250,9 +254,23 @@
       const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
       const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
       const snap = computeAdherenceRange(schedule, events, minStart, Math.max(minStart, Math.min(maxEnd, nowMin)), dateStr);
-      const current = (events||[]).length ? events[events.length-1].status : null;
+
+      // determine "current" by the status in force at *now* (not just last event)
+      const nowMs = Date.now();
+      const current = statusAtTs(events, nowMs);
       const expectedNow = expectedAt(schedule, nowMin);
-      const inAdh = expectedNow ? current===expectedNow : true;
+      const inAdh = expectedNow ? (current === expectedNow) : false;
+
+      // recent switches: only show *today's* events and collapse sequential duplicates
+      const {start:dayStart,end:dayEnd} = getBounds(dateStr);
+      const recent = (events||[])
+        .filter(e => e.ts >= dayStart && e.ts <= dayEnd)
+        .sort((a,b)=>b.ts-a.ts)
+        .reduce((acc, e)=>{
+          if (!acc.length || acc[acc.length-1].status !== e.status) acc.push(e);
+          return acc;
+        }, [])
+        .slice(0,50);
 
       return (
         <div className="grid grid-2">
@@ -291,14 +309,14 @@
             <div style={{height:12}}></div>
             <h3 style={{margin:"0 0 6px 0"}}>Recent Switches</h3>
             <ul className="list">
-              {[...(events||[])].slice().reverse().map((e,i)=>(
+              {recent.map((e,i)=>(
                 <li key={i}>
                   <span className="dot" style={{background:STATUS_DEFS[e.status]?.color}}></span>
                   <span className="pill">{fmtHm(e.ts)}</span>
                   <span style={{color:"#475569"}}>→ {STATUS_DEFS[e.status]?.label}</span>
                 </li>
               ))}
-              {(!events || !events.length) && <li className="muted">No events yet.</li>}
+              {(!recent || !recent.length) && <li className="muted">No events yet today.</li>}
             </ul>
             <div style={{height:6}}></div>
             <StatusLegend/>
@@ -336,7 +354,7 @@
                 <li key={s} className="badge" style={{background:"#f8fafc",color:"#334155",border:"1px solid var(--line)"}}>
                   <span className="dot" style={{background:STATUS_DEFS[s]?.color}}></span>
                   <span>{STATUS_DEFS[s]?.label||s}</span>
-                  <span>— {fmtDur(mins)}</span>
+                  <span>— {mins>=60?`${Math.floor(mins/60)}h ${Math.round(mins%60)}m`:`${Math.round(mins)}m`}</span>
                 </li>
               ))}
               {!Object.keys(perStatus).length && <li className="muted">No time recorded.</li>}
@@ -350,7 +368,7 @@
                   <span className="pill" style={{background:"#f1f5f9",color:"#334155",border:"1px solid var(--line)"}}>{fmtHm(t.start)}</span>
                   <span className="dot" style={{background:STATUS_DEFS[t.status]?.color}}></span>
                   <span style={{color:"#334155"}}>{STATUS_DEFS[t.status]?.label||t.status}</span>
-                  <span className="muted">— {fmtDur(t.minutes)}</span>
+                  <span className="muted">— {t.minutes>=60?`${Math.floor(t.minutes/60)}h ${Math.round(t.minutes%60)}m`:`${Math.round(t.minutes)}m`}</span>
                 </li>
               ))}
               {!timeline.length && <li className="muted">No segments.</li>}
@@ -385,7 +403,6 @@
             <div style={{height:12}}></div>
             <h3 style={{margin:"0 0 6px 0"}}>Exports</h3>
             <div className="exports">
-              {/* quick links */}
               <a className="btn btn-small" href="#" id="expDay">Events (Day)</a>
               <a className="btn btn-small" href="#" id="expWeek">Events (Week)</a>
               <a className="btn btn-small" href="#" id="expMonth">Events (Month)</a>
@@ -399,25 +416,22 @@
 
     /*********** App ***********/
     function App(){
-      // session
       const [me,setMe] = useState(null);
       const [role,setRole] = useState("AGENT");
 
-      // selections
       const [dateStr,setDateStr] = useState(todayStr());
       const [selectedUser,setSelectedUser] = useState("");
 
-      // data
       const [schedule,setSchedule]=useState([]);
       const [events,setEvents]=useState([]);
 
-      // derived (admin overview)
       const adherence = useMemo(()=>{
         const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
         const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
         return computeAdherenceRange(schedule, events, minStart, maxEnd, dateStr);
       }, [schedule, events, dateStr]);
 
+      // Admin AUX aggregation (unchanged from previous pass)
       const auxAgg = useMemo(()=>{
         const {start,end}=getBounds(dateStr);
         const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
@@ -445,10 +459,8 @@
         return {perStatus:per,timeline};
       }, [events, dateStr]);
 
-      // users (for admin panel user list). kept simple—your Admin Tools own user CRUD.
       const [users,setUsers]=useState([]);
 
-      // errors
       const errRef=useRef(""); const errDiv=useRef(null);
       useEffect(()=>{ errDiv.current = document.getElementById("errbar"); },[]);
       function showErr(msg){
@@ -458,7 +470,6 @@
         errDiv.current.style.display = errRef.current ? "block" : "none";
       }
 
-      /***** bootstrap *****/
       useEffect(()=>{
         (async()=>{
           try{
@@ -469,18 +480,13 @@
             setMe(you);
             const r = (you.role||"AGENT").toUpperCase();
             setRole(r);
-
-            // default selected user for admin is the first real agent; for agents it’s themselves
             setSelectedUser(r==="ADMIN" ? (you.defaultUser||you.username) : you.username);
-
-            // Try fetch known users list if your worker exposes /api/users (optional)
             try{
               const ul = await api("/api/users");
               const arr = Array.isArray(ul) ? ul : (ul?.users || []);
               if (arr?.length) setUsers(arr);
-              else setUsers([{username: you.username}]); // fallback
+              else setUsers([{username: you.username}]);
             }catch{ setUsers([{username: you.username}]); }
-
           }catch(e){
             showErr("Unable to verify session. Please sign in again.");
             setTimeout(()=>location.replace("/"), 1200);
@@ -488,39 +494,45 @@
         })();
       },[]);
 
-      // data fetcher
       async function refetch(){
         try{
           if(!selectedUser || !dateStr) return;
-          const sch = await getSchedule(selectedUser,dateStr);  // expect {blocks:[...]} or just array
+          const sch = await getSchedule(selectedUser,dateStr);
           setSchedule(Array.isArray(sch) ? sch : (sch.blocks||[]));
         }catch(e){ showErr("Failed to load schedule."); }
         try{
           const {start,end}=getBounds(dateStr);
-          const ev = await listEvents(selectedUser, start, end); // expect {events:[...]} or array
-          setEvents(Array.isArray(ev) ? ev : (ev.events||[]));
+          const ev = await listEvents(selectedUser, start, end);
+          const arr = Array.isArray(ev) ? ev : (ev.events||[]);
+          setEvents(arr);
         }catch(e){ showErr("Failed to load events."); }
       }
 
-      // initial + polling (15s)
       useEffect(()=>{ refetch(); }, [selectedUser, dateStr]);
       useEffect(()=>{
         const id = setInterval(()=> refetch(), 15000);
         return ()=> clearInterval(id);
       }, [selectedUser, dateStr]);
 
-      // Agent status setter
       async function setStatus(s){
         try{
           const ts = Date.now();
-          await pushEvent(me.username, s, ts);
+          // optimistic
           setEvents(prev => [...(prev||[]), {status:s, ts}]);
+          await pushEvent(me.username, s, ts);
+          // reconcile with server
+          await refetch();
         }catch(e){
           showErr("Could not update status (check session/CORS).");
+          // rollback last optimistic add if needed
+          setEvents(prev => {
+            const next = [...(prev||[])];
+            next.pop();
+            return next;
+          });
         }
       }
 
-      // Admin schedule editor
       function addBlock(){
         setSchedule(prev=>{
           const lastEnd = prev?.length ? prev[prev.length-1].end : "08:00";
@@ -541,21 +553,6 @@
           refetch();
         }catch(e){ showErr("Saving schedule failed."); }
       }
-
-      // CSV/Exports
-      useEffect(()=>{
-        function setHref(id, href){ const a=document.getElementById(id); if(a) a.href = href; }
-        const d = new Date(dateStr+"T00:00:00");
-        const fromDay = isoDate(d);
-        const fromWeek = isoDate(new Date(d.getFullYear(),d.getMonth(),d.getDate()-6));
-        const fromMonth= isoDate(new Date(d.getFullYear(),d.getMonth(),1));
-        const toMonth  = isoDate(new Date(d.getFullYear(),d.getMonth()+1,0));
-        setHref("expDay",   `/api/export?kind=events&from=${fromDay}&to=${fromDay}`);
-        setHref("expWeek",  `/api/export?kind=events&from=${fromWeek}&to=${fromDay}`);
-        setHref("expMonth", `/api/export?kind=events&from=${fromMonth}&to=${toMonth}`);
-        setHref("expSched", `/api/export?kind=schedules&from=${fromMonth}&to=${toMonth}`);
-        setHref("expAdh",   `/api/export?kind=adherence&from=${fromMonth}&to=${toMonth}`);
-      }, [dateStr]);
 
       if (!me) return null;
 
