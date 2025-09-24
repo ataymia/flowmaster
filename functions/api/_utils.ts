@@ -1,7 +1,7 @@
 // functions/api/_utils.ts
 
 export interface Env {
-  AUTH_BASE: string;            // e.g., https://allstar-auth.ataymia.workers.dev
+  AUTH_BASE: string;            // e.g., https://allstar-auth.your-worker.workers.dev
   NOTION_TOKEN?: string;
   NOTION_DATABASE_ID?: string;
 }
@@ -43,49 +43,79 @@ export function setCookie(
   if (opts.secure ?? true) parts.push("Secure");
   if (opts.httpOnly ?? true) parts.push("HttpOnly");
   if (opts.domain) parts.push(`Domain=${opts.domain}`);
-  headers.append("set-cookie", parts.join("; "));
+  headers.append("Set-Cookie", parts.join("; "));
 }
 
 export function clearCookie(headers: Headers, name: string, path = "/") {
   headers.append(
-    "set-cookie",
+    "Set-Cookie",
     `${name}=; Max-Age=0; Path=${path}; SameSite=Lax; Secure; HttpOnly`
   );
 }
 
-/* ---------------- Set-Cookie forwarding ---------------- */
-export function getAllSetCookie(h: Headers): string[] {
-  const anyH = h as any;
-  if (typeof anyH.getAll === "function") return anyH.getAll("set-cookie") || [];
-  const one = h.get("set-cookie");
-  return one ? [one] : [];
+/* ---------------- Robust Set-Cookie forwarding (matches working zip behavior) ---------------- */
+
+function getHeader(h: Headers, name: string): string | null {
+  // getAll isn't always available in CF Pages runtime
+  try {
+    const anyH = h as any;
+    if (typeof anyH.getAll === "function") {
+      const vals = anyH.getAll(name);
+      if (vals && vals.length) return vals.join(", ");
+    }
+  } catch {}
+  return h.get(name) || null;
 }
 
+/**
+ * Cloudflare often flattens multiple Set-Cookie values into a single header string.
+ * This splits correctly on commas that start a new cookie (",<token>=").
+ */
 export function forwardSetCookies(from: Response | Headers, to: Headers) {
-  const src = "headers" in from ? (from as Response).headers : (from as Headers);
-  for (const val of getAllSetCookie(src)) to.append("set-cookie", val);
+  const headers = "headers" in from ? (from as Response).headers : (from as Headers);
+
+  const flattened = getHeader(headers, "set-cookie");
+  if (flattened) {
+    // split on comma that starts a new cookie
+    const parts = flattened.split(/,(?=[^;=]+?=)/g);
+    for (const p of parts) to.append("Set-Cookie", p.trim());
+    return;
+  }
+
+  // Fallback: iterate (some runtimes keep multiple entries)
+  try {
+    (headers as any).forEach?.((val: string, key: string) => {
+      if (key && key.toLowerCase() === "set-cookie" && val) {
+        to.append("Set-Cookie", val);
+      }
+    });
+  } catch {}
 }
 
 export function pickCookieFromSetCookie(src: Headers, name: string): string | null {
-  for (const v of getAllSetCookie(src)) {
-    const m = v.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-    if (m) return decodeURIComponent(m[1]);
+  const flattened = getHeader(src, "set-cookie");
+  if (flattened) {
+    const parts = flattened.split(/,(?=[^;=]+?=)/g);
+    for (const v of parts) {
+      const m = v.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+      if (m) return decodeURIComponent(m[1]);
+    }
   }
   return null;
 }
 
 /* ---------------- Upstream (Auth Worker) ---------------- */
 export async function upstream(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
-  // Fallback so login works even if AUTH_BASE isn’t configured yet
+  // Fallback so login & whoami still work if the var is missing temporarily
   const FALLBACK = "https://allstar-auth.ataymia.workers.dev";
   const base = (env as any)?.AUTH_BASE || FALLBACK;
   const url = path.startsWith("http") ? path : `${base}${path}`;
   return fetch(url, init);
 }
 
-/* ---------------- Session/Access checks (contract matches prior routes) ---------------- */
+/* ---------------- Session/Access checks (contract matches working zip) ---------------- */
 
-/** Lightweight check used by some routes to gate access. */
+/** Lightweight check used to gate News etc. */
 export function ensureSession(req: Request): { ok: true } | { ok: false; response: Response } {
   const access = getCookie(req, "access_token");
   const pageAT = getCookie(req, "allstar_at");
@@ -93,7 +123,7 @@ export function ensureSession(req: Request): { ok: true } | { ok: false; respons
   return { ok: false as const, response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }) };
 }
 
-/** Stronger check used by /users and similar routes. */
+/** Stronger check with token extraction for /users and proxied routes. */
 export function ensureAccess(req: Request): { ok: true; token: string } | { ok: false; response: Response } {
   const token = getCookie(req, "allstar_at") || getCookie(req, "access_token");
   if (!token) return { ok: false as const, response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }) };
@@ -102,7 +132,6 @@ export function ensureAccess(req: Request): { ok: true; token: string } | { ok: 
 
 /* ---------------- Proxies ---------------- */
 
-/** Proxy requiring a valid session; sends token as cookie to the worker. */
 export async function proxyWithAuth(
   req: Request,
   env: Env,
@@ -133,7 +162,6 @@ export async function proxyWithAuth(
   return new Response(res.body, { status: res.status, headers: outHeaders });
 }
 
-/** Proxy that forwards the caller’s entire Cookie header (non-enforcing). */
 export async function proxyWithSession(
   req: Request,
   env: Env,
@@ -163,12 +191,7 @@ export async function proxyWithSession(
 
 /* ---------------- Helpers ---------------- */
 export async function safeJson<T = any>(res: Response): Promise<T | null> {
-  try {
-    // Use a clone so callers can still read the original body if needed.
-    return (await res.clone().json()) as T;
-  } catch {
-    return null;
-  }
+  try { return (await res.clone().json()) as T; } catch { return null; }
 }
 
 export function parseCookieHeader(h: string | null): Record<string, string> {
