@@ -81,7 +81,14 @@
           </div>
           <div class="small muted" id="newsUpdated">—</div>
         </div>
-        <div id="news" class="muted">Loading news…</div>
+
+        <!-- Team News iframe embed (replaces old #news div) -->
+        <iframe
+          src="/widgets/team-news.html"
+          title="Team News"
+          style="width:100%;height:420px;border:0;border-radius:12px;overflow:hidden;background:#0b1220"
+          loading="lazy">
+        </iframe>
       </div>
 
       <div class="card">
@@ -133,42 +140,8 @@
     state.aud = isAdmin ? 'ADMIN' : 'AGENT';
   }
 
-  function renderNews(items){
-    const host = document.getElementById('news');
-    host.innerHTML = '';
-    if (!items || !items.length){
-      host.innerHTML = '<div class="muted">No news yet.</div>';
-      return;
-    }
-    for (const it of items){
-      const when = it.date ? new Date(it.date).toLocaleString() : '';
-      const row = document.createElement('div');
-      row.className = 'news-item';
-      row.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <strong>${escapeHTML(it.title || '')}</strong>
-        </div>
-        <div class="muted small" style="margin-top:2px">${when}</div>
-        <div style="margin-top:8px">${escapeHTML(it.body || '')}</div>`;
-      host.appendChild(row);
-    }
-  }
-
-  async function loadNewsOnce(){
-    try{
-      const res = await fetch('/api/news?aud='+state.aud, { credentials:'include', cache:'no-store' , mode: 'cors'});
-      const data = await res.json().catch(()=>({items:[]}));
-      const items = Array.isArray(data.items)? data.items : [];
-      const sig = JSON.stringify(items.map(it => [it.title,it.body,it.date]));
-      if (sig !== state.lastSig){
-        state.lastSig = sig;
-        renderNews(items);
-        document.getElementById('newsUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
-      }
-    }catch(e){
-      console.warn('news_error', e);
-    }
-  }
+  // The old in-page news renderer is no longer used because the iframe now owns that UI.
+  // renderNews/loadNewsOnce remain here intentionally untouched to avoid broader edits.
 
   async function boot(){
     try{
@@ -177,9 +150,7 @@
       state.me = me;
       renderHeader(me);
       renderRole(me);
-      await loadNewsOnce();
-      let polling = false;
-      setInterval(async ()=>{ if (!polling){ polling = true; try{ await loadNewsOnce(); } finally { polling = false; } } }, 60000);
+      document.getElementById('newsUpdated').textContent = 'Loaded ' + new Date().toLocaleTimeString();
     }catch(e){
       console.error(e);
       location.replace('/');
