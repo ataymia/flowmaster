@@ -90,11 +90,13 @@
     const minuteToMs = (minuteOfDay, dateStr)=> new Date(`${dateStr}T00:00:00`).getTime() + minuteOfDay*60000;
     const getBounds = (dateStr)=>{ const s=new Date(`${dateStr}T00:00:00`).getTime(); return {start:s,end:s+86400000}; };
     const fmtHm = (d)=> new Date(d).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
-
     const within = (ts, {start,end}) => ts>=start && ts<=end;
 
+    const LS_KEY = (u,d)=> `adh_events_v1:${u}:${d}`;
+    const loadLS = (u,d)=>{ try{ const raw=localStorage.getItem(LS_KEY(u,d)); const arr=raw?JSON.parse(raw):[]; return Array.isArray(arr)? arr : []; }catch{return [];} };
+    const saveLS = (u,d,ev)=>{ try{ localStorage.setItem(LS_KEY(u,d), JSON.stringify(ev||[])); }catch{} };
+
     function mergeEvents(prev, incoming, bounds){
-      // Keep everything in-bounds; dedupe on ts+status; sort asc
       const key = (e)=> `${e.ts}-${e.status}`;
       const map = new Map();
       [...(prev||[]), ...(incoming||[])]
@@ -146,8 +148,7 @@
       return cur;
     }
 
-    // Computes adherence only over scheduled minutes between [startMin, endMin),
-    // ignoring minutes where no status is scheduled.
+    // Adherence strictly over scheduled minutes only.
     function computeAdherenceRange(schedule, events, startMin, endMin, dateStr){
       const ev = (events||[]).slice().sort((a,b)=>a.ts-b.ts);
       const minuteActual = new Array(Math.max(0,endMin-startMin)).fill(null);
@@ -167,8 +168,39 @@
         (act===exp)? inMin++ : outMin++;
       }
       const total = inMin+outMin;
-      const pct = total? Math.round((inMin/total)*100) : 100;
+      // Default: if no scheduled minutes elapsed yet, caller decides how to show (we'll start at 100 below)
+      const pct = total? Math.round((inMin/total)*100) : 0;
       return {inMin,outMin,total,pct};
+    }
+
+    // Live adherence that *starts at 100%* when the first scheduled minute begins.
+    function computeLiveAdherence(schedule, events, dateStr){
+      const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
+      const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
+      const nowMin = nowMinutes();
+
+      if (nowMin < minStart) {
+        return {inMin:0,outMin:0,total:0,pct:0, before:true}; // before shift
+      }
+
+      const endMin = Math.max(minStart, Math.min(maxEnd, nowMin));
+      let res = computeAdherenceRange(schedule, events, minStart, endMin, dateStr);
+
+      // If we're within the very first minute and nothing has accumulated yet,
+      // treat the *current* minute as the first datapoint so the meter shows 100 or 0 immediately.
+      if (res.total === 0) {
+        const exp = expectedAt(schedule, nowMin);
+        const act = statusAtTs(events, Date.now());
+        const inNow  = exp && act && exp===act ? 1 : 0;
+        const outNow = exp ? (inNow?0:1) : 0; // if no expected, stays 0/0
+        const total = inNow + outNow;
+        const pct   = total ? Math.round(inNow/total*100) : 0;
+        res = {inMin:inNow, outMin:outNow, total, pct};
+      }
+
+      // Clamp to 100/0 bounds
+      res.pct = Math.max(0, Math.min(100, res.pct));
+      return res;
     }
 
     function assembleActualBlocks(events, dayStartMs, dayEndMs){
@@ -262,20 +294,10 @@
 
     /*********** Screens ***********/
     function AgentView({ me, dateStr, schedule, events, onSetStatus }){
+      const live = computeLiveAdherence(schedule, events, dateStr);
       const nowMin = nowMinutes();
-      const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
-      const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
-
-      // Live adherence: only up to "now" within scheduled window
-      const endForLive = Math.max(minStart, Math.min(maxEnd, nowMin));
-      const snap = useMemo(
-        ()=> computeAdherenceRange(schedule, events, minStart, endForLive, dateStr),
-        [schedule, events, minStart, endForLive, dateStr]
-      );
-
-      const nowMs = Date.now();
-      const current = statusAtTs(events, nowMs);
       const expectedNow = expectedAt(schedule, nowMin);
+      const current = statusAtTs(events, Date.now());
       const inAdh = !!expectedNow && current === expectedNow;
 
       // Recent: today only, collapse duplicates
@@ -297,8 +319,8 @@
               <Pill kind={inAdh?"good":"bad"}>{inAdh? "In Adherence":"Out of Adherence"}</Pill>
             </div>
             <div className="row" style={{gap:12, margin:"8px 0"}}>
-              <Meter value={snap.pct} />
-              <div style={{fontSize:13,color:"#374151"}}><strong>{snap.pct}%</strong></div>
+              <Meter value={live.pct} />
+              <div style={{fontSize:13,color:"#374151"}}><strong>{live.pct}%</strong></div>
             </div>
             <DualBars schedule={schedule} events={events} dateStr={dateStr} />
 
@@ -442,14 +464,14 @@
       const [schedule,setSchedule]=useState([]);
       const [events,setEvents]=useState([]);
 
-      // Admin view % uses full scheduled window; Agent live % uses up to now.
+      // Admin % (full scheduled window of the selected day)
       const adherence = useMemo(()=>{
         const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
         const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
         return computeAdherenceRange(schedule, events, minStart, maxEnd, dateStr);
       }, [schedule, events, dateStr]);
 
-      // Aggregation for admin timeline/aux (unchanged)
+      // Aggregation for admin timeline/aux
       const auxAgg = useMemo(()=>{
         const {start,end}=getBounds(dateStr);
         const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
@@ -488,6 +510,7 @@
         errDiv.current.style.display = errRef.current ? "block" : "none";
       }
 
+      // boot
       useEffect(()=>{
         (async()=>{
           try{
@@ -522,12 +545,22 @@
           const {start,end}=getBounds(dateStr);
           const ev = await listEvents(selectedUser, start, end);
           const incoming = Array.isArray(ev) ? ev : (ev.events||[]);
-          setEvents(prev => mergeEvents(prev, incoming, {start, end}));
+          setEvents(prev => {
+            const merged = mergeEvents(prev, incoming, {start, end});
+            saveLS(selectedUser, dateStr, merged);
+            return merged;
+          });
         }catch(e){ showErr("Failed to load events."); }
       }
 
-      useEffect(()=>{ setEvents([]); refetch(); }, [selectedUser, dateStr]); // reset local day cache when switching day/user
+      // when user/day changes: hydrate from local cache first, then reconcile with server
+      useEffect(()=>{
+        if (!selectedUser || !dateStr) return;
+        setEvents(loadLS(selectedUser, dateStr));
+        refetch();
+      }, [selectedUser, dateStr]);
 
+      // periodic refresh
       useEffect(()=>{
         const id = setInterval(()=> refetch(), 15000);
         return ()=> clearInterval(id);
@@ -537,13 +570,17 @@
         try{
           const {start,end}=getBounds(dateStr);
           const ts = Date.now();
-          // optimistic append within bounds (prevents “reset” feel)
+          // optimistic + persist locally
           if (within(ts,{start,end})) {
-            setEvents(prev => mergeEvents(prev, [{status:s, ts}], {start,end}));
+            setEvents(prev => {
+              const merged = mergeEvents(prev, [{status:s, ts}], {start,end});
+              saveLS(selectedUser, dateStr, merged);
+              return merged;
+            });
           }
           await pushEvent(me.username, s, ts);
-          // short delayed reconcile (merge keeps prior entries)
-          setTimeout(()=>{ refetch(); }, 1200);
+          // reconcile
+          setTimeout(()=>{ refetch(); }, 1000);
         }catch(e){
           showErr("Could not update status (check session/CORS).");
         }
