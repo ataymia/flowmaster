@@ -2,35 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Team News</title>
-  <link rel="stylesheet" href="/widgets/team-news.css" />
   <style>
-    /* Fallback styles if CSS file isn’t present */
-    :root{ --bg:#0b1220; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --accent:#e11d48 }
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
+    /* Match HUB theme (not FlowMaster) */
+    :root{
+      --brand:#e11d48; --brand-ink:#fff;
+      --bg:#ffffff; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb;
+      --chip:#f8fafc; --chip-ink:#0f172a; --shadow:0 10px 25px rgba(17,24,39,.08);
+      --radius:18px;
+    }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
     .wrap{padding:10px}
     .hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-    .hdr .title{font-weight:700}
-    .hdr .meta{color:var(--muted);font-size:12px}
+    .title{font-weight:800;letter-spacing:.2px}
+    .right{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+    .tabs{display:flex;gap:6px;flex-wrap:wrap}
+    .tab{font-size:12px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:6px 10px;cursor:pointer}
+    .tab[aria-pressed="true"]{background:var(--brand);color:#fff;border-color:transparent}
     .list{display:grid;gap:10px}
-    .card{
-      border:1px solid var(--border); border-radius:12px; padding:12px; background:var(--card);
-    }
-    .card .t{font-weight:600}
-    .card .sub{color:var(--muted);font-size:12px;margin-top:4px}
-    .card .body{color:#cbd5e1;font-size:14px;margin-top:8px;line-height:1.35}
-    .pin{display:inline-block;margin-right:6px;color:var(--accent)}
-    .empty{color:var(--muted);font-size:14px;border:1px dashed var(--border);border-radius:12px;padding:16px;text-align:center}
-    .row{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
-    .pill{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:11px;color:#cbd5e1}
-    .right{margin-left:auto}
-    .link{color:#93c5fd;text-decoration:none}
+    .card{border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff; box-shadow:var(--shadow)}
+    .t{font-weight:600}
+    .sub{color:var(--muted);font-size:12px;margin-top:2px}
+    .body{color:#334155;font-size:14px;margin-top:8px;line-height:1.35;white-space:pre-wrap}
+    .pin{display:inline-block;margin-right:6px;color:var(--brand)}
+    .empty{color:var(--muted);font-size:14px;border:1px dashed var(--line);border-radius:12px;padding:16px;text-align:center;background:#fff}
+    .link{color:#2563eb;text-decoration:none}
     .link:hover{text-decoration:underline}
-    .toolbar{display:flex;gap:8px;align-items:center}
-    .btn{font-size:12px;border:1px solid var(--border);background:#0f172a;color:#e5e7eb;border-radius:8px;padding:6px 8px;cursor:pointer}
-    .btn:hover{filter:brightness(1.1)}
+    .err{color:#b91c1c;background:#fef2f2;border:1px solid #fee2e2;border-radius:12px;padding:10px;font-size:14px}
+    .toolbar{display:flex;align-items:center;gap:8px}
+    .btn{font-size:12px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:6px 8px;cursor:pointer}
+    .btn:hover{background:#fafafa}
   </style>
 </head>
 <body>
@@ -38,87 +41,121 @@
     <div class="hdr">
       <div class="title">Team News</div>
       <div class="toolbar">
-        <select id="aud" class="btn" title="Audience filter">
-          <option value="ALL">All</option>
-          <option value="TEAM">Team</option>
-          <option value="FIELD">Field</option>
-          <option value="SALES">Sales</option>
-          <option value="OPS">Ops</option>
-        </select>
+        <div class="tabs" role="tablist" aria-label="Audience filter">
+          <button class="tab" id="tabAll"   data-aud="ALL"   aria-pressed="true">All</button>
+          <button class="tab" id="tabAgent" data-aud="AGENT" aria-pressed="false">Agent</button>
+          <button class="tab" id="tabAdmin" data-aud="ADMIN" aria-pressed="false">Admin</button>
+        </div>
         <button id="refreshBtn" class="btn" title="Refresh now">Refresh</button>
-        <div class="meta" id="ts"></div>
+        <div class="right"><span id="ts">—</span></div>
       </div>
     </div>
+
+    <div id="err" class="err" style="display:none"></div>
     <div id="list" class="list"></div>
   </div>
 
   <script>
     const listEl = document.getElementById('list');
-    const tsEl = document.getElementById('ts');
-    const audSel = document.getElementById('aud');
+    const tsEl   = document.getElementById('ts');
+    const errEl  = document.getElementById('err');
     const refreshBtn = document.getElementById('refreshBtn');
+    const tabs = [...document.querySelectorAll('.tab')];
 
-    function fmtTime(date){
-      try{
-        return new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit'}).format(date);
-      }catch{ return date.toLocaleTimeString() }
+    const state = { aud:'ALL', lastSig:'', timer:null };
+
+    // If iframe is loaded with ?aud=ADMIN/AGENT/ALL, honour it.
+    try {
+      const initAud = new URLSearchParams(location.search).get('aud');
+      if (initAud && ['ALL','AGENT','ADMIN'].includes(initAud.toUpperCase())) state.aud = initAud.toUpperCase();
+    } catch {}
+
+    function setActiveTab(){
+      tabs.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.aud === state.aud)));
     }
 
-    function el(html){
-      const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstElementChild;
+    function fmtTime(date){
+      try{ return new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit'}).format(date); }
+      catch{ return date.toLocaleTimeString(); }
+    }
+
+    function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstElementChild; }
+
+    function showError(msg){
+      errEl.style.display = 'block';
+      errEl.textContent = msg;
+    }
+    function clearError(){
+      errEl.style.display = 'none';
+      errEl.textContent = '';
     }
 
     function render(items){
-      listEl.innerHTML='';
+      listEl.innerHTML = '';
       if(!items || !items.length){
-        listEl.appendChild(el(`<div class="empty">No news items yet.</div>`));
+        listEl.appendChild(el(`<div class="empty">No news yet.</div>`));
         return;
       }
       for(const it of items){
         const pin = it.pinned ? `<span class="pin">★</span>` : '';
-        const date = it.publishedAt ? new Date(it.publishedAt) : null;
-        const when = date ? date.toLocaleDateString() : '';
-        const aud  = it.audience ? it.audience.toUpperCase() : 'ALL';
-        const body = it.body ? it.body.replace(/\n/g,'<br/>') : '';
-
-        const urlPart = it.url ? `<a class="link" href="${it.url}" target="_blank" rel="noreferrer">Open</a>` : '';
+        const when = it.publishedAt ? new Date(it.publishedAt).toLocaleDateString() : '';
+        const body = it.body || '';
+        const url  = it.url ? `<a class="link" href="${it.url}" target="_blank" rel="noreferrer">Open</a>` : '';
         listEl.appendChild(el(`
           <article class="card">
-            <div class="row">
-              <div class="t">${pin}${it.title || '(untitled)'}</div>
-              <span class="pill">${aud}</span>
-              <div class="sub right">${when}</div>
-            </div>
+            <div class="t">${pin}${it.title || '(untitled)'}</div>
+            <div class="sub">${when}</div>
             ${body ? `<div class="body">${body}</div>` : ``}
-            ${urlPart ? `<div class="sub" style="margin-top:6px">${urlPart}</div>` : ``}
+            ${url ? `<div class="sub" style="margin-top:6px">${url}</div>` : ``}
           </article>
         `));
       }
     }
 
     async function load(){
-      const audience = audSel.value;
+      clearError();
       const url = new URL('/api/news', location.origin);
-      if(audience) url.searchParams.set('audience', audience);
-      const r = await fetch(url.toString(), { headers: { 'cache-control':'no-cache' } });
-      const data = await r.json().catch(()=>({items:[]}));
-      render(data.items || []);
-      tsEl.textContent = `Updated ${fmtTime(new Date())}`;
+      url.searchParams.set('audience', state.aud);
+      const r = await fetch(url.toString(), { credentials:'include', cache:'no-store' });
+      let data = null;
+      try { data = await r.json(); } catch { data = { items: [] }; }
+
+      // Helpful messages if backend isn’t wired yet
+      if (data?.error === 'missing_notion_config') {
+        showError('News is not configured: set NOTION_TOKEN and NOTION_DATABASE_ID on your Cloudflare Pages project.');
+      } else if (data?.error === 'notion_error') {
+        showError(`Notion error (status ${data.status || '??'}). Check token, database id, and integration access.`);
+      } else if (r.status === 401) {
+        showError('You are not signed in.');
+      }
+
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const sig = JSON.stringify(items.map(i => [i.title, i.body, i.publishedAt]));
+      if (sig !== state.lastSig){
+        state.lastSig = sig;
+        render(items);
+      }
+      tsEl.textContent = 'Updated ' + fmtTime(new Date());
     }
 
-    // live refresh every 60s
-    let timer = null;
-    function startAuto(){ stopAuto(); timer = setInterval(load, 60_000); }
-    function stopAuto(){ if(timer) clearInterval(timer); timer = null; }
+    function startAuto(){ stopAuto(); state.timer = setInterval(load, 60_000); }
+    function stopAuto(){ if (state.timer) clearInterval(state.timer); state.timer = null; }
 
     refreshBtn.addEventListener('click', load);
-    audSel.addEventListener('change', load);
+    tabs.forEach(b => b.addEventListener('click', () => {
+      state.aud = b.dataset.aud;
+      setActiveTab();
+      load();
+    }));
 
-    // Kick off
-    load().then(startAuto);
-    window.addEventListener('visibilitychange', ()=> {
-      if (document.hidden) stopAuto(); else { load(); startAuto(); }
-    });
+    (async () => {
+      setActiveTab();
+      await load();
+      startAuto();
+      document.addEventListener('visibilitychange', ()=> {
+        if (document.hidden) stopAuto(); else { load(); startAuto(); }
+      });
+    })();
   </script>
 </body>
 </html>
