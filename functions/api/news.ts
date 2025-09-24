@@ -1,10 +1,24 @@
 // functions/api/news.ts
-import { Env, json, ensureSession } from "./_utils";
+import { Env as BaseEnv, json, ensureSession } from "./_utils";
 
 const NOTION_VERSION = "2022-06-28";
 
+interface Env extends BaseEnv {
+  // alternates people sometimes set by accident
+  NOTION_SECRET?: string;
+  NEWS_DATABASE_ID?: string;
+  NEWS_DB_ID?: string;
+}
+
+function pickToken(env: Env) {
+  return env.NOTION_TOKEN || env.NOTION_SECRET || null;
+}
+function pickDB(env: Env) {
+  return env.NOTION_DATABASE_ID || env.NEWS_DATABASE_ID || env.NEWS_DB_ID || null;
+}
+
 function keyByType(props: Record<string, any>, type: string, preferred?: string) {
-  if (preferred && props[preferred]?.type === type) return preferred;
+  if (preferred && props?.[preferred]?.type === type) return preferred;
   for (const [k,v] of Object.entries(props||{})) if ((v as any)?.type === type) return k;
   return null;
 }
@@ -18,7 +32,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const session = ensureSession(request);
   if (!session.ok) return session.response;
 
-  if (!env.NOTION_TOKEN || !env.NOTION_DATABASE_ID) {
+  const token = pickToken(env);
+  const dbid  = pickDB(env);
+
+  if (!token || !dbid) {
     return json({ items: [], error: "missing_notion_config" }, 200, { "cache-control":"no-store" });
   }
 
@@ -26,10 +43,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const audParam = (url.searchParams.get("audience") || "ALL").toUpperCase();
   const nowISO = new Date().toISOString();
 
-  const r = await fetch(`https://api.notion.com/v1/databases/${env.NOTION_DATABASE_ID}/query`, {
+  const r = await fetch(`https://api.notion.com/v1/databases/${dbid}/query`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+      "Authorization": `Bearer ${token}`,
       "Notion-Version": NOTION_VERSION,
       "content-type": "application/json",
     },
@@ -38,23 +55,23 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       sorts: [{ property: "PublishedAt", direction: "descending" }],
     }),
   });
+
   if (!r.ok) {
     const txt = await r.text().catch(()=> "");
     return json({ items: [], error: "notion_error", status: r.status, body: txt }, 200, { "cache-control":"no-store" });
   }
 
   const data = await r.json().catch(()=> ({} as any));
-  const sample = (data?.results?.[0]?.properties) || {};
+  const props = (data?.results?.[0]?.properties) || {};
 
-  const kTitle = keyByType(sample, "title", "Title");
-  const kBody  = keyByType(sample, "rich_text", "Body");
-  const kPub   = keyByType(sample, "date", "PublishedAt");
-  const kExp   = keyByType(sample, "date", "ExpiresAt");
-  const kAud   = keyByType(sample, "select", "Audience");
-  const kPin   = keyByType(sample, "checkbox", "Pinned");
+  const kTitle = keyByType(props, "title", "Title");
+  const kBody  = keyByType(props, "rich_text", "Body");
+  const kPub   = keyByType(props, "date", "PublishedAt");
+  const kExp   = keyByType(props, "date", "ExpiresAt");
+  const kAud   = keyByType(props, "select", "Audience");
+  const kPin   = keyByType(props, "checkbox", "Pinned");
 
-  const items = (data?.results || [])
-    .map((page:any) => {
+  const items = (data?.results||[]).map((page:any) => {
       const p = page.properties || {};
       return {
         id: page.id,
