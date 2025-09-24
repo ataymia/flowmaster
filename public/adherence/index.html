@@ -385,7 +385,7 @@
             <div style={{height:12}}></div>
             <h3 style={{margin:"0 0 6px 0"}}>Exports</h3>
             <div className="exports">
-              {/* last day / week / month quick links */}
+              {/* quick links */}
               <a className="btn btn-small" href="#" id="expDay">Events (Day)</a>
               <a className="btn btn-small" href="#" id="expWeek">Events (Week)</a>
               <a className="btn btn-small" href="#" id="expMonth">Events (Month)</a>
@@ -427,13 +427,20 @@
         for (let i=0;i<ev.length && ev[i].ts<end;i++){
           const e=ev[i];
           const segEnd=Math.min(e.ts,end);
-          if (cur){ const mins=Math.max(0,Math.floor((Math.min(segEnd,Date.now())-curStart)/60000)); if(mins){ per[cur]=(per[cur]||0)+mins; timeline.push({start:curStart,end:segEnd,status:cur,minutes:mins}); } }
+          if (cur){
+            const mins=Math.max(0,Math.floor((Math.min(segEnd,Date.now())-curStart)/60000));
+            if(mins){
+              per[cur] = (per[cur] || 0) + mins;
+              timeline.push({start:curStart,end:segEnd,status:cur,minutes:mins});
+            }
+          }
           cur=e.status; curStart=e.ts;
         }
         const hardEnd=Math.min(end,Date.now());
         if (cur && curStart<hardEnd){
           const mins=Math.max(0,Math.floor((hardEnd-curStart)/60000));
-          per[cur]=(per[cur)||0)+mins; timeline.push({start:curStart,end:hardEnd,status:cur,minutes:mins});
+          per[cur] = (per[cur] || 0) + mins;
+          timeline.push({start:curStart,end:hardEnd,status:cur,minutes:mins});
         }
         return {perStatus:per,timeline};
       }, [events, dateStr]);
