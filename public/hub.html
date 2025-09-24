@@ -41,9 +41,6 @@
     .grid-2{grid-template-columns:2fr 1fr}
     .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
     .card h2{margin:0 0 8px 0}
-    .news-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
-    .news-item{padding:12px 0;border-top:1px solid var(--line)}
-    .news-item:first-child{border-top:0}
     .muted{color:var(--muted)}
     .small{font-size:12px}
     .hidden{display:none!important}
@@ -74,21 +71,15 @@
     </div>
 
     <div class="grid grid-2">
+      <!-- Left card: just the widget (no duplicate "Team News" header) -->
       <div class="card">
-        <div class="news-head">
-          <div style="display:flex;align-items:center;gap:8px">
-            <h2 style="margin:0">Team News</h2>
-          </div>
-          <div class="small muted" id="newsUpdated">—</div>
-        </div>
-
-        <!-- Team News iframe embed (replaces old #news div) -->
         <iframe
           src="/widgets/team-news.html"
           title="Team News"
-          style="width:100%;height:420px;border:0;border-radius:12px;overflow:hidden;background:#0b1220"
+          style="width:100%;height:420px;border:0;border-radius:12px;overflow:hidden;background:#ffffff"
           loading="lazy">
         </iframe>
+        <div class="small muted" id="newsUpdated" style="margin-top:8px">—</div>
       </div>
 
       <div class="card">
@@ -139,9 +130,6 @@
     if (isAdmin) adminBtn.classList.remove('hidden'); else adminBtn.classList.add('hidden');
     state.aud = isAdmin ? 'ADMIN' : 'AGENT';
   }
-
-  // The old in-page news renderer is no longer used because the iframe now owns that UI.
-  // renderNews/loadNewsOnce remain here intentionally untouched to avoid broader edits.
 
   async function boot(){
     try{
