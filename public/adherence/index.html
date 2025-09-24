@@ -288,8 +288,8 @@
               ))}
             </div>
 
-            <div style="height:12px"></div>
-            <h3 style="margin:0 0 6px 0">Recent Switches</h3>
+            <div style={{height:12}}></div>
+            <h3 style={{margin:"0 0 6px 0"}}>Recent Switches</h3>
             <ul className="list">
               {[...(events||[])].slice().reverse().map((e,i)=>(
                 <li key={i}>
@@ -300,14 +300,14 @@
               ))}
               {(!events || !events.length) && <li className="muted">No events yet.</li>}
             </ul>
-            <div style="height:6px"></div>
+            <div style={{height:6}}></div>
             <StatusLegend/>
           </div>
         </div>
       );
     }
 
-    function AdminView({ me, allUsers, selectedUser, setSelectedUser, dateStr, setDateStr, schedule, setSchedule, events, adherence, perStatus, timeline, onAddBlock, onUpdateBlock, onDeleteBlock, onSaveSchedule, exportsBase }){
+    function AdminView({ me, allUsers, selectedUser, setSelectedUser, dateStr, setDateStr, schedule, setSchedule, events, adherence, perStatus, timeline, onAddBlock, onUpdateBlock, onDeleteBlock, onSaveSchedule }){
       return (
         <div className="grid grid-2">
           <div className="card">
@@ -322,38 +322,38 @@
               </div>
             </div>
 
-            <div style="height:8px"></div>
-            <h3 style="margin:0 0 8px 0">Projected vs Actual</h3>
+            <div style={{height:8}}></div>
+            <h3 style={{margin:"0 0 8px 0"}}>Projected vs Actual</h3>
             <DualBars schedule={schedule} events={events} dateStr={dateStr} />
-            <div className="row" style="margin-top:8px">
-              <div>Adherence: <strong>{adherence.pct}%</strong> <span class="muted">({adherence.inMin} in · {adherence.outMin} out)</span></div>
+            <div className="row" style={{marginTop:8}}>
+              <div>Adherence: <strong>{adherence.pct}%</strong> <span className="muted">({adherence.inMin} in · {adherence.outMin} out)</span></div>
             </div>
 
-            <div style="height:8px"></div>
-            <h3 style="margin:0 0 6px 0">AUX Totals (day)</h3>
-            <ul class="row-wrap" style="gap:8px">
+            <div style={{height:8}}></div>
+            <h3 style={{margin:"0 0 6px 0"}}>AUX Totals (day)</h3>
+            <ul className="row-wrap" style={{gap:8}}>
               {Object.entries(perStatus).sort((a,b)=>b[1]-a[1]).map(([s,mins])=>(
-                <li key={s} class="badge" style="background:#f8fafc;color:#334155;border:1px solid var(--line)">
-                  <span class="dot" style={{background:STATUS_DEFS[s]?.color}}></span>
+                <li key={s} className="badge" style={{background:"#f8fafc",color:"#334155",border:"1px solid var(--line)"}}>
+                  <span className="dot" style={{background:STATUS_DEFS[s]?.color}}></span>
                   <span>{STATUS_DEFS[s]?.label||s}</span>
                   <span>— {fmtDur(mins)}</span>
                 </li>
               ))}
-              {!Object.keys(perStatus).length && <li class="muted">No time recorded.</li>}
+              {!Object.keys(perStatus).length && <li className="muted">No time recorded.</li>}
             </ul>
 
-            <div style="height:8px"></div>
-            <h3 style="margin:0 0 6px 0">IMED-style Timeline</h3>
+            <div style={{height:8}}></div>
+            <h3 style={{margin:"0 0 6px 0"}}>IMED-style Timeline</h3>
             <ul className="list">
               {timeline.sort((a,b)=>a.start-b.start).map((t,i)=>(
                 <li key={i}>
-                  <span class="pill" style="background:#f1f5f9;color:#334155;border:1px solid var(--line)">{fmtHm(t.start)}</span>
-                  <span class="dot" style={{background:STATUS_DEFS[t.status]?.color}}></span>
+                  <span className="pill" style={{background:"#f1f5f9",color:"#334155",border:"1px solid var(--line)"}}>{fmtHm(t.start)}</span>
+                  <span className="dot" style={{background:STATUS_DEFS[t.status]?.color}}></span>
                   <span style={{color:"#334155"}}>{STATUS_DEFS[t.status]?.label||t.status}</span>
-                  <span class="muted">— {fmtDur(t.minutes)}</span>
+                  <span className="muted">— {fmtDur(t.minutes)}</span>
                 </li>
               ))}
-              {!timeline.length && <li class="muted">No segments.</li>}
+              {!timeline.length && <li className="muted">No segments.</li>}
             </ul>
           </div>
 
@@ -362,35 +362,35 @@
               <h2>Schedule Editor</h2>
               <button className="btn btn-brand btn-small" onClick={onAddBlock} disabled={!selectedUser}>+ Block</button>
             </div>
-            {!selectedUser && <div class="muted">Select a user to edit today’s schedule.</div>}
+            {!selectedUser && <div className="muted">Select a user to edit today’s schedule.</div>}
             {selectedUser && (
-              <div class="row-wrap" style="gap:8px">
+              <div className="row-wrap" style={{gap:8}}>
                 {schedule.map((blk,i)=>(
-                  <div key={i} class="row-wrap" style="gap:6px;align-items:center;border:1px solid var(--line);padding:8px;border-radius:10px">
+                  <div key={i} className="row-wrap" style={{gap:6,alignItems:"center",border:"1px solid var(--line)",padding:8,borderRadius:10}}>
                     <select value={blk.status} onChange={e=>onUpdateBlock(i,"status",e.target.value)}>
                       {DEFAULT_STATUSES.map(s=>(<option key={s} value={s}>{STATUS_DEFS[s].label}</option>))}
                     </select>
                     <input value={blk.start} onChange={e=>onUpdateBlock(i,"start",e.target.value)} placeholder="HH:MM" />
                     <input value={blk.end}   onChange={e=>onUpdateBlock(i,"end",e.target.value)}   placeholder="HH:MM" />
-                    <button class="btn btn-small btn-danger" onClick={()=>onDeleteBlock(i)}>Delete</button>
+                    <button className="btn btn-small btn-danger" onClick={()=>onDeleteBlock(i)}>Delete</button>
                   </div>
                 ))}
-                {!schedule.length && <div class="muted">No blocks. Add one to begin.</div>}
-                <div style="width:100%;display:flex;justify-content:flex-end;margin-top:8px">
-                  <button class="btn btn-brand" onClick={onSaveSchedule} disabled={!selectedUser}>Save Schedule</button>
+                {!schedule.length && <div className="muted">No blocks. Add one to begin.</div>}
+                <div style={{width:"100%",display:"flex",justifyContent:"flex-end",marginTop:8}}>
+                  <button className="btn btn-brand" onClick={onSaveSchedule} disabled={!selectedUser}>Save Schedule</button>
                 </div>
               </div>
             )}
 
-            <div style="height:12px"></div>
-            <h3 style="margin:0 0 6px 0">Exports</h3>
-            <div class="exports">
-              <!-- last day / week / month quick links -->
-              <a class="btn btn-small" href="#" id="expDay">Events (Day)</a>
-              <a class="btn btn-small" href="#" id="expWeek">Events (Week)</a>
-              <a class="btn btn-small" href="#" id="expMonth">Events (Month)</a>
-              <a class="btn btn-small" href="#" id="expSched">Schedules (Month)</a>
-              <a class="btn btn-small" href="#" id="expAdh">Adherence (Month)</a>
+            <div style={{height:12}}></div>
+            <h3 style={{margin:"0 0 6px 0"}}>Exports</h3>
+            <div className="exports">
+              {/* last day / week / month quick links */}
+              <a className="btn btn-small" href="#" id="expDay">Events (Day)</a>
+              <a className="btn btn-small" href="#" id="expWeek">Events (Week)</a>
+              <a className="btn btn-small" href="#" id="expMonth">Events (Month)</a>
+              <a className="btn btn-small" href="#" id="expSched">Schedules (Month)</a>
+              <a className="btn btn-small" href="#" id="expAdh">Adherence (Month)</a>
             </div>
           </div>
         </div>
@@ -433,7 +433,7 @@
         const hardEnd=Math.min(end,Date.now());
         if (cur && curStart<hardEnd){
           const mins=Math.max(0,Math.floor((hardEnd-curStart)/60000));
-          per[cur]=(per[cur]||0)+mins; timeline.push({start:curStart,end:hardEnd,status:cur,minutes:mins});
+          per[cur]=(per[cur)||0)+mins; timeline.push({start:curStart,end:hardEnd,status:cur,minutes:mins});
         }
         return {perStatus:per,timeline};
       }, [events, dateStr]);
