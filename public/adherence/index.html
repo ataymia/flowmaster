@@ -43,10 +43,14 @@
     input,select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
     .meter{width:100%;height:10px;background:#f1f5f9;border-radius:999px;overflow:hidden;border:1px solid var(--line)}
     .meter > div{height:100%}
-    .bar{position:relative;border:1px solid var(--line);background:#fff;border-radius:10px;overflow:hidden;height:24px}
-    .bar .seg{position:absolute;top:0;bottom:0;opacity:.45}
-    .bar .seg.actual{opacity:.6}
+    .bar-wrap{flex:1}
+    .bar{position:relative;border:1px solid var(--line);background:#fff;border-radius:10px;overflow:hidden;height:28px}
+    .bar .seg{position:absolute;top:0;bottom:0;opacity:.55}
+    .bar .seg.actual{opacity:.7}
     .bar .now{position:absolute;top:0;bottom:0;width:2px;background:#0f172a}
+    .ticks{position:relative;height:14px; margin-top:6px}
+    .tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
+    .tick-label{position:absolute;top:14px;transform:translateX(-50%);font-size:10px;color:#64748b}
     .legend{display:flex;flex-wrap:wrap;gap:10px}
     .chip{display:flex;align-items:center;gap:6px;font-size:12px}
     .dot{width:10px;height:10px;border-radius:999px}
@@ -92,13 +96,7 @@
     const getBounds = (dateStr)=>{ const s=new Date(`${dateStr}T00:00:00`).getTime(); return {start:s,end:s+86400000}; };
     const fmtHm = (d)=> new Date(d).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
     const within = (ts, {start,end}) => ts>=start && ts<=end;
-    const fmtHMS = (ms)=>{
-      const sec = Math.max(0, Math.floor(ms/1000));
-      const h = Math.floor(sec/3600).toString().padStart(2,"0");
-      const m = Math.floor((sec%3600)/60).toString().padStart(2,"0");
-      const s = (sec%60).toString().padStart(2,"0");
-      return `${h}:${m}:${s}`;
-    };
+    const fmtHMS = (ms)=>{ const sec=Math.max(0,Math.floor(ms/1000)); const h=String(Math.floor(sec/3600)).padStart(2,"0"); const m=String(Math.floor((sec%3600)/60)).padStart(2,"0"); const s=String(sec%60).padStart(2,"0"); return `${h}:${m}:${s}`; };
 
     const LS_KEY = (u,d)=> `adh_events_v1:${u}:${d}`;
     const loadLS = (u,d)=>{ try{ const raw=localStorage.getItem(LS_KEY(u,d)); const arr=raw?JSON.parse(raw):[]; return Array.isArray(arr)? arr : []; }catch{return [];} };
@@ -185,12 +183,9 @@
       const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
       const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
       const nowMin = nowMinutes();
-
       if (nowMin < minStart) return {inMin:0,outMin:0,total:0,pct:0, before:true};
-
       const endMin = Math.max(minStart, Math.min(maxEnd, nowMin));
       let res = computeAdherenceRange(schedule, events, minStart, endMin, dateStr);
-
       if (res.total === 0) {
         const exp = expectedAt(schedule, nowMin);
         const act = statusAtTs(events, Date.now());
@@ -205,25 +200,47 @@
     }
 
     function assembleActualBlocks(events, dayStartMs, dayEndMs){
+      // 24h continuous, default to offline when unknown, fill to end-of-day
       const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
-      let curStatus=null, curStart=dayStartMs;
-      for (let i=0;i<ev.length;i++){ if (ev[i].ts<=dayStartMs){ curStatus=ev[i].status; curStart=dayStartMs; } else break; }
+      let cur = statusAtTs(ev, dayStartMs) || 'offline';
+      let curStart = dayStartMs;
       const out=[];
       for (let i=0;i<ev.length;i++){
         const e=ev[i];
         if (e.ts < dayStartMs) continue;
-        if (e.ts > Math.min(dayEndMs, Date.now())) break;
-        if (curStatus) out.push({start:curStart,end:e.ts,status:curStatus});
-        curStatus=e.status; curStart=e.ts;
+        if (e.ts > dayEndMs) break;
+        if (curStart < e.ts){
+          out.push({start:curStart,end:e.ts,status:cur});
+          curStart = e.ts;
+        }
+        cur = e.status || 'offline';
       }
-      const hardEnd=Math.min(dayEndMs, Date.now());
-      if (curStatus) out.push({start:curStart,end:hardEnd,status:curStatus});
+      // from last point to end-of-day: show current (if past now, it will just be gray offline continuation)
+      if (curStart < dayEndMs){
+        out.push({start:curStart,end:dayEndMs,status:cur});
+      }
       return out;
+    }
+
+    function assembleExpectedBlocks24h(schedule, dateStr){
+      // Convert schedule to segments in minutes, fill gaps with offline for full 0..1440
+      const segs = (schedule||[]).map(b=>({start:hhmmToMinutes(b.start), end:hhmmToMinutes(b.end), status:b.status}));
+      segs.sort((a,b)=>a.start-b.start);
+      const full=[];
+      let cursor=0;
+      for (const s of segs){
+        if (s.start>cursor){ full.push({start:cursor,end:s.start,status:'offline'}); }
+        full.push({start:s.start,end:s.end,status:s.status});
+        cursor = Math.max(cursor, s.end);
+      }
+      if (cursor<1440) full.push({start:cursor,end:1440,status:'offline'});
+      // Convert to ms segments
+      return full.map(x=>({startMs: minuteToMs(x.start, dateStr), endMs: minuteToMs(x.end, dateStr), status:x.status}));
     }
 
     // Find the timestamp when the *current* status began (today).
     function currentStatusStartTs(events, dateStr){
-      const {start:dayStart, end:dayEnd} = getBounds(dateStr);
+      const {start:dayStart} = getBounds(dateStr);
       const now = Date.now();
       const ev = (events||[]).slice().sort((a,b)=>a.ts-b.ts);
       let lastChange = null;
@@ -231,10 +248,9 @@
         if (ev[i].ts <= now && ev[i].ts >= dayStart){ lastChange = ev[i].ts; break; }
       }
       if (lastChange !== null) return lastChange;
-      // If no change event today but we *do* have a status carrying into today, start at dayStart
       const carried = statusAtTs(events, dayStart);
       if (carried) return dayStart;
-      return null; // no current status
+      return null;
     }
 
     /*********** Components ***********/
@@ -262,46 +278,76 @@
     const DualBars = ({schedule, events, dateStr})=>{
       const [, setTick] = useState(0);
       useEffect(()=>{ const id=setInterval(()=>setTick(t=>t+1),1000); return ()=>clearInterval(id); },[]);
-      const minStart = schedule?.length? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
-      const maxEnd   = schedule?.length? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
-      const dayStart = minuteToMs(minStart,dateStr), dayEnd=minuteToMs(maxEnd,dateStr);
-      const expectedBlocks = (schedule||[]).map(b=>({start:hhmmToMinutes(b.start), end:hhmmToMinutes(b.end), status:b.status}));
+
+      // Full-day range (0:00 -> 24:00)
+      const dayStart = minuteToMs(0, dateStr), dayEnd=minuteToMs(1440, dateStr);
+      const expectedBlocks = assembleExpectedBlocks24h(schedule, dateStr);
       const actualBlocks = assembleActualBlocks(events, dayStart, dayEnd);
+
       const pct = (l,r)=> ((r-l)/(dayEnd-dayStart))*100;
       const leftPctMs=(ms)=> ((ms-dayStart)/(dayEnd-dayStart))*100;
-      const leftPctMin=(m)=> leftPctMs(minuteToMs(m,dateStr));
-      const nowMin = nowMinutes();
-      const expAt=(m)=> expectedAt(schedule,m);
 
+      // Ticks each hour, label every 2 hours for readability
+      const hours = new Array(25).fill(0).map((_,i)=>i); // 0..24
+      const labelFor = (h)=> {
+        const d=new Date(dayStart + h*3600000);
+        return d.toLocaleTimeString([], {hour:'2-digit'});
+      };
+
+      const now = Date.now();
       return (
-        <div className="row-wrap" style={{gap:8}}>
-          <div style={{display:"grid",gap:8,flex:"1 1 360px"}}>
-            <div className="row" style={{gap:10}}>
-              <div style={{width:80,fontSize:12,color:"#374151"}}>Projected</div>
-              <div className="bar" style={{flex:1}}>
+        <div className="bar-wrap">
+          {/* Projected (24h continuous) */}
+          <div className="row" style={{gap:10}}>
+            <div style={{width:80,fontSize:12,color:"#374151"}}>Projected</div>
+            <div style={{flex:1}}>
+              <div className="bar">
                 {expectedBlocks.map((b,i)=>{
-                  const l=leftPctMin(b.start), w=pct(minuteToMs(b.start,dateStr), minuteToMs(b.end,dateStr));
-                  return <div key={i} className="seg" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color, opacity:.35}} />;
+                  const l=leftPctMs(b.startMs), w=pct(b.startMs, b.endMs);
+                  return <div key={i} className="seg" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color, opacity:b.status==='offline'? .35:.35}} />;
                 })}
-                {(nowMin>=minStart && nowMin<=maxEnd) && <div className="now" style={{left:`${leftPctMin(nowMin)}%`}}></div>}
+                {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
               </div>
-            </div>
-            <div className="row" style={{gap:10}}>
-              <div style={{width:80,fontSize:12,color:"#374151"}}>Actual</div>
-              <div className="bar" style={{flex:1}}>
-                {actualBlocks.map((b,i)=>{
-                  const startMin = Math.max(minStart, Math.floor((b.start - minuteToMs(0,dateStr))/60000));
-                  const endMin   = Math.min(maxEnd,   Math.floor((b.end   - minuteToMs(0,dateStr))/60000));
-                  const l=leftPctMin(startMin), w=pct(minuteToMs(startMin,dateStr), minuteToMs(endMin,dateStr));
-                  const mid = Math.floor((startMin+endMin)/2);
-                  const mismatch = !!expAt(mid) && expAt(mid)!==b.status;
+              <div className="ticks">
+                {hours.map(h=>{
+                  const x=leftPctMs(dayStart + h*3600000);
                   return (
-                    <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}}>
-                      {mismatch && <div style={{position:"absolute",inset:0,background:"#ef4444",opacity:.28}}/>}
-                    </div>
+                    <React.Fragment key={h}>
+                      <div className="tick" style={{left:`${x}%`}}></div>
+                      {(h%2===0) && <div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}
+                    </React.Fragment>
                   );
                 })}
-                {(nowMin>=minStart && nowMin<=maxEnd) && <div className="now" style={{left:`${leftPctMin(nowMin)}%`}}></div>}
+              </div>
+            </div>
+          </div>
+
+          {/* Actual (24h continuous; fills unknown with offline so it never looks broken) */}
+          <div className="row" style={{gap:10, marginTop:8}}>
+            <div style={{width:80,fontSize:12,color:"#374151"}}>Actual</div>
+            <div style={{flex:1}}>
+              <div className="bar">
+                {actualBlocks.map((b,i)=>{
+                  const l=leftPctMs(b.start), w=pct(b.start, b.end);
+                  const mismatchMid = Math.min(b.end, Math.max(b.start, now));
+                  // We don't overlay mismatch red here because mismatch is shown in Admin bar;
+                  // Agent bar stays clean & continuous. (Can re-enable if you want.)
+                  return (
+                    <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}} />
+                  );
+                })}
+                {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
+              </div>
+              <div className="ticks">
+                {hours.map(h=>{
+                  const x=leftPctMs(dayStart + h*3600000);
+                  return (
+                    <React.Fragment key={h}>
+                      <div className="tick" style={{left:`${x}%`}}></div>
+                      {(h%2===0) && <div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -381,14 +427,7 @@
               {(!recent || !recent.length) && <li className="muted">No events yet today.</li>}
             </ul>
             <div style={{height:6}}></div>
-            <div className="legend">
-              {DEFAULT_STATUSES.map(s=>(
-                <div key={s} className="chip">
-                  <span className="dot" style={{background:STATUS_DEFS[s].color}}></span>
-                  <span style={{fontSize:13}}>{STATUS_DEFS[s].label}</span>
-                </div>
-              ))}
-            </div>
+            <StatusLegend/>
           </div>
         </div>
       );
@@ -410,7 +449,7 @@
             </div>
 
             <div style={{height:8}}></div>
-            <h3 style={{margin:"0 0 8px 0"}}>Projected vs Actual</h3>
+            <h3 style={{margin:"0 0 8px 0"}}>Projected vs Actual (24h)</h3>
             <DualBars schedule={schedule} events={events} dateStr={dateStr} />
             <div className="row" style={{marginTop:8}}>
               <div>Adherence: <strong>{adherence.pct}%</strong> <span className="muted">({adherence.inMin} in · {adherence.outMin} out)</span></div>
@@ -505,11 +544,12 @@
       const auxAgg = useMemo(()=>{
         const {start,end}=getBounds(dateStr);
         const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
-        let cur=null, curStart=start;
-        for (let i=0;i<ev.length;i++){ if (ev[i].ts<=start){ cur=ev[i].status; curStart=start; } else break; }
+        let cur=statusAtTs(ev,start) || null;
+        let curStart=start;
         const per={}, timeline=[];
         for (let i=0;i<ev.length && ev[i].ts<end;i++){
           const e=ev[i];
+          if (e.ts < start) continue;
           const segEnd=Math.min(e.ts,end);
           if (cur){
             const mins=Math.max(0,Math.floor((Math.min(segEnd,Date.now())-curStart)/60000));
@@ -609,7 +649,6 @@
             });
           }
           await pushEvent(me.username, s, ts);
-          // reconcile
           setTimeout(()=>{ refetch(); }, 1000);
         }catch(e){
           showErr("Could not update status (check session/CORS).");
