@@ -4,14 +4,12 @@
   <meta charset="utf-8" />
   <title>Allstar Agent Adherence</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Hub theme (light) -->
   <style>
     :root{
       --brand:#e11d48; --brand-ink:#fff;
       --bg:#ffffff; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb;
       --chip:#f8fafc; --chip-ink:#0f172a; --shadow:0 10px 25px rgba(17,24,39,.08);
       --radius:18px;
-      --good:#16a34a; --warn:#f59e0b; --bad:#ef4444;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -59,10 +57,8 @@
     .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
     .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
     .exports{display:flex;flex-wrap:wrap;gap:8px}
-    .muted{color:var(--muted)}
     .hidden{display:none!important}
   </style>
-  <!-- React (no build tools) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -90,9 +86,22 @@
     const isoDate = (d)=> new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0,10);
     const todayStr = ()=> isoDate(new Date());
     const hhmmToMinutes = (hhmm)=>{ const [h,m]=hhmm.split(":").map(Number); return h*60+m; };
+    const nowMinutes = ()=> { const d=new Date(); return d.getHours()*60 + d.getMinutes(); };
     const minuteToMs = (minuteOfDay, dateStr)=> new Date(`${dateStr}T00:00:00`).getTime() + minuteOfDay*60000;
     const getBounds = (dateStr)=>{ const s=new Date(`${dateStr}T00:00:00`).getTime(); return {start:s,end:s+86400000}; };
     const fmtHm = (d)=> new Date(d).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+
+    const within = (ts, {start,end}) => ts>=start && ts<=end;
+
+    function mergeEvents(prev, incoming, bounds){
+      // Keep everything in-bounds; dedupe on ts+status; sort asc
+      const key = (e)=> `${e.ts}-${e.status}`;
+      const map = new Map();
+      [...(prev||[]), ...(incoming||[])]
+        .filter(e => e && typeof e.ts==='number' && within(e.ts, bounds))
+        .forEach(e => { map.set(key(e), e); });
+      return Array.from(map.values()).sort((a,b)=>a.ts-b.ts);
+    }
 
     /*********** API ***********/
     async function api(path, opts={}){
@@ -137,6 +146,8 @@
       return cur;
     }
 
+    // Computes adherence only over scheduled minutes between [startMin, endMin),
+    // ignoring minutes where no status is scheduled.
     function computeAdherenceRange(schedule, events, startMin, endMin, dateStr){
       const ev = (events||[]).slice().sort((a,b)=>a.ts-b.ts);
       const minuteActual = new Array(Math.max(0,endMin-startMin)).fill(null);
@@ -150,9 +161,9 @@
       let inMin=0, outMin=0;
       for(let m=startMin;m<endMin;m++){
         const exp = expectedAt(schedule,m);
-        if (!exp) continue; // ignore times not scheduled
+        if (!exp) continue;                     // ignore unscheduled minutes
         const act = minuteActual[m-startMin];
-        if (!act) { outMin++; continue; }
+        if (!act) { outMin++; continue; }       // no status set during scheduled minute => out
         (act===exp)? inMin++ : outMin++;
       }
       const total = inMin+outMin;
@@ -175,23 +186,6 @@
       const hardEnd=Math.min(dayEndMs, Date.now());
       if (curStatus) out.push({start:curStart,end:hardEnd,status:curStatus});
       return out;
-    }
-
-    /** Merge server events with local (dedupe + keep last-before-start for continuity) */
-    function mergeEvents(localArr, serverArr, dayStart, dayEnd){
-      const all = [...(localArr||[]), ...((Array.isArray(serverArr)?serverArr:(serverArr?.events||[]))||[])];
-      // dedupe by ts+status
-      const key = (e)=> `${e.ts}|${e.status}`;
-      const map = new Map();
-      for (const e of all){ if (e && typeof e.ts==='number' && e.status) map.set(key(e), e); }
-      let merged = Array.from(map.values()).sort((a,b)=>a.ts-b.ts);
-
-      // Keep only today's window PLUS the last event before dayStart (for carry-over status)
-      const lastBefore = merged.filter(e=>e.ts<dayStart).pop();
-      merged = merged.filter(e=>e.ts>=dayStart && e.ts<=dayEnd);
-      if (lastBefore) merged.unshift(lastBefore);
-
-      return merged;
     }
 
     /*********** Components ***********/
@@ -227,7 +221,7 @@
       const pct = (l,r)=> ((r-l)/(dayEnd-dayStart))*100;
       const leftPctMs=(ms)=> ((ms-dayStart)/(dayEnd-dayStart))*100;
       const leftPctMin=(m)=> leftPctMs(minuteToMs(m,dateStr));
-      const now = new Date(); const nowMin = now.getHours()*60 + now.getMinutes();
+      const nowMin = nowMinutes();
       const expAt=(m)=> expectedAt(schedule,m);
 
       return (
@@ -268,29 +262,26 @@
 
     /*********** Screens ***********/
     function AgentView({ me, dateStr, schedule, events, onSetStatus }){
-      const now = new Date(); const nowMin = now.getHours()*60 + now.getMinutes();
+      const nowMin = nowMinutes();
       const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
       const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
 
-      // Adherence ***to this moment*** (only scheduled minutes elapsed so far)
-      const snap = computeAdherenceRange(
-        schedule,
-        events,
-        minStart,
-        Math.max(minStart, Math.min(maxEnd, nowMin)),
-        dateStr
+      // Live adherence: only up to "now" within scheduled window
+      const endForLive = Math.max(minStart, Math.min(maxEnd, nowMin));
+      const snap = useMemo(
+        ()=> computeAdherenceRange(schedule, events, minStart, endForLive, dateStr),
+        [schedule, events, minStart, endForLive, dateStr]
       );
 
-      // current status at *now*
       const nowMs = Date.now();
       const current = statusAtTs(events, nowMs);
       const expectedNow = expectedAt(schedule, nowMin);
-      const inAdh = expectedNow ? (current === expectedNow) : false;
+      const inAdh = !!expectedNow && current === expectedNow;
 
-      // recent switches: only show *today's* unique sequence
+      // Recent: today only, collapse duplicates
       const {start:dayStart,end:dayEnd} = getBounds(dateStr);
       const recent = (events||[])
-        .filter(e => e.ts >= dayStart && e.ts <= dayEnd)
+        .filter(e => within(e.ts,{start:dayStart,end:dayEnd}))
         .sort((a,b)=>b.ts-a.ts)
         .reduce((acc, e)=>{
           if (!acc.length || acc[acc.length-1].status !== e.status) acc.push(e);
@@ -351,7 +342,7 @@
       );
     }
 
-    function AdminView({ me, allUsers, selectedUser, setSelectedUser, dateStr, setDateStr, schedule, setSchedule, events, adherence, perStatus, timeline, onAddBlock, onUpdateBlock, onDeleteBlock, onSaveSchedule }){
+    function AdminView({ allUsers, selectedUser, setSelectedUser, dateStr, setDateStr, schedule, events, adherence, perStatus, timeline, onAddBlock, onUpdateBlock, onDeleteBlock, onSaveSchedule }){
       return (
         <div className="grid grid-2">
           <div className="card">
@@ -451,14 +442,14 @@
       const [schedule,setSchedule]=useState([]);
       const [events,setEvents]=useState([]);
 
-      // For Admin panel we show full-day %; for Agent we compute "to now" inside AgentView.
-      const dayAdherence = useMemo(()=>{
+      // Admin view % uses full scheduled window; Agent live % uses up to now.
+      const adherence = useMemo(()=>{
         const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
         const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
         return computeAdherenceRange(schedule, events, minStart, maxEnd, dateStr);
       }, [schedule, events, dateStr]);
 
-      // Admin AUX aggregation
+      // Aggregation for admin timeline/aux (unchanged)
       const auxAgg = useMemo(()=>{
         const {start,end}=getBounds(dateStr);
         const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
@@ -529,12 +520,14 @@
         }catch(e){ showErr("Failed to load schedule."); }
         try{
           const {start,end}=getBounds(dateStr);
-          const serverEv = await listEvents(selectedUser, start, end);
-          setEvents(prev => mergeEvents(prev, serverEv, start, end));
+          const ev = await listEvents(selectedUser, start, end);
+          const incoming = Array.isArray(ev) ? ev : (ev.events||[]);
+          setEvents(prev => mergeEvents(prev, incoming, {start, end}));
         }catch(e){ showErr("Failed to load events."); }
       }
 
-      useEffect(()=>{ refetch(); }, [selectedUser, dateStr]);
+      useEffect(()=>{ setEvents([]); refetch(); }, [selectedUser, dateStr]); // reset local day cache when switching day/user
+
       useEffect(()=>{
         const id = setInterval(()=> refetch(), 15000);
         return ()=> clearInterval(id);
@@ -542,14 +535,15 @@
 
       async function setStatus(s){
         try{
+          const {start,end}=getBounds(dateStr);
           const ts = Date.now();
-          const current = statusAtTs(events, ts);
-          if (current === s) return; // no-op if same status
-          // optimistic
-          setEvents(prev => mergeEvents(prev, [{status:s, ts}], ...Object.values(getBounds(dateStr))));
+          // optimistic append within bounds (prevents “reset” feel)
+          if (within(ts,{start,end})) {
+            setEvents(prev => mergeEvents(prev, [{status:s, ts}], {start,end}));
+          }
           await pushEvent(me.username, s, ts);
-          // reconcile with server
-          await refetch();
+          // short delayed reconcile (merge keeps prior entries)
+          setTimeout(()=>{ refetch(); }, 1200);
         }catch(e){
           showErr("Could not update status (check session/CORS).");
         }
@@ -601,16 +595,14 @@
           <main className="main">
             {role==="ADMIN" ? (
               <AdminView
-                me={me}
                 allUsers={users}
                 selectedUser={selectedUser}
                 setSelectedUser={setSelectedUser}
                 dateStr={dateStr}
                 setDateStr={setDateStr}
                 schedule={schedule}
-                setSchedule={setSchedule}
                 events={events}
-                adherence={dayAdherence}
+                adherence={adherence}
                 perStatus={auxAgg.perStatus}
                 timeline={auxAgg.timeline}
                 onAddBlock={addBlock}
