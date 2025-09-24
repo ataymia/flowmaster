@@ -43,14 +43,18 @@
     input,select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
     .meter{width:100%;height:10px;background:#f1f5f9;border-radius:999px;overflow:hidden;border:1px solid var(--line)}
     .meter > div{height:100%}
+
     .bar-wrap{flex:1}
     .bar{position:relative;border:1px solid var(--line);background:#fff;border-radius:10px;overflow:hidden;height:28px}
     .bar .seg{position:absolute;top:0;bottom:0;opacity:.55}
     .bar .seg.actual{opacity:.7}
     .bar .now{position:absolute;top:0;bottom:0;width:2px;background:#0f172a}
-    .ticks{position:relative;height:14px; margin-top:6px}
+
+    /* NEW: give the ticks more bottom room, and add bigger gap before the second bar */
+    .ticks{position:relative;height:18px; margin-top:8px}
     .tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
-    .tick-label{position:absolute;top:14px;transform:translateX(-50%);font-size:10px;color:#64748b}
+    .tick-label{position:absolute;top:18px;transform:translateX(-50%);font-size:10px;color:#64748b}
+
     .legend{display:flex;flex-wrap:wrap;gap:10px}
     .chip{display:flex;align-items:center;gap:6px;font-size:12px}
     .dot{width:10px;height:10px;border-radius:999px}
@@ -154,7 +158,6 @@
       return cur;
     }
 
-    // Adherence strictly over scheduled minutes only.
     function computeAdherenceRange(schedule, events, startMin, endMin, dateStr){
       const ev = (events||[]).slice().sort((a,b)=>a.ts-b.ts);
       const minuteActual = new Array(Math.max(0,endMin-startMin)).fill(null);
@@ -168,9 +171,9 @@
       let inMin=0, outMin=0;
       for(let m=startMin;m<endMin;m++){
         const exp = expectedAt(schedule,m);
-        if (!exp) continue;                     // ignore unscheduled minutes
+        if (!exp) continue;
         const act = minuteActual[m-startMin];
-        if (!act) { outMin++; continue; }       // no status set during scheduled minute => out
+        if (!act) { outMin++; continue; }
         (act===exp)? inMin++ : outMin++;
       }
       const total = inMin+outMin;
@@ -178,7 +181,6 @@
       return {inMin,outMin,total,pct};
     }
 
-    // Live adherence that starts at 100% when first scheduled minute begins.
     function computeLiveAdherence(schedule, events, dateStr){
       const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
       const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
@@ -199,31 +201,8 @@
       return res;
     }
 
-    function assembleActualBlocks(events, dayStartMs, dayEndMs){
-      // 24h continuous, default to offline when unknown, fill to end-of-day
-      const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
-      let cur = statusAtTs(ev, dayStartMs) || 'offline';
-      let curStart = dayStartMs;
-      const out=[];
-      for (let i=0;i<ev.length;i++){
-        const e=ev[i];
-        if (e.ts < dayStartMs) continue;
-        if (e.ts > dayEndMs) break;
-        if (curStart < e.ts){
-          out.push({start:curStart,end:e.ts,status:cur});
-          curStart = e.ts;
-        }
-        cur = e.status || 'offline';
-      }
-      // from last point to end-of-day: show current (if past now, it will just be gray offline continuation)
-      if (curStart < dayEndMs){
-        out.push({start:curStart,end:dayEndMs,status:cur});
-      }
-      return out;
-    }
-
+    // Build 24h expected segments, filling gaps with offline
     function assembleExpectedBlocks24h(schedule, dateStr){
-      // Convert schedule to segments in minutes, fill gaps with offline for full 0..1440
       const segs = (schedule||[]).map(b=>({start:hhmmToMinutes(b.start), end:hhmmToMinutes(b.end), status:b.status}));
       segs.sort((a,b)=>a.start-b.start);
       const full=[];
@@ -234,11 +213,32 @@
         cursor = Math.max(cursor, s.end);
       }
       if (cursor<1440) full.push({start:cursor,end:1440,status:'offline'});
-      // Convert to ms segments
       return full.map(x=>({startMs: minuteToMs(x.start, dateStr), endMs: minuteToMs(x.end, dateStr), status:x.status}));
     }
 
-    // Find the timestamp when the *current* status began (today).
+    // NEW: Actual blocks only up to "now" (no future painting)
+    function assembleActualBlocksPastOnly(events, dayStartMs, dayEndMs, nowMs){
+      const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
+      const until = Math.min(dayEndMs, nowMs);
+      let cur = statusAtTs(ev, dayStartMs) || 'offline';
+      let curStart = dayStartMs;
+      const out=[];
+      for (let i=0;i<ev.length;i++){
+        const e=ev[i];
+        if (e.ts < dayStartMs) continue;
+        if (e.ts > until) break;
+        if (curStart < e.ts){
+          out.push({start:curStart,end:e.ts,status:cur});
+          curStart = e.ts;
+        }
+        cur = e.status || 'offline';
+      }
+      if (curStart < until){
+        out.push({start:curStart,end:until,status:cur});
+      }
+      return out;
+    }
+
     function currentStatusStartTs(events, dateStr){
       const {start:dayStart} = getBounds(dateStr);
       const now = Date.now();
@@ -279,22 +279,18 @@
       const [, setTick] = useState(0);
       useEffect(()=>{ const id=setInterval(()=>setTick(t=>t+1),1000); return ()=>clearInterval(id); },[]);
 
-      // Full-day range (0:00 -> 24:00)
       const dayStart = minuteToMs(0, dateStr), dayEnd=minuteToMs(1440, dateStr);
       const expectedBlocks = assembleExpectedBlocks24h(schedule, dateStr);
-      const actualBlocks = assembleActualBlocks(events, dayStart, dayEnd);
+
+      const now = Date.now();
+      const actualPast = assembleActualBlocksPastOnly(events, dayStart, dayEnd, now);
 
       const pct = (l,r)=> ((r-l)/(dayEnd-dayStart))*100;
       const leftPctMs=(ms)=> ((ms-dayStart)/(dayEnd-dayStart))*100;
 
-      // Ticks each hour, label every 2 hours for readability
-      const hours = new Array(25).fill(0).map((_,i)=>i); // 0..24
-      const labelFor = (h)=> {
-        const d=new Date(dayStart + h*3600000);
-        return d.toLocaleTimeString([], {hour:'2-digit'});
-      };
+      const hours = new Array(25).fill(0).map((_,i)=>i);
+      const labelFor = (h)=> new Date(dayStart + h*3600000).toLocaleTimeString([], {hour:'2-digit'});
 
-      const now = Date.now();
       return (
         <div className="bar-wrap">
           {/* Projected (24h continuous) */}
@@ -322,19 +318,20 @@
             </div>
           </div>
 
-          {/* Actual (24h continuous; fills unknown with offline so it never looks broken) */}
-          <div className="row" style={{gap:10, marginTop:8}}>
+          {/* Actual (24h) — background offline full width, then ONLY past segments up to now */}
+          <div className="row" style="
+            gap:10;
+            margin-top:26px;  /* NEW: extra spacing so it won't overlap the first bar's tick labels */
+          ">
             <div style={{width:80,fontSize:12,color:"#374151"}}>Actual</div>
             <div style={{flex:1}}>
               <div className="bar">
-                {actualBlocks.map((b,i)=>{
+                {/* background offline layer across the whole day */}
+                <div className="seg actual" style="left:0;right:0;width:100%;background:#9ca3af;opacity:.18"></div>
+                {/* paint only the past blocks up to 'now' */}
+                {actualPast.map((b,i)=>{
                   const l=leftPctMs(b.start), w=pct(b.start, b.end);
-                  const mismatchMid = Math.min(b.end, Math.max(b.start, now));
-                  // We don't overlay mismatch red here because mismatch is shown in Admin bar;
-                  // Agent bar stays clean & continuous. (Can re-enable if you want.)
-                  return (
-                    <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}} />
-                  );
+                  return <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}} />;
                 })}
                 {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
               </div>
@@ -359,7 +356,6 @@
     function AgentView({ me, dateStr, schedule, events, onSetStatus }){
       const live = computeLiveAdherence(schedule, events, dateStr);
 
-      // Timer: find when current status began (tsStart), then tick every second
       const [tick, setTick] = useState(0);
       useEffect(()=>{ const id=setInterval(()=>setTick(t=>t+1),1000); return ()=>clearInterval(id); },[]);
       const tsStart = useMemo(()=> currentStatusStartTs(events, dateStr), [events, dateStr]);
@@ -371,7 +367,6 @@
       const current = statusAtTs(events, Date.now());
       const inAdh = !!expectedNow && current === expectedNow;
 
-      // Recent: today only, collapse duplicates
       const {start:dayStart,end:dayEnd} = getBounds(dateStr);
       const recent = (events||[])
         .filter(e => within(e.ts,{start:dayStart,end:dayEnd}))
@@ -533,23 +528,20 @@
       const [schedule,setSchedule]=useState([]);
       const [events,setEvents]=useState([]);
 
-      // Admin % (full scheduled window of the selected day)
       const adherence = useMemo(()=>{
         const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
         const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
         return computeAdherenceRange(schedule, events, minStart, maxEnd, dateStr);
       }, [schedule, events, dateStr]);
 
-      // Aggregation for admin timeline/aux
       const auxAgg = useMemo(()=>{
         const {start,end}=getBounds(dateStr);
         const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
-        let cur=statusAtTs(ev,start) || null;
-        let curStart=start;
+        let cur=null, curStart=start;
+        for (let i=0;i<ev.length;i++){ if (ev[i].ts<=start){ cur=ev[i].status; curStart=start; } else break; }
         const per={}, timeline=[];
         for (let i=0;i<ev.length && ev[i].ts<end;i++){
           const e=ev[i];
-          if (e.ts < start) continue;
           const segEnd=Math.min(e.ts,end);
           if (cur){
             const mins=Math.max(0,Math.floor((Math.min(segEnd,Date.now())-curStart)/60000));
@@ -580,7 +572,6 @@
         errDiv.current.style.display = errRef.current ? "block" : "none";
       }
 
-      // boot
       useEffect(()=>{
         (async()=>{
           try{
@@ -623,14 +614,12 @@
         }catch(e){ showErr("Failed to load events."); }
       }
 
-      // when user/day changes: hydrate from local cache first, then reconcile with server
       useEffect(()=>{
         if (!selectedUser || !dateStr) return;
         setEvents(loadLS(selectedUser, dateStr));
         refetch();
       }, [selectedUser, dateStr]);
 
-      // periodic refresh
       useEffect(()=>{
         const id = setInterval(()=> refetch(), 15000);
         return ()=> clearInterval(id);
@@ -640,7 +629,6 @@
         try{
           const {start,end}=getBounds(dateStr);
           const ts = Date.now();
-          // optimistic + persist locally
           if (within(ts,{start,end})) {
             setEvents(prev => {
               const merged = mergeEvents(prev, [{status:s, ts}], {start,end});
