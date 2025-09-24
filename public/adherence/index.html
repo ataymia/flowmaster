@@ -59,6 +59,7 @@
     .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
     .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
     .exports{display:flex;flex-wrap:wrap;gap:8px}
+    .muted{color:var(--muted)}
     .hidden{display:none!important}
   </style>
   <!-- React (no build tools) -->
@@ -149,7 +150,7 @@
       let inMin=0, outMin=0;
       for(let m=startMin;m<endMin;m++){
         const exp = expectedAt(schedule,m);
-        if (!exp) continue;
+        if (!exp) continue; // ignore times not scheduled
         const act = minuteActual[m-startMin];
         if (!act) { outMin++; continue; }
         (act===exp)? inMin++ : outMin++;
@@ -174,6 +175,23 @@
       const hardEnd=Math.min(dayEndMs, Date.now());
       if (curStatus) out.push({start:curStart,end:hardEnd,status:curStatus});
       return out;
+    }
+
+    /** Merge server events with local (dedupe + keep last-before-start for continuity) */
+    function mergeEvents(localArr, serverArr, dayStart, dayEnd){
+      const all = [...(localArr||[]), ...((Array.isArray(serverArr)?serverArr:(serverArr?.events||[]))||[])];
+      // dedupe by ts+status
+      const key = (e)=> `${e.ts}|${e.status}`;
+      const map = new Map();
+      for (const e of all){ if (e && typeof e.ts==='number' && e.status) map.set(key(e), e); }
+      let merged = Array.from(map.values()).sort((a,b)=>a.ts-b.ts);
+
+      // Keep only today's window PLUS the last event before dayStart (for carry-over status)
+      const lastBefore = merged.filter(e=>e.ts<dayStart).pop();
+      merged = merged.filter(e=>e.ts>=dayStart && e.ts<=dayEnd);
+      if (lastBefore) merged.unshift(lastBefore);
+
+      return merged;
     }
 
     /*********** Components ***********/
@@ -253,15 +271,23 @@
       const now = new Date(); const nowMin = now.getHours()*60 + now.getMinutes();
       const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
       const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
-      const snap = computeAdherenceRange(schedule, events, minStart, Math.max(minStart, Math.min(maxEnd, nowMin)), dateStr);
 
-      // determine "current" by the status in force at *now* (not just last event)
+      // Adherence ***to this moment*** (only scheduled minutes elapsed so far)
+      const snap = computeAdherenceRange(
+        schedule,
+        events,
+        minStart,
+        Math.max(minStart, Math.min(maxEnd, nowMin)),
+        dateStr
+      );
+
+      // current status at *now*
       const nowMs = Date.now();
       const current = statusAtTs(events, nowMs);
       const expectedNow = expectedAt(schedule, nowMin);
       const inAdh = expectedNow ? (current === expectedNow) : false;
 
-      // recent switches: only show *today's* events and collapse sequential duplicates
+      // recent switches: only show *today's* unique sequence
       const {start:dayStart,end:dayEnd} = getBounds(dateStr);
       const recent = (events||[])
         .filter(e => e.ts >= dayStart && e.ts <= dayEnd)
@@ -425,13 +451,14 @@
       const [schedule,setSchedule]=useState([]);
       const [events,setEvents]=useState([]);
 
-      const adherence = useMemo(()=>{
+      // For Admin panel we show full-day %; for Agent we compute "to now" inside AgentView.
+      const dayAdherence = useMemo(()=>{
         const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
         const maxEnd   = schedule?.length ? Math.max(...schedule.map(b=>hhmmToMinutes(b.end))) : 17*60;
         return computeAdherenceRange(schedule, events, minStart, maxEnd, dateStr);
       }, [schedule, events, dateStr]);
 
-      // Admin AUX aggregation (unchanged from previous pass)
+      // Admin AUX aggregation
       const auxAgg = useMemo(()=>{
         const {start,end}=getBounds(dateStr);
         const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
@@ -502,9 +529,8 @@
         }catch(e){ showErr("Failed to load schedule."); }
         try{
           const {start,end}=getBounds(dateStr);
-          const ev = await listEvents(selectedUser, start, end);
-          const arr = Array.isArray(ev) ? ev : (ev.events||[]);
-          setEvents(arr);
+          const serverEv = await listEvents(selectedUser, start, end);
+          setEvents(prev => mergeEvents(prev, serverEv, start, end));
         }catch(e){ showErr("Failed to load events."); }
       }
 
@@ -517,19 +543,15 @@
       async function setStatus(s){
         try{
           const ts = Date.now();
+          const current = statusAtTs(events, ts);
+          if (current === s) return; // no-op if same status
           // optimistic
-          setEvents(prev => [...(prev||[]), {status:s, ts}]);
+          setEvents(prev => mergeEvents(prev, [{status:s, ts}], ...Object.values(getBounds(dateStr))));
           await pushEvent(me.username, s, ts);
           // reconcile with server
           await refetch();
         }catch(e){
           showErr("Could not update status (check session/CORS).");
-          // rollback last optimistic add if needed
-          setEvents(prev => {
-            const next = [...(prev||[])];
-            next.pop();
-            return next;
-          });
         }
       }
 
@@ -588,7 +610,7 @@
                 schedule={schedule}
                 setSchedule={setSchedule}
                 events={events}
-                adherence={adherence}
+                adherence={dayAdherence}
                 perStatus={auxAgg.perStatus}
                 timeline={auxAgg.timeline}
                 onAddBlock={addBlock}
