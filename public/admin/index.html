@@ -37,19 +37,22 @@
     .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
     .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
     .hidden{display:none!important}
-    /* Users tab UI */
+    /* Common rows / inputs */
     .row{display:flex;align-items:center;gap:10px}
     input,select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
-    .tr{display:grid;grid-template-columns:1.3fr .8fr .6fr .6fr .3fr;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
+    /* Table-ish row */
+    .tr{display:grid;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
     .th{font-weight:700;color:#334155}
     .tag{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:#f8fafc}
     .tag.admin{background:#eef2ff;color:#3730a3;border-color:#e0e7ff}
+    /* Menu in Users list */
     .menu{position:relative}
     .menu-btn{border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:#fff;cursor:pointer}
     .menu-pop{position:absolute;right:0;top:36px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);min-width:190px;display:none;overflow:hidden}
     .menu.open .menu-pop{display:block}
     .menu-item{padding:10px 12px;cursor:pointer}
     .menu-item:hover{background:#f8fafc}
+    /* Slide-over panel */
     .panel{position:fixed;top:0;right:0;bottom:0;width:420px;max-width:100%;background:#fff;border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .2s ease;z-index:40;display:flex;flex-direction:column}
     .panel.open{transform:translateX(0)}
     .panel-hd{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
@@ -58,7 +61,7 @@
     .label{display:block;margin:8px 0 4px 0;font-size:12px;color:#334155}
     .switch{display:inline-flex;align-items:center;gap:8px}
     .switch input{width:18px;height:18px}
-    /* Diagnostics modal */
+    /* Modal (diagnostics) */
     .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:50}
     .modal.open{display:flex}
     .modal-card{width:min(900px,95vw);max-height:85vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px}
@@ -109,13 +112,31 @@
           </div>
         </div>
         <div style="height:10px"></div>
-
         <div id="u-empty" class="muted" style="display:none">No users found.</div>
         <div id="u-list"></div>
       </section>
 
+      <!-- Live Board -->
+      <section class="card hidden" id="tab-live">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">Live Board</h2>
+          <div class="row">
+            <input id="lb-search" placeholder="Search…" />
+            <select id="lb-sort">
+              <option value="username">Username</option>
+              <option value="status">Status</option>
+              <option value="online">Online first</option>
+              <option value="last_seen">Last seen</option>
+            </select>
+            <button class="btn" id="lb-refresh">Refresh</button>
+          </div>
+        </div>
+        <div style="height:8px"></div>
+        <div id="lb-empty" class="muted" style="display:none">No agents found.</div>
+        <div id="lb-list"></div>
+      </section>
+
       <!-- Stubs -->
-      <section class="card hidden" id="tab-live"><h2>Live Board</h2><div class="muted">Coming soon…</div></section>
       <section class="card hidden" id="tab-schedules"><h2>Schedules</h2><div class="muted">Coming soon…</div></section>
       <section class="card hidden" id="tab-history"><h2>Adherence History</h2><div class="muted">Coming soon…</div></section>
       <section class="card hidden" id="tab-news"><h2>News</h2><div class="muted">Coming soon…</div></section>
@@ -140,6 +161,12 @@
         <option value="ADMIN">ADMIN</option>
         <option value="SUPERADMIN">SUPERADMIN</option>
       </select>
+
+      <div style="height:8px"></div>
+      <label class="switch">
+        <input id="p-active" type="checkbox" />
+        <span>Active</span>
+      </label>
 
       <div style="height:8px"></div>
       <label class="switch">
@@ -196,9 +223,10 @@
   </div>
 
   <script>
-    // ---------- UI helpers ----------
+    // ---------- Tabs / UI ----------
     const errEl = document.getElementById('errbar');
     function showErr(msg){ errEl.textContent = String(msg||''); errEl.style.display = msg ? 'block' : 'none'; }
+
     const tabs = Array.from(document.querySelectorAll('.tab'));
     const panels = {
       users: document.getElementById('tab-users'),
@@ -207,15 +235,26 @@
       history: document.getElementById('tab-history'),
       news: document.getElementById('tab-news'),
     };
-    function activate(tab){ tabs.forEach(b=>b.classList.toggle('active', b.dataset.tab===tab)); Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==tab)); history.replaceState(null,'',`#${tab}`); }
+    function activate(tab){
+      tabs.forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+      Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==tab));
+      history.replaceState(null,'',`#${tab}`);
+      onTabChange(); // hook for live board polling
+    }
     tabs.forEach(b=> b.addEventListener('click', ()=> activate(b.dataset.tab)));
     const initial = location.hash.replace('#',''); if (initial && panels[initial]) activate(initial);
 
     // ---------- Auth ----------
     const meEl = document.getElementById('me');
-    function normalizeMe(raw){ const me = raw?.me ?? raw ?? {}; return { username: me.username || me.email || 'user', role: String(me.role || 'AGENT').toUpperCase() }; }
+    function normalizeMe(raw){
+      const me = raw?.me ?? raw ?? {};
+      return { username: me.username || me.email || 'user', role: String(me.role || 'AGENT').toUpperCase() };
+    }
     function isAdminRole(role){ const r=String(role||'').toUpperCase(); return r==='ADMIN' || r==='SUPERADMIN'; }
-    async function who(){ const r = await fetch('/api/whoami', {credentials:'include', cache:'no-store', mode:'cors', headers:{Accept:'application/json'}}); if(!r.ok) throw new Error('whoami_fail'); const data = await r.json().catch(()=> ({})); return data; }
+    async function who(){
+      const r = await fetch('/api/whoami', {credentials:'include', cache:'no-store', mode:'cors', headers:{Accept:'application/json'}});
+      if(!r.ok) throw new Error('whoami_fail'); return r.json();
+    }
     (async ()=>{
       try{
         const m = normalizeMe(await who());
@@ -225,15 +264,10 @@
     })();
 
     // ---------- Generic API (force JSON) ----------
-    function looksLikeHtml(t){
-      const s = String(t || '');
-      return /<\/?[a-z][\s\S]*>/i.test(s);
-    }
+    function looksLikeHtml(t){ const s = String(t || ''); return /<\/?[a-z][\s\S]*>/i.test(s); }
     async function apiJSON(path, opts = {}){
       const init = {
-        credentials: 'include',
-        mode: 'cors',
-        cache: 'no-store',
+        credentials: 'include', mode: 'cors', cache: 'no-store',
         ...opts,
         headers: {
           Accept: 'application/json',
@@ -243,14 +277,9 @@
       };
       const r = await fetch(path, init);
       const text = await r.text().catch(()=> '');
-      let data;
-      try { data = text ? JSON.parse(text) : {}; } catch { data = undefined; }
+      let data; try { data = text ? JSON.parse(text) : {}; } catch { data = undefined; }
       if (!r.ok || looksLikeHtml(text) || (text && data === undefined)) {
-        const e = new Error('Request failed');
-        e.status = r.status;
-        e.text = text;
-        e.data = data;
-        throw e;
+        const e = new Error('Request failed'); e.status = r.status; e.text = text; e.data = data; throw e;
       }
       return { status: r.status, data, text };
     }
@@ -269,6 +298,7 @@
       pTitle: document.getElementById('p-title'),
       pUsername: document.getElementById('p-username'),
       pRole: document.getElementById('p-role'),
+      pActive: document.getElementById('p-active'),
       pForce: document.getElementById('p-force'),
       pSave: document.getElementById('p-save'),
       pDelete: document.getElementById('p-delete'),
@@ -284,7 +314,7 @@
     };
     let users = [];
     let selected = null;
-    let USERS_BASE = ''; // set when a probe wins
+    let USERS_BASE = '';
 
     function adaptUsers(payload){
       const arr = Array.isArray(payload) ? payload
@@ -292,12 +322,10 @@
                 : Array.isArray(payload?.data) ? payload.data
                 : [];
       return arr.map(u => ({
-        id: u.id || u.user_id || u._id || null,
         username: u.username || u.email || '',
         role: (u.role || 'AGENT').toUpperCase(),
-        // Active isn't a column in your Worker; keep UI but ignore backend write.
         active: ('active' in u) ? !!u.active : true,
-        forcePwReset: !!(u.forcePwReset || u.mustChangePassword || u.must_change_password),
+        forcePwReset: !!(u.forcePwReset || u.mustChangePassword),
       })).filter(u => u.username);
     }
 
@@ -319,8 +347,8 @@
           const {data} = await apiJSON(p, { method:'GET' });
           const adapted = adaptUsers(data);
           if (Array.isArray(adapted)){
-            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/users'); // best-effort base
-            U.endpoint.textContent = 'API Endpoint in use: ' + p;
+            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/api/users'); // normalized base
+            U.endpoint.textContent = 'API Endpoint in use: ' + USERS_BASE;
             return adapted;
           }
         }catch(e){ lastErr = e; }
@@ -334,11 +362,13 @@
       U.empty.style.display='none';
       const head = document.createElement('div');
       head.className = 'tr th';
+      head.style.gridTemplateColumns = '1.3fr .8fr .6fr .6fr .3fr';
       head.innerHTML = `<div>Username</div><div>Role</div><div>Active</div><div>Must reset</div><div></div>`;
       U.list.appendChild(head);
       users.forEach(u=>{
         const row = document.createElement('div');
         row.className = 'tr';
+        row.style.gridTemplateColumns = head.style.gridTemplateColumns;
         row.innerHTML = `
           <div><strong>${u.username}</strong></div>
           <div><span class="tag ${u.role==='ADMIN'?'admin':''}">${u.role}</span></div>
@@ -361,8 +391,8 @@
             menu.classList.remove('open');
             const act = mi.dataset.act;
             if (act==='open') openPanel(u);
-            if (act==='reset') await doReset(u);
-            if (act==='delete') await doDelete(u);
+            if (act==='reset') await doReset(u.username);
+            if (act==='delete') await doDelete(u.username);
           });
         });
         document.addEventListener('click', ()=> menu.classList.remove('open'));
@@ -371,10 +401,11 @@
     }
 
     function openPanel(u){
-      selected = {...u}; // includes id
+      selected = {...u};
       U.pTitle.textContent = u.username;
       U.pUsername.value = u.username;
       U.pRole.value = u.role || 'AGENT';
+      U.pActive.checked = !!u.active;
       U.pForce.checked = !!u.forcePwReset;
       U.pResetMsg.textContent = '';
       U.panel.classList.add('open');
@@ -384,52 +415,52 @@
 
     async function doSave(){
       if (!selected) return;
-      if (!selected.id){ showErr('Cannot save: user id missing. Refresh.'); return; }
-      const updates = [];
-      // role change (Worker: SUPERADMIN required for role changes)
-      const newRole = U.pRole.value;
-      if (newRole && newRole !== selected.role) updates.push({ role: newRole });
-      // must change password
-      const mustChange = !!U.pForce.checked;
-      if (mustChange !== !!selected.forcePwReset) updates.push({ mustChangePassword: mustChange });
+      const username = U.pUsername.value.trim();
 
-      if (!updates.length){ closePanel(); return; }
-
-      // Send each field individually to keep semantics clear
-      for (const body of updates){
-        try{
-          await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(selected.id)}`, {
-            method:'PATCH',
-            body: JSON.stringify(body)
-          });
-        }catch(e){
-          showErr('Save failed: Request failed');
-          return;
+      // Preferred: your Worker supports PATCH /users/:id (or username) with {role, mustChangePassword}
+      // We try several shapes/paths for resilience.
+      const bodies = [
+        { role: U.pRole.value, mustChangePassword: !!U.pForce.checked }, // Worker’s shape
+        { user: { username, role: U.pRole.value, mustChangePassword: !!U.pForce.checked } }, // alt shape
+      ];
+      const paths = [
+        `${USERS_BASE}/${encodeURIComponent(username)}`,    // /api/users/:username (Pages proxy → Worker /users/:id)
+        `/api/admin/users/${encodeURIComponent(username)}`  // alt
+      ];
+      for (const path of paths){
+        for (const body of bodies){
+          try{
+            await apiJSON(path, { method:'PATCH', body: JSON.stringify(body) });
+            closePanel(); await refresh(); return;
+          }catch{}
         }
       }
-      closePanel(); await refresh();
+      showErr('Save failed: Request failed');
     }
     U.pSave.addEventListener('click', doSave);
 
-    async function doDelete(u){
-      if (!u?.id){ showErr('Cannot delete: user id missing. Refresh.'); return; }
-      if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
-      try{
-        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, { method:'DELETE' });
-        closePanel(); await refresh();
-      }catch{
-        showErr('Delete failed: Request failed');
-      }
-    }
-    U.pDelete.addEventListener('click', ()=> selected && doDelete(selected));
-
-    async function doReset(u){
-      if (!u?.id){ showErr('Cannot reset: user id missing. Refresh.'); return; }
-      // Preferred path if you later add a dedicated endpoint:
-      const tryEndpoints = [
-        `${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}/reset-password`,
+    async function doDelete(username){
+      if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+      const paths = [
+        `${USERS_BASE}/${encodeURIComponent(username)}`,
+        `/api/admin/users/${encodeURIComponent(username)}`
       ];
-      for (const p of tryEndpoints){
+      for (const p of paths){
+        try{
+          await apiJSON(p, { method:'DELETE' });
+          closePanel(); await refresh(); return;
+        }catch{}
+      }
+      showErr('Delete failed: Request failed');
+    }
+    U.pDelete.addEventListener('click', ()=> selected && doDelete(selected.username));
+
+    async function doReset(username){
+      const paths = [
+        `${USERS_BASE}/${encodeURIComponent(username)}/reset-password`,
+        `/api/admin/users/${encodeURIComponent(username)}/reset-password`
+      ];
+      for (const p of paths){
         try{
           const {data} = await apiJSON(p, { method:'POST' });
           const temp = (data && (data.tempPassword || data.password)) || '';
@@ -437,35 +468,28 @@
           return;
         }catch{}
       }
-      // Fallback: just force a change on next login
       try{
-        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, {
-          method:'PATCH',
-          body: JSON.stringify({ mustChangePassword: true })
-        });
+        await apiJSON(`${USERS_BASE}/${encodeURIComponent(username)}`, { method:'PATCH', body: JSON.stringify({ mustChangePassword:true }) });
         U.pResetMsg.textContent = 'Flagged to change password on next login.';
-      }catch{
-        showErr('Reset password failed: Request failed');
-      }
+      }catch{ showErr('Reset password failed: Request failed'); }
     }
-    U.pReset.addEventListener('click', ()=> selected && doReset(selected));
+    U.pReset.addEventListener('click', ()=> selected && doReset(selected.username));
 
     // Create user
     function openNew(){ U.nUser.value=''; U.nRole.value='AGENT'; U.nTemp.value=''; U.newModal.classList.add('open'); }
     function closeNew(){ U.newModal.classList.remove('open'); }
     U.nClose.addEventListener('click', closeNew);
     U.nCreate.addEventListener('click', async ()=>{
-      const username = U.nUser.value.trim().toLowerCase();
+      const username = U.nUser.value.trim();
       const roleUpper = U.nRole.value;
-      let pw = U.nTemp.value.trim();
+      const temp = U.nTemp.value.trim();
       if (!username){ showErr('Username is required.'); return; }
-      if (!pw){
-        // generate simple temp (Worker enforces hash + mustChangePassword)
-        pw = Math.random().toString(36).slice(2,6) + Math.random().toString(36).slice(2,6);
-      }
+
+      // Preferred Worker shape: {username, password?, role}
       const payloads = [
-        { username, role: roleUpper, password: pw },
-        { email: username, role: roleUpper, password: pw }, // if Worker maps email->username
+        { username, role: roleUpper, ...(temp ? { password: temp } : {}) },
+        { email: username, role: roleUpper, ...(temp ? { password: temp } : {}) },
+        { user: { username, role: roleUpper, ...(temp ? { password: temp } : {}) } },
       ];
       const paths = [
         USERS_BASE || '/api/users',
@@ -474,10 +498,11 @@
       for (const p of paths){
         for (const body of payloads){
           try{
-            await apiJSON(p, { method:'POST', body: JSON.stringify(body) });
+            const {data} = await apiJSON(p, { method:'POST', body: JSON.stringify(body) });
             closeNew();
             await refresh();
-            alert(`User created.\nTemp password: ${pw}\n(They'll be forced to change on first login.)`);
+            const generated = (data && (data.tempPassword || data.password)) || '';
+            if (generated) alert(`User created.\nTemp password: ${generated}`);
             showErr('');
             return;
           }catch{}
@@ -501,6 +526,108 @@
     document.getElementById('u-new').addEventListener('click', openNew);
     document.getElementById('u-search').addEventListener('input', ()=>{ clearTimeout(U._deb); U._deb = setTimeout(refresh, 250); });
 
+    // ---------- Live Board ----------
+    const LB = {
+      list: document.getElementById('lb-list'),
+      empty: document.getElementById('lb-empty'),
+      q: document.getElementById('lb-search'),
+      sort: document.getElementById('lb-sort'),
+      refresh: document.getElementById('lb-refresh'),
+    };
+    let liveRows = [];
+
+    function fmtAgo(ms){
+      if (!ms) return '—';
+      const d = Date.now() - ms;
+      if (d < 60_000) return `${Math.floor(d/1000)}s ago`;
+      if (d < 3_600_000) return `${Math.floor(d/60_000)}m ago`;
+      return `${Math.floor(d/3_600_000)}h ago`;
+    }
+    function fmtTime(ms){
+      return ms ? new Date(ms).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
+    }
+    function statusTag(s){
+      const map = {
+        available: '#16a34a', bathroom: '#f59e0b', break: '#facc15',
+        lunch: '#fb923c', training: '#6366f1', meeting: '#3b82f6', offline: '#9ca3af',
+        null: '#9ca3af', undefined: '#9ca3af',
+      };
+      const c = map[(s||'').toLowerCase()] || '#9ca3af';
+      return `<span class="tag" style="display:inline-flex;align-items:center;gap:6px">
+                <span style="width:10px;height:10px;border-radius:999px;background:${c}"></span>
+                ${s ? s : '—'}
+              </span>`;
+    }
+    function onlineDot(ok){
+      return `<span style="width:10px;height:10px;border-radius:999px;background:${ok?'#16a34a':'#9ca3af'};display:inline-block"></span>`;
+    }
+
+    function renderLive(){
+      const q = (LB.q.value||'').toLowerCase().trim();
+      let rows = liveRows.filter(r => !q || r.username.toLowerCase().includes(q) || String(r.status||'').toLowerCase().includes(q));
+
+      const sort = LB.sort.value;
+      rows.sort((a,b)=>{
+        if (sort==='username') return a.username.localeCompare(b.username);
+        if (sort==='status')   return String(a.status||'').localeCompare(String(b.status||''));
+        if (sort==='online')   return (b.online?1:0) - (a.online?1:0);
+        if (sort==='last_seen')return (b.last_seen||0) - (a.last_seen||0);
+        return 0;
+      });
+
+      LB.list.innerHTML = '';
+      if (!rows.length){ LB.empty.style.display='block'; return; }
+      LB.empty.style.display='none';
+
+      const head = document.createElement('div');
+      head.className = 'tr th';
+      head.style.gridTemplateColumns = '1.3fr .8fr .8fr .8fr .6fr';
+      head.innerHTML = `<div>User</div><div>Status</div><div>Now/TS</div><div>Last seen</div><div>Online</div>`;
+      LB.list.appendChild(head);
+
+      rows.forEach(r=>{
+        const row = document.createElement('div');
+        row.className = 'tr';
+        row.style.gridTemplateColumns = head.style.gridTemplateColumns;
+        row.innerHTML = `
+          <div><strong>${r.username}</strong></div>
+          <div>${statusTag(r.status)}</div>
+          <div>${fmtTime(r.ts)}</div>
+          <div>${fmtAgo(r.last_seen)}</div>
+          <div>${onlineDot(!!r.online)} ${r.online?'':'(idle)'}</div>
+        `;
+        LB.list.appendChild(row);
+      });
+    }
+
+    async function fetchLive(){
+      try{
+        const r = await fetch('/api/presence', { credentials:'include', cache:'no-store', mode:'cors' });
+        const text = await r.text();
+        const data = text ? JSON.parse(text) : [];
+        if (!Array.isArray(data)) throw new Error('bad_presence_shape');
+        liveRows = data;
+        renderLive();
+        showErr('');
+      }catch(e){
+        showErr('Failed to load live presence.');
+      }
+    }
+    LB.refresh.addEventListener('click', fetchLive);
+    LB.q.addEventListener('input', ()=>{ clearTimeout(LB._deb); LB._deb=setTimeout(renderLive, 200); });
+    LB.sort.addEventListener('change', renderLive);
+
+    let liveTimer;
+    function onTabChange(){
+      const active = document.querySelector('.tab.active')?.dataset.tab;
+      clearInterval(liveTimer);
+      if (active==='live'){
+        fetchLive();
+        liveTimer = setInterval(fetchLive, 5000);
+      }
+    }
+    window.addEventListener('hashchange', onTabChange);
+
     // ---------- Diagnostics ----------
     const diag = document.getElementById('diag');
     const diagBtn = document.getElementById('diag-btn');
@@ -517,7 +644,7 @@
           const t1=performance.now();
           report.push(`✓ ${label} (${Math.round(t1-t0)}ms)\n` + JSON.stringify(res,null,2).slice(0,2000));
         }catch(e){
-          const summary = e && (e.debug || e.text || e.message || e.toString());
+          const summary = e && (e.text || e.message || e.toString());
           report.push(`✗ ${label}\n` + String(summary).slice(0,2000));
         }
       }
@@ -528,18 +655,14 @@
       }catch(e){
         report.push('✗ users list\n' + (e.text || e.message || 'fail'));
       }
-      const sampleUser = 'diag_'+Math.random().toString(36).slice(2,7);
-      report.push('Create payload shapes (preview only):\n' + JSON.stringify([
-        { username: sampleUser, role:'ADMIN', password:'Temp1234' },
-        { email: sampleUser, role:'ADMIN', password:'Temp1234' },
-      ], null, 2));
       diagBody.innerHTML = report.map(r=> `<pre>${r}</pre>`).join('');
     });
     diagClose.addEventListener('click', ()=> diag.classList.remove('open'));
     diag.addEventListener('click', (e)=> { if (e.target===diag) diag.classList.remove('open'); });
 
     // Initial users load
-    refresh();
+    async function boot(){ await refresh(); onTabChange(); }
+    boot();
   </script>
 </body>
 </html>
