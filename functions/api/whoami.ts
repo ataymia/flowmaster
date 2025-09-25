@@ -24,3 +24,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const me = await r.json().catch(() => ({}));
   return json({ authed: true, me }, 200, { "cache-control": "no-store" });
 };
+// functions/api/whoami.ts
+import { type Env, proxyWithSession } from "./_utils";
+
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  // supports /api/whoami and /api/whoami?format=json (both return JSON)
+  return proxyWithSession(request, env, "/me", { method: "GET" });
+};
