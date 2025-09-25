@@ -1,50 +1,49 @@
 // functions/api/users.ts
-import { proxyWithAuth, Env, json } from "./_utils";
+import {
+  type Env,
+  proxyWithAuth,
+} from "./_utils";
 
 /**
- * Routes handled here (proxied to the Worker):
- *  GET    /api/users               ->  GET  /users
- *  GET    /api/users?role=AGENT    ->  GET  /users?role=AGENT
- *  POST   /api/users               ->  POST /users
- *  PATCH  /api/users/:id           ->  PATCH /users/:id
- *  DELETE /api/users/:id           ->  DELETE /users/:id
+ * Helper to map /api/... to backend /...
+ *   /api/users            -> /users
+ *   /api/users?role=AGENT -> /users?role=AGENT
+ *   /api/users/123        -> /users/123
  */
-
-function workerPath(req: Request) {
-  const url = new URL(req.url);
-  // Extract optional ":id" after /api/users/
-  const match = url.pathname.match(/^\/api\/users(?:\/([^/]+))?\/?$/);
-  const id = match?.[1];
-  const search = url.search || "";
-  return id ? `/users/${id}${search}` : `/users${search}`;
+function backendPath(req: Request) {
+  const u = new URL(req.url);
+  const suffix = u.pathname.replace(/^\/api/, "");
+  return suffix + (u.search || "");
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  return proxyWithAuth(request, env, workerPath(request));
+  // List users (admin/superadmin only)
+  return proxyWithAuth(request, env, backendPath(request), {
+    method: "GET",
+  });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  return proxyWithAuth(request, env, "/users", {
+  // Create user; ensure JSON content-type even if caller forgot it
+  const raw = await request.clone().text();
+  return proxyWithAuth(request, env, backendPath(request), {
     method: "POST",
-    body: await request.clone().text(), // forward raw body
+    body: raw,
+    headers: { "content-type": "application/json" },
   });
 };
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
-  const path = workerPath(request);
-  if (!/\/users\/[^/?#]+/.test(path)) {
-    return json({ error: "missing user id" }, 400);
-  }
-  return proxyWithAuth(request, env, path, {
+  const raw = await request.clone().text();
+  return proxyWithAuth(request, env, backendPath(request), {
     method: "PATCH",
-    body: await request.clone().text(),
+    body: raw,
+    headers: { "content-type": "application/json" },
   });
 };
 
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
-  const path = workerPath(request);
-  if (!/\/users\/[^/?#]+/.test(path)) {
-    return json({ error: "missing user id" }, 400);
-  }
-  return proxyWithAuth(request, env, path, { method: "DELETE" });
+  return proxyWithAuth(request, env, backendPath(request), {
+    method: "DELETE",
+  });
 };
