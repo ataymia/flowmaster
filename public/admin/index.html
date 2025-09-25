@@ -37,15 +37,15 @@
     .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
     .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
     .hidden{display:none!important}
-    /* Common rows / inputs */
+    /* Rows / inputs */
     .row{display:flex;align-items:center;gap:10px}
     input,select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
-    /* Table-ish row */
+    /* Grid row */
     .tr{display:grid;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
     .th{font-weight:700;color:#334155}
     .tag{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:#f8fafc}
     .tag.admin{background:#eef2ff;color:#3730a3;border-color:#e0e7ff}
-    /* Menu in Users list */
+    /* Menu */
     .menu{position:relative}
     .menu-btn{border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:#fff;cursor:pointer}
     .menu-pop{position:absolute;right:0;top:36px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);min-width:190px;display:none;overflow:hidden}
@@ -112,6 +112,7 @@
           </div>
         </div>
         <div style="height:10px"></div>
+
         <div id="u-empty" class="muted" style="display:none">No users found.</div>
         <div id="u-list"></div>
       </section>
@@ -119,10 +120,13 @@
       <!-- Live Board -->
       <section class="card hidden" id="tab-live">
         <div class="row" style="justify-content:space-between">
-          <h2 style="margin:0">Live Board</h2>
+          <div>
+            <h2 style="margin:0">Live Board</h2>
+            <div class="hint">Shows last status + online heartbeat (last 90s).</div>
+          </div>
           <div class="row">
             <input id="lb-search" placeholder="Search…" />
-            <select id="lb-sort">
+            <select id="lb-sort" title="Sort by">
               <option value="username">Username</option>
               <option value="status">Status</option>
               <option value="online">Online first</option>
@@ -161,12 +165,6 @@
         <option value="ADMIN">ADMIN</option>
         <option value="SUPERADMIN">SUPERADMIN</option>
       </select>
-
-      <div style="height:8px"></div>
-      <label class="switch">
-        <input id="p-active" type="checkbox" />
-        <span>Active</span>
-      </label>
 
       <div style="height:8px"></div>
       <label class="switch">
@@ -246,42 +244,21 @@
 
     // ---------- Auth ----------
     const meEl = document.getElementById('me');
-    function normalizeMe(raw){
-      const me = raw?.me ?? raw ?? {};
-      return { username: me.username || me.email || 'user', role: String(me.role || 'AGENT').toUpperCase() };
-    }
+    function normalizeMe(raw){ const me = raw?.me ?? raw ?? {}; return { username: me.username || me.email || 'user', role: String(me.role || 'AGENT').toUpperCase() }; }
     function isAdminRole(role){ const r=String(role||'').toUpperCase(); return r==='ADMIN' || r==='SUPERADMIN'; }
-    async function who(){
-      const r = await fetch('/api/whoami', {credentials:'include', cache:'no-store', mode:'cors', headers:{Accept:'application/json'}});
-      if(!r.ok) throw new Error('whoami_fail'); return r.json();
-    }
-    (async ()=>{
-      try{
-        const m = normalizeMe(await who());
-        meEl.textContent = `${m.username} · ${m.role}`;
-        if (!isAdminRole(m.role)) showErr('Access denied: admin role required.');
-      }catch{ showErr('Unable to verify session.'); }
-    })();
+    async function who(){ const r = await fetch('/api/whoami', {credentials:'include', cache:'no-store', mode:'cors', headers:{Accept:'application/json'}}); if(!r.ok) throw new Error('whoami_fail'); return r.json(); }
+    (async ()=>{ try{ const m = normalizeMe(await who()); meEl.textContent = `${m.username} · ${m.role}`; if (!isAdminRole(m.role)) showErr('Access denied: admin role required.'); }catch{ showErr('Unable to verify session.'); } })();
 
     // ---------- Generic API (force JSON) ----------
     function looksLikeHtml(t){ const s = String(t || ''); return /<\/?[a-z][\s\S]*>/i.test(s); }
     async function apiJSON(path, opts = {}){
-      const init = {
-        credentials: 'include', mode: 'cors', cache: 'no-store',
-        ...opts,
-        headers: {
-          Accept: 'application/json',
-          ...(opts.body ? {'content-type':'application/json'} : {}),
-          ...(opts.headers || {})
-        }
-      };
+      const init = { credentials:'include', mode:'cors', cache:'no-store', ...opts,
+        headers:{ Accept:'application/json', ...(opts.body?{'content-type':'application/json'}:{}), ...(opts.headers||{}) } };
       const r = await fetch(path, init);
       const text = await r.text().catch(()=> '');
       let data; try { data = text ? JSON.parse(text) : {}; } catch { data = undefined; }
-      if (!r.ok || looksLikeHtml(text) || (text && data === undefined)) {
-        const e = new Error('Request failed'); e.status = r.status; e.text = text; e.data = data; throw e;
-      }
-      return { status: r.status, data, text };
+      if (!r.ok || looksLikeHtml(text) || (text && data === undefined)) { const e = new Error('Request failed'); e.status=r.status; e.text=text; e.data=data; throw e; }
+      return { status:r.status, data, text };
     }
 
     // ---------- Users tab ----------
@@ -298,7 +275,6 @@
       pTitle: document.getElementById('p-title'),
       pUsername: document.getElementById('p-username'),
       pRole: document.getElementById('p-role'),
-      pActive: document.getElementById('p-active'),
       pForce: document.getElementById('p-force'),
       pSave: document.getElementById('p-save'),
       pDelete: document.getElementById('p-delete'),
@@ -314,7 +290,7 @@
     };
     let users = [];
     let selected = null;
-    let USERS_BASE = '';
+    let USERS_BASE = ''; // set when a probe wins
 
     function adaptUsers(payload){
       const arr = Array.isArray(payload) ? payload
@@ -322,10 +298,10 @@
                 : Array.isArray(payload?.data) ? payload.data
                 : [];
       return arr.map(u => ({
+        id: u.id || u.user_id || u._id || null,
         username: u.username || u.email || '',
         role: (u.role || 'AGENT').toUpperCase(),
-        active: ('active' in u) ? !!u.active : true,
-        forcePwReset: !!(u.forcePwReset || u.mustChangePassword),
+        forcePwReset: !!(u.forcePwReset || u.mustChangePassword || u.must_change_password),
       })).filter(u => u.username);
     }
 
@@ -347,8 +323,8 @@
           const {data} = await apiJSON(p, { method:'GET' });
           const adapted = adaptUsers(data);
           if (Array.isArray(adapted)){
-            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/api/users'); // normalized base
-            U.endpoint.textContent = 'API Endpoint in use: ' + USERS_BASE;
+            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/users'); // normalized base towards Worker semantics
+            U.endpoint.textContent = 'API Endpoint in use: ' + p;
             return adapted;
           }
         }catch(e){ lastErr = e; }
@@ -372,7 +348,7 @@
         row.innerHTML = `
           <div><strong>${u.username}</strong></div>
           <div><span class="tag ${u.role==='ADMIN'?'admin':''}">${u.role}</span></div>
-          <div>${u.active?'<span class="tag">Yes</span>':'<span class="tag">No</span>'}</div>
+          <div><span class="tag">Yes</span></div>
           <div>${u.forcePwReset?'<span class="tag">Yes</span>':'<span class="tag">No</span>'}</div>
           <div class="menu">
             <button class="menu-btn">⋯</button>
@@ -391,8 +367,8 @@
             menu.classList.remove('open');
             const act = mi.dataset.act;
             if (act==='open') openPanel(u);
-            if (act==='reset') await doReset(u.username);
-            if (act==='delete') await doDelete(u.username);
+            if (act==='reset') await doReset(u);
+            if (act==='delete') await doDelete(u);
           });
         });
         document.addEventListener('click', ()=> menu.classList.remove('open'));
@@ -405,7 +381,6 @@
       U.pTitle.textContent = u.username;
       U.pUsername.value = u.username;
       U.pRole.value = u.role || 'AGENT';
-      U.pActive.checked = !!u.active;
       U.pForce.checked = !!u.forcePwReset;
       U.pResetMsg.textContent = '';
       U.panel.classList.add('open');
@@ -415,52 +390,47 @@
 
     async function doSave(){
       if (!selected) return;
-      const username = U.pUsername.value.trim();
+      if (!selected.id){ showErr('Cannot save: user id missing. Refresh.'); return; }
+      const updates = [];
+      const newRole = U.pRole.value;
+      if (newRole && newRole !== selected.role) updates.push({ role: newRole });
+      const mustChange = !!U.pForce.checked;
+      if (mustChange !== !!selected.forcePwReset) updates.push({ mustChangePassword: mustChange });
 
-      // Preferred: your Worker supports PATCH /users/:id (or username) with {role, mustChangePassword}
-      // We try several shapes/paths for resilience.
-      const bodies = [
-        { role: U.pRole.value, mustChangePassword: !!U.pForce.checked }, // Worker’s shape
-        { user: { username, role: U.pRole.value, mustChangePassword: !!U.pForce.checked } }, // alt shape
-      ];
-      const paths = [
-        `${USERS_BASE}/${encodeURIComponent(username)}`,    // /api/users/:username (Pages proxy → Worker /users/:id)
-        `/api/admin/users/${encodeURIComponent(username)}`  // alt
-      ];
-      for (const path of paths){
-        for (const body of bodies){
-          try{
-            await apiJSON(path, { method:'PATCH', body: JSON.stringify(body) });
-            closePanel(); await refresh(); return;
-          }catch{}
+      if (!updates.length){ closePanel(); return; }
+
+      for (const body of updates){
+        try{
+          await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(selected.id)}`, {
+            method:'PATCH',
+            body: JSON.stringify(body)
+          });
+        }catch{
+          showErr('Save failed: Request failed'); return;
         }
       }
-      showErr('Save failed: Request failed');
+      closePanel(); await refresh();
     }
     U.pSave.addEventListener('click', doSave);
 
-    async function doDelete(username){
-      if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
-      const paths = [
-        `${USERS_BASE}/${encodeURIComponent(username)}`,
-        `/api/admin/users/${encodeURIComponent(username)}`
-      ];
-      for (const p of paths){
-        try{
-          await apiJSON(p, { method:'DELETE' });
-          closePanel(); await refresh(); return;
-        }catch{}
+    async function doDelete(u){
+      if (!u?.id){ showErr('Cannot delete: user id missing. Refresh.'); return; }
+      if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+      try{
+        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, { method:'DELETE' });
+        closePanel(); await refresh();
+      }catch{
+        showErr('Delete failed: Request failed');
       }
-      showErr('Delete failed: Request failed');
     }
-    U.pDelete.addEventListener('click', ()=> selected && doDelete(selected.username));
+    U.pDelete.addEventListener('click', ()=> selected && doDelete(selected));
 
-    async function doReset(username){
-      const paths = [
-        `${USERS_BASE}/${encodeURIComponent(username)}/reset-password`,
-        `/api/admin/users/${encodeURIComponent(username)}/reset-password`
+    async function doReset(u){
+      if (!u?.id){ showErr('Cannot reset: user id missing. Refresh.'); return; }
+      const tryEndpoints = [
+        `${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}/reset-password`,
       ];
-      for (const p of paths){
+      for (const p of tryEndpoints){
         try{
           const {data} = await apiJSON(p, { method:'POST' });
           const temp = (data && (data.tempPassword || data.password)) || '';
@@ -469,27 +439,32 @@
         }catch{}
       }
       try{
-        await apiJSON(`${USERS_BASE}/${encodeURIComponent(username)}`, { method:'PATCH', body: JSON.stringify({ mustChangePassword:true }) });
+        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, {
+          method:'PATCH',
+          body: JSON.stringify({ mustChangePassword: true })
+        });
         U.pResetMsg.textContent = 'Flagged to change password on next login.';
-      }catch{ showErr('Reset password failed: Request failed'); }
+      }catch{
+        showErr('Reset password failed: Request failed');
+      }
     }
-    U.pReset.addEventListener('click', ()=> selected && doReset(selected.username));
+    U.pReset.addEventListener('click', ()=> selected && doReset(selected));
 
     // Create user
     function openNew(){ U.nUser.value=''; U.nRole.value='AGENT'; U.nTemp.value=''; U.newModal.classList.add('open'); }
     function closeNew(){ U.newModal.classList.remove('open'); }
     U.nClose.addEventListener('click', closeNew);
     U.nCreate.addEventListener('click', async ()=>{
-      const username = U.nUser.value.trim();
+      const username = U.nUser.value.trim().toLowerCase();
       const roleUpper = U.nRole.value;
-      const temp = U.nTemp.value.trim();
+      let pw = U.nTemp.value.trim();
       if (!username){ showErr('Username is required.'); return; }
-
-      // Preferred Worker shape: {username, password?, role}
+      if (!pw){
+        pw = Math.random().toString(36).slice(2,6) + Math.random().toString(36).slice(2,6);
+      }
       const payloads = [
-        { username, role: roleUpper, ...(temp ? { password: temp } : {}) },
-        { email: username, role: roleUpper, ...(temp ? { password: temp } : {}) },
-        { user: { username, role: roleUpper, ...(temp ? { password: temp } : {}) } },
+        { username, role: roleUpper, password: pw },
+        { email: username, role: roleUpper, password: pw },
       ];
       const paths = [
         USERS_BASE || '/api/users',
@@ -498,11 +473,10 @@
       for (const p of paths){
         for (const body of payloads){
           try{
-            const {data} = await apiJSON(p, { method:'POST', body: JSON.stringify(body) });
+            await apiJSON(p, { method:'POST', body: JSON.stringify(body) });
             closeNew();
             await refresh();
-            const generated = (data && (data.tempPassword || data.password)) || '';
-            if (generated) alert(`User created.\nTemp password: ${generated}`);
+            alert(`User created.\nTemp password: ${pw}\n(They'll be forced to change on first login.)`);
             showErr('');
             return;
           }catch{}
@@ -511,14 +485,13 @@
       showErr('Create failed: Request failed');
     });
 
-    // Search/refresh wiring
     async function refresh(){
       try{
         const arr = await listUsers(U.q.value.trim());
         users = arr;
         renderUsers();
         showErr('');
-      }catch(e){
+      }catch{
         showErr('Failed to load users: Request failed');
       }
     }
@@ -535,6 +508,7 @@
       refresh: document.getElementById('lb-refresh'),
     };
     let liveRows = [];
+    let liveTimer;
 
     function fmtAgo(ms){
       if (!ms) return '—';
@@ -569,7 +543,7 @@
       const sort = LB.sort.value;
       rows.sort((a,b)=>{
         if (sort==='username') return a.username.localeCompare(b.username);
-        if (sort==='status')   return String(a.status||'').localeCompare(String(b.status||''));
+        if (sort==='status')   return String(a.status||'').localeCompare(String(b.status||'')); 
         if (sort==='online')   return (b.online?1:0) - (a.online?1:0);
         if (sort==='last_seen')return (b.last_seen||0) - (a.last_seen||0);
         return 0;
@@ -609,7 +583,7 @@
         liveRows = data;
         renderLive();
         showErr('');
-      }catch(e){
+      }catch{
         showErr('Failed to load live presence.');
       }
     }
@@ -617,7 +591,6 @@
     LB.q.addEventListener('input', ()=>{ clearTimeout(LB._deb); LB._deb=setTimeout(renderLive, 200); });
     LB.sort.addEventListener('change', renderLive);
 
-    let liveTimer;
     function onTabChange(){
       const active = document.querySelector('.tab.active')?.dataset.tab;
       clearInterval(liveTimer);
@@ -655,12 +628,20 @@
       }catch(e){
         report.push('✗ users list\n' + (e.text || e.message || 'fail'));
       }
+      // Presence probe
+      try{
+        const r = await fetch('/api/presence', { credentials:'include', cache:'no-store', mode:'cors' });
+        const t = await r.text();
+        report.push(`✓ presence (${r.status})\n` + t.slice(0,2000));
+      }catch(e){
+        report.push('✗ presence\n' + (e.message || 'fail'));
+      }
       diagBody.innerHTML = report.map(r=> `<pre>${r}</pre>`).join('');
     });
     diagClose.addEventListener('click', ()=> diag.classList.remove('open'));
     diag.addEventListener('click', (e)=> { if (e.target===diag) diag.classList.remove('open'); });
 
-    // Initial users load
+    // Boot
     async function boot(){ await refresh(); onTabChange(); }
     boot();
   </script>
