@@ -31,19 +31,15 @@
     .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
     .tab{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
     .tab.active{background:var(--brand);color:#fff;border-color:transparent}
-    .grid{display:grid;gap:20px}
     .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
     .card h2{margin:0 0 8px 0}
     .muted{color:var(--muted)}
     .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
     .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
     .hidden{display:none!important}
-
     /* Users tab UI */
     .row{display:flex;align-items:center;gap:10px}
-    .row-right{margin-left:auto;display:flex;align-items:center;gap:8px}
     input,select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
-    .table{width:100%;border-collapse:separate;border-spacing:0 8px}
     .tr{display:grid;grid-template-columns:1.3fr .8fr .6fr .6fr .3fr;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
     .th{font-weight:700;color:#334155}
     .tag{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:#f8fafc}
@@ -62,6 +58,11 @@
     .label{display:block;margin:8px 0 4px 0;font-size:12px;color:#334155}
     .switch{display:inline-flex;align-items:center;gap:8px}
     .switch input{width:18px;height:18px}
+    /* Diagnostics modal */
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:50}
+    .modal.open{display:flex}
+    .modal-card{width:min(900px,95vw);max-height:85vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px}
+    pre{white-space:pre-wrap;background:#f8fafc;border:1px solid var(--line);padding:10px;border-radius:10px;font-size:12px;max-height:300px;overflow:auto}
   </style>
 </head>
 <body>
@@ -76,7 +77,7 @@
           <span class="pill">Admin only</span>
         </div>
         <div class="hl">
-          <span id="me" class="muted">Checking session…</span>
+          <button class="btn" id="diag-btn">Diagnose API</button>
           <a class="btn" href="/hub.html">Back to Hub</a>
           <a class="btn btn-danger" href="/api/logout">Sign out</a>
         </div>
@@ -108,33 +109,11 @@
         <div id="u-list"></div>
       </section>
 
-      <!-- Live Board -->
-      <section class="card hidden" id="tab-live">
-        <h2>Live Board</h2>
-        <p class="muted">See all agents’ current status, since timer, today’s adherence %, and next block.</p>
-        <div class="muted">Coming in Step 3…</div>
-      </section>
-
-      <!-- Schedules -->
-      <section class="card hidden" id="tab-schedules">
-        <h2>Schedules</h2>
-        <p class="muted">Templates + assigner, plus existing single-day editor.</p>
-        <div class="muted">Coming in Step 4…</div>
-      </section>
-
-      <!-- History -->
-      <section class="card hidden" id="tab-history">
-        <h2>Adherence History</h2>
-        <p class="muted">Daily rollups, filters, drill-in, and exports.</p>
-        <div class="muted">Coming in Step 6…</div>
-      </section>
-
-      <!-- News -->
-      <section class="card hidden" id="tab-news">
-        <h2>News</h2>
-        <p class="muted">Publish updates to Notion (or open Notion if env vars aren’t set).</p>
-        <div class="muted">Coming in Step 7…</div>
-      </section>
+      <!-- Stubs -->
+      <section class="card hidden" id="tab-live"><h2>Live Board</h2><div class="muted">Coming in Step 3…</div></section>
+      <section class="card hidden" id="tab-schedules"><h2>Schedules</h2><div class="muted">Coming in Step 4…</div></section>
+      <section class="card hidden" id="tab-history"><h2>Adherence History</h2><div class="muted">Coming in Step 6…</div></section>
+      <section class="card hidden" id="tab-news"><h2>News</h2><div class="muted">Coming in Step 7…</div></section>
     </main>
 
     <div class="footer">© Allstar — Admin Tools</div>
@@ -204,80 +183,82 @@
     </div>
   </div>
 
-  <script>
-    // ========== Error banner ==========
-    const errEl = document.getElementById('errbar');
-    function showErr(msg){
-      errEl.textContent = String(msg||'');
-      errEl.style.display = msg ? 'block' : 'none';
-    }
+  <!-- Diagnostics modal -->
+  <div id="diag" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="row" style="justify-content:space-between">
+        <h3 style="margin:0">API Diagnostics</h3>
+        <button class="btn" id="diag-close">Close</button>
+      </div>
+      <div style="height:8px"></div>
+      <div id="diag-body"></div>
+    </div>
+  </div>
 
-    // ========== Tabs ==========
-    const tabButtons = Array.from(document.querySelectorAll('.tab'));
-    const tabPanels = {
+  <script>
+    // ---------- UI helpers ----------
+    const errEl = document.getElementById('errbar');
+    function showErr(msg){ errEl.textContent = String(msg||''); errEl.style.display = msg ? 'block' : 'none'; }
+    const tabs = Array.from(document.querySelectorAll('.tab'));
+    const panels = {
       users: document.getElementById('tab-users'),
       live: document.getElementById('tab-live'),
       schedules: document.getElementById('tab-schedules'),
       history: document.getElementById('tab-history'),
       news: document.getElementById('tab-news'),
     };
-    function activate(tab){
-      tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-      Object.entries(tabPanels).forEach(([k,el]) => el.classList.toggle('hidden', k !== tab));
-      history.replaceState(null, '', `#${tab}`);
-    }
-    tabButtons.forEach(b => b.addEventListener('click', ()=> activate(b.dataset.tab)));
-    const initial = location.hash.replace('#','');
-    if (initial && tabPanels[initial]) activate(initial);
+    function activate(tab){ tabs.forEach(b=>b.classList.toggle('active', b.dataset.tab===tab)); Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==tab)); history.replaceState(null,'',`#${tab}`);}
+    tabs.forEach(b=> b.addEventListener('click', ()=> activate(b.dataset.tab)));
+    const initial = location.hash.replace('#',''); if (initial && panels[initial]) activate(initial);
 
-    // ========== Auth gate ==========
+    // ---------- Auth ----------
     const meEl = document.getElementById('me');
-    function normalizeMe(raw){
-      const me = raw?.me ?? raw ?? {};
-      const username = me.username || me.email || 'user';
-      const role = String(me.role || 'AGENT').toUpperCase();
-      return { username, role };
-    }
-    function isAdminRole(role){
-      const r = String(role||'').toUpperCase();
-      return r === 'ADMIN' || r === 'SUPERADMIN';
-    }
-    async function fetchWhoamiWithRetry(retries=2){
-      let lastErr;
-      for (let i=0;i<=retries;i++){
-        try{
-          const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store', mode:'cors' });
-          if (!r.ok) throw new Error(`status_${r.status}`);
-          const ct = r.headers.get('content-type')||'';
-          const data = ct.includes('json') ? (await r.json()) : {};
-          return normalizeMe(data);
-        }catch(e){ lastErr = e; await new Promise(res=>setTimeout(res,250)); }
-      }
-      throw lastErr || new Error('whoami_failed');
-    }
-    (async function gate(){
+    function normalizeMe(raw){ const me = raw?.me ?? raw ?? {}; return { username: me.username || me.email || 'user', role: String(me.role || 'AGENT').toUpperCase() }; }
+    function isAdminRole(role){ const r=String(role||'').toUpperCase(); return r==='ADMIN' || r==='SUPERADMIN'; }
+    async function who(){ const r = await fetch('/api/whoami', {credentials:'include', cache:'no-store', mode:'cors'}); if(!r.ok) throw new Error('whoami_fail'); const ct=r.headers.get('content-type')||''; return ct.includes('json') ? (await r.json()) : {}; }
+    (async ()=>{
       try{
-        const me = await fetchWhoamiWithRetry(2);
-        if (!isAdminRole(me.role)){
-          showErr('Access denied: admin role required.');
-          meEl.textContent = `${me.username} · ${me.role}`;
-          return;
-        }
-        meEl.textContent = `${me.username} · ${me.role}`;
-        showErr('');
-      }catch(e){
-        showErr('Unable to verify session (network/cookies/CORS). Please refresh or sign in again.');
-        console.warn('whoami_error', e);
-      }
+        const m = normalizeMe(await who());
+        meEl.textContent = `${m.username} · ${m.role}`;
+        if (!isAdminRole(m.role)) showErr('Access denied: admin role required.');
+      }catch{ showErr('Unable to verify session.'); }
     })();
 
-    // ========== Users Tab ==========
+    // ---------- Generic API with smart retries ----------
+    async function apiSmart(path, opts={}){
+      // try with/without content-type and with same options
+      const attempts = [];
+      const headers = (opts.headers||{});
+      const hasBody = !!opts.body;
+      const initA = { credentials:'include', ...opts, headers: hasBody ? { ...headers, 'content-type': headers['content-type'] || 'application/json' } : headers };
+      const initB = { credentials:'include', ...opts, headers }; // no content-type
+      for (const init of [initA, initB]){
+        try{
+          const r = await fetch(path, init);
+          const status = r.status;
+          const ct = r.headers.get('content-type') || '';
+          const text = await r.text().catch(()=> '');
+          const data = ct.includes('json') ? (text? JSON.parse(text): {}) : text;
+          if (status>=200 && status<300){ return { ok:true, status, data, text }; }
+          attempts.push({ path, status, data, text });
+        }catch(e){
+          attempts.push({ path, error:String(e) });
+        }
+      }
+      const last = attempts[attempts.length-1] || {};
+      const err = new Error('Request failed');
+      err.debug = attempts;
+      throw err;
+    }
+
+    // ---------- Users tab ----------
     const U = {
-      listEl: document.getElementById('u-list'),
-      emptyEl: document.getElementById('u-empty'),
-      search: document.getElementById('u-search'),
-      refreshBtn: document.getElementById('u-refresh'),
+      list: document.getElementById('u-list'),
+      empty: document.getElementById('u-empty'),
+      q: document.getElementById('u-search'),
+      refresh: document.getElementById('u-refresh'),
       newBtn: document.getElementById('u-new'),
+      // panel
       panel: document.getElementById('panel'),
       pClose: document.getElementById('p-close'),
       pTitle: document.getElementById('p-title'),
@@ -289,6 +270,7 @@
       pDelete: document.getElementById('p-delete'),
       pReset: document.getElementById('p-reset'),
       pResetMsg: document.getElementById('p-reset-msg'),
+      // new modal
       newModal: document.getElementById('new-modal'),
       nClose: document.getElementById('n-close'),
       nUser: document.getElementById('n-username'),
@@ -298,44 +280,6 @@
     };
     let users = [];
     let selected = null;
-
-    // Generic API helper:
-    async function api(path, opts={}){
-      const init = {
-        credentials:'include',
-        ...opts
-      };
-      // Only set content-type if sending a body
-      if (opts.body && !((opts.headers||{})['content-type'])) {
-        init.headers = { ...(opts.headers||{}), 'content-type':'application/json' };
-      }
-      const r = await fetch(path, init);
-      const ct = r.headers.get('content-type') || '';
-      const bodyText = await r.text().catch(()=> '');
-      const body = ct.includes('json') ? (JSON.parse(bodyText||'{}')) : bodyText;
-      if (!r.ok){
-        const msg = typeof body==='string' && body ? body : (body?.error || body?.message || r.statusText || 'Request failed');
-        throw new Error(msg);
-      }
-      return body;
-    }
-
-    // Try multiple endpoints for listing users
-    async function tryUserList(query=''){
-      const qs = query ? ('?query=' + encodeURIComponent(query)) : '';
-      const paths = [
-        '/api/users' + qs,
-        '/api/users/list' + qs,
-        '/api/admin/users' + qs,
-      ];
-      let lastErr;
-      for (const p of paths){
-        try{
-          return await api(p, { method:'GET' });
-        }catch(e){ lastErr = e; }
-      }
-      throw lastErr || new Error('Request failed');
-    }
 
     function adaptUsers(payload){
       const arr = Array.isArray(payload) ? payload
@@ -350,34 +294,36 @@
       })).filter(u => u.username);
     }
 
-    async function fetchUsers(query=''){
-      try{
-        const data = await tryUserList(query);
-        users = adaptUsers(data);
-        renderUsers();
-        showErr('');
-      }catch(e){
-        showErr('Failed to load users: ' + e.message);
-        console.warn('users_list_error', e);
+    async function listUsers(query=''){
+      const qs = query ? ('?query=' + encodeURIComponent(query)) : '';
+      const paths = [
+        '/api/users' + qs,
+        '/api/users/list' + qs,
+        '/api/admin/users' + qs,
+        '/api/user/list' + qs,
+      ];
+      let last;
+      for (const p of paths){
+        try{
+          const {ok,data,text,status} = await apiSmart(p, { method:'GET' });
+          if (ok){
+            const adapted = adaptUsers(data);
+            return { users: adapted, raw: {status, data: data || text, path:p} };
+          }
+        }catch(e){ last = e; }
       }
+      throw last || new Error('users_list_failed');
     }
 
     function renderUsers(){
-      U.listEl.innerHTML = '';
-      if (!users.length){ U.emptyEl.style.display='block'; return; }
-      U.emptyEl.style.display='none';
-      // Header row
+      U.list.innerHTML = '';
+      if (!users.length){ U.empty.style.display='block'; return; }
+      U.empty.style.display='none';
       const head = document.createElement('div');
       head.className = 'tr th';
-      head.innerHTML = `
-        <div>Username</div>
-        <div>Role</div>
-        <div>Active</div>
-        <div>Must reset</div>
-        <div></div>`;
-      U.listEl.appendChild(head);
-
-      users.forEach(u => {
+      head.innerHTML = `<div>Username</div><div>Role</div><div>Active</div><div>Must reset</div><div></div>`;
+      U.list.appendChild(head);
+      users.forEach(u=>{
         const row = document.createElement('div');
         row.className = 'tr';
         row.innerHTML = `
@@ -394,30 +340,20 @@
             </div>
           </div>
         `;
-        // open row click
-        row.addEventListener('click', (ev)=>{
-          if (ev.target.closest('.menu')) return;
-          openPanel(u);
-        });
-        // menu
+        row.addEventListener('click', ev=>{ if (ev.target.closest('.menu')) return; openPanel(u); });
         const menu = row.querySelector('.menu');
-        const btn = row.querySelector('.menu-btn');
-        btn.addEventListener('click', (e)=>{
-          e.stopPropagation();
-          document.querySelectorAll('.menu.open').forEach(m=> m.classList.remove('open'));
-          menu.classList.toggle('open');
-        });
+        row.querySelector('.menu-btn').addEventListener('click', (e)=>{ e.stopPropagation(); document.querySelectorAll('.menu.open').forEach(m=>m.classList.remove('open')); menu.classList.toggle('open'); });
         row.querySelectorAll('.menu-item').forEach(mi=>{
           mi.addEventListener('click', async ()=>{
             menu.classList.remove('open');
             const act = mi.dataset.act;
-            if (act==='open'){ openPanel(u); }
-            else if (act==='reset'){ await doReset(u.username); }
-            else if (act==='delete'){ await doDelete(u.username); }
+            if (act==='open') openPanel(u);
+            if (act==='reset') await doReset(u.username);
+            if (act==='delete') await doDelete(u.username);
           });
         });
         document.addEventListener('click', ()=> menu.classList.remove('open'));
-        U.listEl.appendChild(row);
+        U.list.appendChild(row);
       });
     }
 
@@ -434,107 +370,147 @@
     function closePanel(){ U.panel.classList.remove('open'); selected=null; }
     U.pClose.addEventListener('click', closePanel);
 
-    // Actions
     async function doSave(){
       if (!selected) return;
       const username = U.pUsername.value.trim();
-      const payload = {
-        role: U.pRole.value,
-        active: !!U.pActive.checked,
-        forcePwReset: !!U.pForce.checked,
-      };
-      try{
-        await api(`/api/users/${encodeURIComponent(username)}`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload)
-        });
-        showErr('');
-        closePanel();
-        await fetchUsers(U.search.value.trim());
-      }catch(e){
-        showErr('Save failed: ' + e.message);
+      const payloads = [
+        { role: U.pRole.value, active: !!U.pActive.checked, forcePwReset: !!U.pForce.checked },
+        { user: { username, role: U.pRole.value.toLowerCase(), active: !!U.pActive.checked, forcePwReset: !!U.pForce.checked } },
+      ];
+      const paths = [
+        `/api/users/${encodeURIComponent(username)}`,
+        `/api/admin/users/${encodeURIComponent(username)}`,
+      ];
+      for (const path of paths){
+        for (const body of payloads){
+          try{
+            const {ok} = await apiSmart(path, { method:'PATCH', body: JSON.stringify(body) });
+            if (ok){ closePanel(); await refresh(); return; }
+          }catch{}
+        }
       }
+      showErr('Save failed: Request failed');
     }
     U.pSave.addEventListener('click', doSave);
 
     async function doDelete(username){
       if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
-      try{
-        await api(`/api/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
-        showErr('');
-        closePanel();
-        await fetchUsers(U.search.value.trim());
-      }catch(e){
-        showErr('Delete failed: ' + e.message);
+      const paths = [
+        `/api/users/${encodeURIComponent(username)}`,
+        `/api/admin/users/${encodeURIComponent(username)}`,
+      ];
+      for (const p of paths){
+        try{
+          const res = await apiSmart(p, { method:'DELETE' });
+          if (res.ok){ closePanel(); await refresh(); return; }
+        }catch{}
       }
+      showErr('Delete failed: Request failed');
     }
     U.pDelete.addEventListener('click', ()=> selected && doDelete(selected.username));
 
     async function doReset(username){
-      // Try common reset endpoints; fall back to PATCH flag if unsupported
       const paths = [
         `/api/users/${encodeURIComponent(username)}/reset-password`,
         `/api/admin/users/${encodeURIComponent(username)}/reset-password`,
       ];
-      let lastErr;
       for (const p of paths){
         try{
-          const res = await api(p, { method:'POST' });
-          const temp = res?.tempPassword || res?.password || '';
-          U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
-          showErr('');
-          return;
-        }catch(e){ lastErr = e; }
+          const {ok,data,text} = await apiSmart(p, { method:'POST' });
+          if (ok){
+            const temp = (data && (data.tempPassword || data.password)) || '';
+            U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
+            return;
+          }
+        }catch{}
       }
-      // Fallback: set forcePwReset=true
+      // Fallback: set force flag
       try{
-        await api(`/api/users/${encodeURIComponent(username)}`, {
-          method:'PATCH',
-          body: JSON.stringify({ forcePwReset:true })
-        });
+        await apiSmart(`/api/users/${encodeURIComponent(username)}`, { method:'PATCH', body: JSON.stringify({ forcePwReset:true }) });
         U.pResetMsg.textContent = 'Flagged to change password on next login.';
-        showErr('');
-      }catch(e){
-        showErr('Reset password failed: ' + (lastErr?.message || e.message));
-      }
+      }catch{ showErr('Reset password failed: Request failed'); }
     }
     U.pReset.addEventListener('click', ()=> selected && doReset(selected.username));
 
-    // New user modal
+    // Create user (multi-shape attempts)
     function openNew(){ U.nUser.value=''; U.nRole.value='AGENT'; U.nTemp.value=''; U.newModal.classList.add('open'); }
     function closeNew(){ U.newModal.classList.remove('open'); }
     U.nClose.addEventListener('click', closeNew);
     U.nCreate.addEventListener('click', async ()=>{
       const username = U.nUser.value.trim();
-      const role = U.nRole.value;
-      const tempPassword = U.nTemp.value.trim();
+      const roleUpper = U.nRole.value;
+      const roleLower = roleUpper.toLowerCase();
+      const temp = U.nTemp.value.trim();
       if (!username){ showErr('Username is required.'); return; }
-      try{
-        const payload = { username, role };
-        if (tempPassword) payload.tempPassword = tempPassword;
-        const res = await api('/api/users', { method: 'POST', body: JSON.stringify(payload) });
-        showErr('');
-        closeNew();
-        await fetchUsers(U.search.value.trim());
-        const generated = res?.tempPassword || res?.password;
-        if (generated){ alert(`User created.\nTemp password: ${generated}`); }
-      }catch(e){
-        showErr('Create failed: ' + e.message);
+      const payloads = [
+        { username, role: roleUpper, ...(temp?{tempPassword:temp}:{}) },
+        { email: username, role: roleUpper, ...(temp?{tempPassword:temp}:{}) },
+        { user: { username, role: roleLower, ...(temp?{tempPassword:temp}:{}) } },
+      ];
+      const paths = [
+        '/api/users',
+        '/api/users/create',
+        '/api/admin/users',
+      ];
+      for (const p of paths){
+        for (const body of payloads){
+          try{
+            const {ok,data,text,status} = await apiSmart(p, { method:'POST', body: JSON.stringify(body) });
+            if (ok){
+              closeNew();
+              await refresh();
+              const generated = (data && (data.tempPassword || data.password)) || '';
+              if (generated) alert(`User created.\nTemp password: ${generated}`);
+              showErr('');
+              return;
+            }
+          }catch{}
+        }
       }
+      showErr('Create failed: Request failed');
     });
 
-    // Wiring
-    U.refreshBtn.addEventListener('click', ()=> fetchUsers(U.search.value.trim()));
-    U.newBtn.addEventListener('click', openNew);
-    U.search.addEventListener('input', (e)=>{
-      const q = e.target.value.trim();
-      clearTimeout(U._deb);
-      U._deb = setTimeout(()=> fetchUsers(q), 250);
+    // Search/refresh wiring
+    async function refresh(){ try{ const {users:arr}= await listUsers(U.q.value.trim()); users = arr; renderUsers(); showErr(''); }catch(e){ showErr('Failed to load users: Request failed'); } }
+    document.getElementById('u-refresh').addEventListener('click', refresh);
+    document.getElementById('u-new').addEventListener('click', openNew);
+    document.getElementById('u-search').addEventListener('input', (e)=>{ clearTimeout(U._deb); U._deb = setTimeout(refresh, 250); });
+
+    // ---------- Diagnostics ----------
+    const diag = document.getElementById('diag');
+    const diagBtn = document.getElementById('diag-btn');
+    const diagClose = document.getElementById('diag-close');
+    const diagBody = document.getElementById('diag-body');
+    diagBtn.addEventListener('click', async ()=>{
+      diag.classList.add('open');
+      diagBody.innerHTML = '<div class="muted">Probing endpoints…</div>';
+      const report = [];
+      async function probe(label, fn){
+        try{
+          const t0=performance.now();
+          const res = await fn();
+          const t1=performance.now();
+          report.push(`✓ ${label} (${Math.round(t1-t0)}ms)\n` + JSON.stringify(res,null,2).slice(0,2000));
+        }catch(e){
+          report.push(`✗ ${label}\n` + (e.debug? JSON.stringify(e.debug,null,2).slice(0,2000) : String(e)));
+        }
+      }
+      await probe('whoami', async()=> (await apiSmart('/api/whoami',{method:'GET'})));
+      await probe('users list', async()=> (await listUsers(U.q.value.trim())));
+      // dry-run create (OPTIONS/HEAD/GET?): some Workers reject preflight—so just show intended payloads
+      const sampleUser = 'diag_'+Math.random().toString(36).slice(2,7);
+      report.push('create attempts (payload shapes):\n' + JSON.stringify([
+        { username: sampleUser, role:'ADMIN' },
+        { email: sampleUser, role:'ADMIN' },
+        { user:{ username: sampleUser, role:'admin' } },
+      ], null, 2));
+      diagBody.innerHTML = report.map(r=> `<pre>${r}</pre>`).join('');
     });
+    diagClose.addEventListener('click', ()=> diag.classList.remove('open'));
+    diag.addEventListener('click', (e)=> { if (e.target===diag) diag.classList.remove('open'); });
 
-    // Initial load (users tab only)
-    if (!initial || initial==='users') fetchUsers('');
-
+    // Initial users load
+    refresh();
   </script>
 </body>
 </html>
