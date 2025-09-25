@@ -63,6 +63,7 @@
     .modal.open{display:flex}
     .modal-card{width:min(900px,95vw);max-height:85vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px}
     pre{white-space:pre-wrap;background:#f8fafc;border:1px solid var(--line);padding:10px;border-radius:10px;font-size:12px;max-height:300px;overflow:auto}
+    .hint{font-size:12px;color:#64748b}
   </style>
 </head>
 <body>
@@ -77,6 +78,7 @@
           <span class="pill">Admin only</span>
         </div>
         <div class="hl">
+          <span id="me" class="muted"></span>
           <button class="btn" id="diag-btn">Diagnose API</button>
           <a class="btn" href="/hub.html">Back to Hub</a>
           <a class="btn btn-danger" href="/api/logout">Sign out</a>
@@ -96,7 +98,10 @@
       <!-- Users -->
       <section class="card" id="tab-users">
         <div class="row" style="justify-content:space-between">
-          <h2>Users</h2>
+          <div>
+            <h2 style="margin:0">Users</h2>
+            <div id="u-endpoint" class="hint"></div>
+          </div>
           <div class="row">
             <input id="u-search" placeholder="Search users…" />
             <button class="btn" id="u-refresh">Refresh</button>
@@ -110,10 +115,10 @@
       </section>
 
       <!-- Stubs -->
-      <section class="card hidden" id="tab-live"><h2>Live Board</h2><div class="muted">Coming in Step 3…</div></section>
-      <section class="card hidden" id="tab-schedules"><h2>Schedules</h2><div class="muted">Coming in Step 4…</div></section>
-      <section class="card hidden" id="tab-history"><h2>Adherence History</h2><div class="muted">Coming in Step 6…</div></section>
-      <section class="card hidden" id="tab-news"><h2>News</h2><div class="muted">Coming in Step 7…</div></section>
+      <section class="card hidden" id="tab-live"><h2>Live Board</h2><div class="muted">Coming soon…</div></section>
+      <section class="card hidden" id="tab-schedules"><h2>Schedules</h2><div class="muted">Coming soon…</div></section>
+      <section class="card hidden" id="tab-history"><h2>Adherence History</h2><div class="muted">Coming soon…</div></section>
+      <section class="card hidden" id="tab-news"><h2>News</h2><div class="muted">Coming soon…</div></section>
     </main>
 
     <div class="footer">© Allstar — Admin Tools</div>
@@ -166,7 +171,7 @@
       <button class="btn" id="n-close">Close</button>
     </div>
     <div class="panel-bd">
-      <label class="label">Username</label>
+      <label class="label">Username (or email)</label>
       <input id="n-username" placeholder="jane.doe" />
 
       <label class="label">Role</label>
@@ -215,7 +220,7 @@
     const meEl = document.getElementById('me');
     function normalizeMe(raw){ const me = raw?.me ?? raw ?? {}; return { username: me.username || me.email || 'user', role: String(me.role || 'AGENT').toUpperCase() }; }
     function isAdminRole(role){ const r=String(role||'').toUpperCase(); return r==='ADMIN' || r==='SUPERADMIN'; }
-    async function who(){ const r = await fetch('/api/whoami', {credentials:'include', cache:'no-store', mode:'cors'}); if(!r.ok) throw new Error('whoami_fail'); const ct=r.headers.get('content-type')||''; return ct.includes('json') ? (await r.json()) : {}; }
+    async function who(){ const r = await fetch('/api/whoami', {credentials:'include', cache:'no-store', mode:'cors', headers:{Accept:'application/json'}}); if(!r.ok) throw new Error('whoami_fail'); const data = await r.json().catch(()=> ({})); return data; }
     (async ()=>{
       try{
         const m = normalizeMe(await who());
@@ -224,31 +229,26 @@
       }catch{ showErr('Unable to verify session.'); }
     })();
 
-    // ---------- Generic API with smart retries ----------
-    async function apiSmart(path, opts={}){
-      // try with/without content-type and with same options
-      const attempts = [];
-      const headers = (opts.headers||{});
-      const hasBody = !!opts.body;
-      const initA = { credentials:'include', ...opts, headers: hasBody ? { ...headers, 'content-type': headers['content-type'] || 'application/json' } : headers };
-      const initB = { credentials:'include', ...opts, headers }; // no content-type
-      for (const init of [initA, initB]){
-        try{
-          const r = await fetch(path, init);
-          const status = r.status;
-          const ct = r.headers.get('content-type') || '';
-          const text = await r.text().catch(()=> '');
-          const data = ct.includes('json') ? (text? JSON.parse(text): {}) : text;
-          if (status>=200 && status<300){ return { ok:true, status, data, text }; }
-          attempts.push({ path, status, data, text });
-        }catch(e){
-          attempts.push({ path, error:String(e) });
+    // ---------- Generic API (force JSON) ----------
+    function looksLikeHtml(t){ return /<\/?[a-z][\s\S]*>/i.test(String(t||'')).trim(); }
+    async function apiJSON(path, opts={}){
+      const init = {
+        credentials:'include',
+        mode:'cors',
+        cache:'no-store',
+        ...opts,
+        headers:{
+          Accept:'application/json',
+          ...(opts.body ? {'content-type':'application/json'} : {}),
+          ...(opts.headers||{})
         }
-      }
-      const last = attempts[attempts.length-1] || {};
-      const err = new Error('Request failed');
-      err.debug = attempts;
-      throw err;
+      };
+      const r = await fetch(path, init);
+      const text = await r.text().catch(()=> '');
+      let data = {};
+      try{ data = text ? JSON.parse(text) : {}; }catch{}
+      if (!r.ok || looksLikeHtml(text)){ const e=new Error('Request failed'); e.status=r.status; e.text=text; e.data=data; throw e; }
+      return { status:r.status, data, text };
     }
 
     // ---------- Users tab ----------
@@ -258,6 +258,7 @@
       q: document.getElementById('u-search'),
       refresh: document.getElementById('u-refresh'),
       newBtn: document.getElementById('u-new'),
+      endpoint: document.getElementById('u-endpoint'),
       // panel
       panel: document.getElementById('panel'),
       pClose: document.getElementById('p-close'),
@@ -280,6 +281,7 @@
     };
     let users = [];
     let selected = null;
+    let USERS_BASE = ''; // set when a probe wins
 
     function adaptUsers(payload){
       const arr = Array.isArray(payload) ? payload
@@ -296,23 +298,29 @@
 
     async function listUsers(query=''){
       const qs = query ? ('?query=' + encodeURIComponent(query)) : '';
-      const paths = [
-        '/api/users' + qs,
-        '/api/users/list' + qs,
-        '/api/admin/users' + qs,
-        '/api/user/list' + qs,
+      const probes = [
+        '/api/users'+qs,
+        '/api/users?format=json'+(qs? '&'+qs.slice(1):''),
+        '/api/users?list=1'+(qs? '&'+qs.slice(1):''),
+        '/api/users/list'+qs,
+        '/api/admin/users'+qs,
+        '/api/admin/users/list'+qs,
+        '/api/list-users'+qs,
+        '/api/user/list'+qs,
       ];
-      let last;
-      for (const p of paths){
+      let lastErr;
+      for (const p of probes){
         try{
-          const {ok,data,text,status} = await apiSmart(p, { method:'GET' });
-          if (ok){
-            const adapted = adaptUsers(data);
-            return { users: adapted, raw: {status, data: data || text, path:p} };
+          const {data} = await apiJSON(p, { method:'GET' });
+          const adapted = adaptUsers(data);
+          if (Array.isArray(adapted)){
+            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/users'); // best-effort base
+            U.endpoint.textContent = 'API Endpoint in use: ' + p;
+            return adapted;
           }
-        }catch(e){ last = e; }
+        }catch(e){ lastErr = e; }
       }
-      throw last || new Error('users_list_failed');
+      throw lastErr || new Error('users_list_failed');
     }
 
     function renderUsers(){
@@ -373,19 +381,19 @@
     async function doSave(){
       if (!selected) return;
       const username = U.pUsername.value.trim();
-      const payloads = [
+      const bodies = [
         { role: U.pRole.value, active: !!U.pActive.checked, forcePwReset: !!U.pForce.checked },
         { user: { username, role: U.pRole.value.toLowerCase(), active: !!U.pActive.checked, forcePwReset: !!U.pForce.checked } },
       ];
       const paths = [
-        `/api/users/${encodeURIComponent(username)}`,
-        `/api/admin/users/${encodeURIComponent(username)}`,
+        `${USERS_BASE || '/api/users'}/${encodeURIComponent(username)}`,
+        `/api/admin/users/${encodeURIComponent(username)}`
       ];
       for (const path of paths){
-        for (const body of payloads){
+        for (const body of bodies){
           try{
-            const {ok} = await apiSmart(path, { method:'PATCH', body: JSON.stringify(body) });
-            if (ok){ closePanel(); await refresh(); return; }
+            await apiJSON(path, { method:'PATCH', body: JSON.stringify(body) });
+            closePanel(); await refresh(); return;
           }catch{}
         }
       }
@@ -396,13 +404,13 @@
     async function doDelete(username){
       if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
       const paths = [
-        `/api/users/${encodeURIComponent(username)}`,
-        `/api/admin/users/${encodeURIComponent(username)}`,
+        `${USERS_BASE || '/api/users'}/${encodeURIComponent(username)}`,
+        `/api/admin/users/${encodeURIComponent(username)}`
       ];
       for (const p of paths){
         try{
-          const res = await apiSmart(p, { method:'DELETE' });
-          if (res.ok){ closePanel(); await refresh(); return; }
+          await apiJSON(p, { method:'DELETE' });
+          closePanel(); await refresh(); return;
         }catch{}
       }
       showErr('Delete failed: Request failed');
@@ -411,28 +419,25 @@
 
     async function doReset(username){
       const paths = [
-        `/api/users/${encodeURIComponent(username)}/reset-password`,
-        `/api/admin/users/${encodeURIComponent(username)}/reset-password`,
+        `${USERS_BASE || '/api/users'}/${encodeURIComponent(username)}/reset-password`,
+        `/api/admin/users/${encodeURIComponent(username)}/reset-password`
       ];
       for (const p of paths){
         try{
-          const {ok,data,text} = await apiSmart(p, { method:'POST' });
-          if (ok){
-            const temp = (data && (data.tempPassword || data.password)) || '';
-            U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
-            return;
-          }
+          const {data} = await apiJSON(p, { method:'POST' });
+          const temp = (data && (data.tempPassword || data.password)) || '';
+          U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
+          return;
         }catch{}
       }
-      // Fallback: set force flag
       try{
-        await apiSmart(`/api/users/${encodeURIComponent(username)}`, { method:'PATCH', body: JSON.stringify({ forcePwReset:true }) });
+        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(username)}`, { method:'PATCH', body: JSON.stringify({ forcePwReset:true }) });
         U.pResetMsg.textContent = 'Flagged to change password on next login.';
       }catch{ showErr('Reset password failed: Request failed'); }
     }
     U.pReset.addEventListener('click', ()=> selected && doReset(selected.username));
 
-    // Create user (multi-shape attempts)
+    // Create user
     function openNew(){ U.nUser.value=''; U.nRole.value='AGENT'; U.nTemp.value=''; U.newModal.classList.add('open'); }
     function closeNew(){ U.newModal.classList.remove('open'); }
     U.nClose.addEventListener('click', closeNew);
@@ -448,22 +453,20 @@
         { user: { username, role: roleLower, ...(temp?{tempPassword:temp}:{}) } },
       ];
       const paths = [
-        '/api/users',
+        USERS_BASE || '/api/users',
         '/api/users/create',
         '/api/admin/users',
       ];
       for (const p of paths){
         for (const body of payloads){
           try{
-            const {ok,data,text,status} = await apiSmart(p, { method:'POST', body: JSON.stringify(body) });
-            if (ok){
-              closeNew();
-              await refresh();
-              const generated = (data && (data.tempPassword || data.password)) || '';
-              if (generated) alert(`User created.\nTemp password: ${generated}`);
-              showErr('');
-              return;
-            }
+            const {data} = await apiJSON(p, { method:'POST', body: JSON.stringify(body) });
+            closeNew();
+            await refresh();
+            const generated = (data && (data.tempPassword || data.password)) || '';
+            if (generated) alert(`User created.\nTemp password: ${generated}`);
+            showErr('');
+            return;
           }catch{}
         }
       }
@@ -471,10 +474,19 @@
     });
 
     // Search/refresh wiring
-    async function refresh(){ try{ const {users:arr}= await listUsers(U.q.value.trim()); users = arr; renderUsers(); showErr(''); }catch(e){ showErr('Failed to load users: Request failed'); } }
+    async function refresh(){
+      try{
+        const arr = await listUsers(U.q.value.trim());
+        users = arr;
+        renderUsers();
+        showErr('');
+      }catch(e){
+        showErr('Failed to load users: Request failed');
+      }
+    }
     document.getElementById('u-refresh').addEventListener('click', refresh);
     document.getElementById('u-new').addEventListener('click', openNew);
-    document.getElementById('u-search').addEventListener('input', (e)=>{ clearTimeout(U._deb); U._deb = setTimeout(refresh, 250); });
+    document.getElementById('u-search').addEventListener('input', ()=>{ clearTimeout(U._deb); U._deb = setTimeout(refresh, 250); });
 
     // ---------- Diagnostics ----------
     const diag = document.getElementById('diag');
@@ -492,14 +504,20 @@
           const t1=performance.now();
           report.push(`✓ ${label} (${Math.round(t1-t0)}ms)\n` + JSON.stringify(res,null,2).slice(0,2000));
         }catch(e){
-          report.push(`✗ ${label}\n` + (e.debug? JSON.stringify(e.debug,null,2).slice(0,2000) : String(e)));
+          const summary = e && (e.debug || e.text || e.message || e.toString());
+          report.push(`✗ ${label}\n` + String(summary).slice(0,2000));
         }
       }
-      await probe('whoami', async()=> (await apiSmart('/api/whoami',{method:'GET'})));
-      await probe('users list', async()=> (await listUsers(U.q.value.trim())));
-      // dry-run create (OPTIONS/HEAD/GET?): some Workers reject preflight—so just show intended payloads
+      await probe('whoami', async()=> (await apiJSON('/api/whoami',{method:'GET'})));
+      try{
+        const arr = await listUsers(document.getElementById('u-search').value.trim());
+        report.push(`✓ users list\n` + JSON.stringify({ using: USERS_BASE || '(not set — path variant)' , count: arr.length }, null, 2));
+      }catch(e){
+        report.push('✗ users list\n' + (e.text || e.message || 'fail'));
+      }
+      // Show create payload shapes (we won’t POST in diagnostics)
       const sampleUser = 'diag_'+Math.random().toString(36).slice(2,7);
-      report.push('create attempts (payload shapes):\n' + JSON.stringify([
+      report.push('Create payload shapes (preview only):\n' + JSON.stringify([
         { username: sampleUser, role:'ADMIN' },
         { email: sampleUser, role:'ADMIN' },
         { user:{ username: sampleUser, role:'admin' } },
