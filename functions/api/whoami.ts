@@ -1,33 +1,34 @@
 // functions/api/whoami.ts
-import { Env, json, getCookie, upstream } from "./_utils";
+import { type Env, json, getCookie, upstream } from "./_utils";
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  // Prefer our Pages session cookie; fall back to worker cookie if present
+  // Prefer the Pages session cookie; fall back to Worker cookie
   const token =
     getCookie(request, "allstar_at") || getCookie(request, "access_token");
+
   if (!token) {
-    return json({ authed: false, reason: "no cookie" }, 200, {
+    return json({ authed: false, reason: "no_cookie" }, 200, {
       "cache-control": "no-store",
     });
   }
 
-  // Call the worker using the token as a cookie (what /me expects)
-  const r = await upstream(env, "/me", {
+  // Ask the Auth Worker who we are, passing the token as a cookie
+  const res = await upstream(env, "/me", {
+    method: "GET",
     headers: { cookie: `access_token=${token}` },
+    redirect: "manual",
   });
 
-  if (!r.ok) {
-    return json({ authed: false, status: r.status }, 200, {
-      "cache-control": "no-store",
-    });
+  // Normalize output for the frontend
+  if (res.ok) {
+    const me = await res.json().catch(() => ({}));
+    return json({ authed: true, me }, 200, { "cache-control": "no-store" });
   }
-  const me = await r.json().catch(() => ({}));
-  return json({ authed: true, me }, 200, { "cache-control": "no-store" });
-};
-// functions/api/whoami.ts
-import { type Env, proxyWithSession } from "./_utils";
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  // supports /api/whoami and /api/whoami?format=json (both return JSON)
-  return proxyWithSession(request, env, "/me", { method: "GET" });
+  // 401 = not logged in / expired; otherwise surface status for diagnostics
+  return json(
+    { authed: false, status: res.status },
+    200,
+    { "cache-control": "no-store" }
+  );
 };
