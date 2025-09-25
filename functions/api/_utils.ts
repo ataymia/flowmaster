@@ -1,17 +1,17 @@
 // functions/api/_utils.ts
+// Shared helpers for Pages Functions → Auth Worker proxying
 
 export interface Env {
-  /** Preferred: Worker origin, e.g. https://allstar-auth.ataymia.workers.dev */
-  AUTH_BASE?: string;
-  /** Back-compat / alias: if present, we’ll use this too */
-  BACKEND_ORIGIN?: string;
+  // Your Worker base URL, e.g. "https://allstar-auth.ataymia.workers.dev"
+  AUTH_BASE: string;
 
-  // for News widget (unchanged)
+  // (used by /api/news widget; unchanged)
   NOTION_TOKEN?: string;
   NOTION_DATABASE_ID?: string;
 }
 
 /* ---------------- JSON ---------------- */
+
 export function json(data: any, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(data), {
     status,
@@ -20,6 +20,7 @@ export function json(data: any, status = 200, headers?: HeadersInit) {
 }
 
 /* ---------------- Cookies ---------------- */
+
 type SameSite = "Lax" | "Strict" | "None";
 
 export function getCookie(req: Request, name: string): string | null {
@@ -58,10 +59,9 @@ export function clearCookie(headers: Headers, name: string, path = "/") {
   );
 }
 
-/* ---------------- Robust Set-Cookie forwarding (matches working zip behavior) ---------------- */
+/* ---------------- Robust Set-Cookie forwarding ---------------- */
 
 function getHeader(h: Headers, name: string): string | null {
-  // getAll isn't always available in CF Pages runtime
   try {
     const anyH = h as any;
     if (typeof anyH.getAll === "function") {
@@ -77,18 +77,15 @@ function getHeader(h: Headers, name: string): string | null {
  * This splits correctly on commas that start a new cookie (",<token>=").
  */
 export function forwardSetCookies(from: Response | Headers, to: Headers) {
-  const headers =
-    "headers" in from ? (from as Response).headers : (from as Headers);
+  const headers = "headers" in from ? (from as Response).headers : (from as Headers);
 
   const flattened = getHeader(headers, "set-cookie");
   if (flattened) {
-    // split on comma that starts a new cookie
     const parts = flattened.split(/,(?=[^;=]+?=)/g);
     for (const p of parts) to.append("Set-Cookie", p.trim());
     return;
   }
 
-  // Fallback: iterate (some runtimes keep multiple entries)
   try {
     (headers as any).forEach?.((val: string, key: string) => {
       if (key && key.toLowerCase() === "set-cookie" && val) {
@@ -112,105 +109,59 @@ export function pickCookieFromSetCookie(src: Headers, name: string): string | nu
 
 /* ---------------- Upstream (Auth Worker) ---------------- */
 
-/**
- * Resolve the upstream origin.
- * Priority: AUTH_BASE → BACKEND_ORIGIN → FALLBACK
- * If we fall back, we add an X-Proxy-Fallback header so it’s visible in DevTools.
- */
-function resolveAuthBase(env: Env): { base: string; fellBack: boolean } {
-  const configured =
-    (env.AUTH_BASE || env.BACKEND_ORIGIN || "").trim().replace(/\/+$/, "");
-  if (configured) return { base: configured, fellBack: false };
-
-  // Hard fallback to keep Hub usable if variable is briefly missing.
-  const FALLBACK = "https://allstar-auth.ataymia.workers.dev";
-  return { base: FALLBACK, fellBack: true };
+function resolveBase(env: Env) {
+  // Hard fallback so /whoami & login keep working during misconfig
+  return (env as any)?.AUTH_BASE || "https://allstar-auth.ataymia.workers.dev";
 }
-
-/**
- * Low-level upstream fetch (no cookie handling).
- * Prefer using proxyWithAuth / proxyWithSession / forward.
- */
-export async function upstream(
-  env: Env,
-  path: string,
-  init: RequestInit = {}
-): Promise<Response> {
-  const { base } = resolveAuthBase(env);
+export async function upstream(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
+  const base = resolveBase(env);
   const url = path.startsWith("http") ? path : `${base}${path}`;
   return fetch(url, init);
 }
 
-/* ---------------- Session/Access checks (contract matches working zip) ---------------- */
+/* ---------------- Session/Access checks ---------------- */
 
-/** Lightweight check used to gate News etc. */
-export function ensureSession(
-  req: Request
-): { ok: true } | { ok: false; response: Response } {
+export function ensureSession(req: Request): { ok: true } | { ok: false; response: Response } {
   const access = getCookie(req, "access_token");
   const pageAT = getCookie(req, "allstar_at");
   if (access || pageAT) return { ok: true as const };
   return {
     ok: false as const,
-    response: json(
-      { error: "unauthorized" },
-      401,
-      { "cache-control": "no-store" }
-    ),
+    response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }),
   };
 }
 
-export function ensureAccess(req: Request) {
-  const token = getCookie(req, "access_token") || getCookie(req, "allstar_at");
-  if (!token) return { ok: false as const, response: json({ error: "unauthorized" }, 401) };
+export function ensureAccess(req: Request): { ok: true; token: string } | { ok: false; response: Response } {
+  // Accept either site cookie (allstar_at) or worker cookie (access_token)
+  const token = getCookie(req, "allstar_at") || getCookie(req, "access_token");
+  if (!token) {
+    return {
+      ok: false as const,
+      response: json({ error: "unauthorized" }, 401, { "cache-control": "no-store" }),
+    };
+  }
   return { ok: true as const, token };
 }
 
-/* ---------------- Proxies ---------------- */
+/* ---------------- Proxies (ALWAYS forward cookie + bearer) ---------------- */
 
-/**
- * Generic forwarder (keep original cookies/authorization).
- * Useful when you just want /api/* → Worker/* with minimal ceremony.
- */
-export async function forward(env: Env, req: Request, path: string) {
-  const { base, fellBack } = resolveAuthBase(env);
-  const url = new URL(req.url);
-  const target = `${base}${path}${url.search || ""}`;
+function buildAuthHeaders(req: Request, token: string, extra?: HeadersInit) {
+  const headers = new Headers(extra || {});
+  // Always send both auth forms; the Worker accepts either.
+  headers.set("cookie", `access_token=${token}`);
+  headers.set("authorization", `Bearer ${token}`);
 
-  const headers = new Headers();
-  // Pass browser cookies and/or Authorization header through to Worker
-  const cookie = req.headers.get("cookie");
-  if (cookie) headers.set("cookie", cookie);
-  const auth = req.headers.get("authorization") || req.headers.get("Authorization");
-  if (auth) headers.set("authorization", auth);
-
+  // Preserve JSON content-type if present on incoming request
   const ct = req.headers.get("content-type");
-  if (ct) headers.set("content-type", ct);
+  if (ct && !headers.has("content-type")) headers.set("content-type", ct);
 
-  const init: RequestInit = {
-    method: req.method,
-    headers,
-    redirect: "manual",
-  };
-  if (!["GET", "HEAD"].includes(req.method)) {
-    init.body = await req.clone().text();
-  }
+  // Preserve Accept if present (some callers require it)
+  const accept = req.headers.get("accept");
+  if (accept && !headers.has("accept")) headers.set("accept", accept);
 
-  const res = await fetch(target, init);
-  const outHeaders = new Headers(res.headers);
-
-  // mark fallback usage to help diagnose misconfig
-  if (fellBack) outHeaders.set("x-proxy-fallback", "true");
-
-  // Preserve Set-Cookie correctly
-  const final = new Response(res.body, { status: res.status, headers: outHeaders });
-  return final;
+  return headers;
 }
 
-/**
- * Proxy that asserts session and injects access_token as Cookie explicitly.
- * Use for routes that require a clean, explicit cookie.
- */
 export async function proxyWithAuth(
   req: Request,
   env: Env,
@@ -220,16 +171,9 @@ export async function proxyWithAuth(
   const access = ensureAccess(req);
   if (!access.ok) return access.response;
 
-  const { base, fellBack } = resolveAuthBase(env);
-  const url = new URL(req.url);
-  const target = `${base}${path}${url.search || ""}`;
+  const headers = buildAuthHeaders(req, access.token, init.headers);
 
-  const headers = new Headers(init.headers || {});
-  headers.set("cookie", `access_token=${access.token}`);
-  const ct = req.headers.get("content-type");
-  if (ct && !headers.has("content-type")) headers.set("content-type", ct);
-
-  const res = await fetch(target, {
+  const res = await upstream(env, path, {
     ...init,
     method: init.method || req.method,
     body: init.body ?? req.body,
@@ -240,32 +184,28 @@ export async function proxyWithAuth(
   const outHeaders = new Headers();
   const resCT = res.headers.get("content-type");
   if (resCT) outHeaders.set("content-type", resCT);
-  if (fellBack) outHeaders.set("x-proxy-fallback", "true");
   forwardSetCookies(res, outHeaders);
+
   return new Response(res.body, { status: res.status, headers: outHeaders });
 }
 
-/**
- * Proxy that just forwards the session (browser cookies) as-is.
- * Use for routes like /auth/login, /me where Worker already handles cookies.
- */
 export async function proxyWithSession(
   req: Request,
   env: Env,
   path: string,
   init: RequestInit = {}
 ) {
-  const { base, fellBack } = resolveAuthBase(env);
-  const url = new URL(req.url);
-  const target = `${base}${path}${url.search || ""}`;
-
   const headers = new Headers(init.headers || {});
   const cookie = req.headers.get("cookie");
   if (cookie && !headers.has("cookie")) headers.set("cookie", cookie);
+
   const ct = req.headers.get("content-type");
   if (ct && !headers.has("content-type")) headers.set("content-type", ct);
 
-  const res = await fetch(target, {
+  const accept = req.headers.get("accept");
+  if (accept && !headers.has("accept")) headers.set("accept", accept);
+
+  const res = await upstream(env, path, {
     ...init,
     method: init.method || req.method,
     body: init.body ?? req.body,
@@ -276,18 +216,15 @@ export async function proxyWithSession(
   const outHeaders = new Headers();
   const resCT = res.headers.get("content-type");
   if (resCT) outHeaders.set("content-type", resCT);
-  if (fellBack) outHeaders.set("x-proxy-fallback", "true");
   forwardSetCookies(res, outHeaders);
+
   return new Response(res.body, { status: res.status, headers: outHeaders });
 }
 
 /* ---------------- Helpers ---------------- */
+
 export async function safeJson<T = any>(res: Response): Promise<T | null> {
-  try {
-    return (await res.clone().json()) as T;
-  } catch {
-    return null;
-  }
+  try { return (await res.clone().json()) as T; } catch { return null; }
 }
 
 export function parseCookieHeader(h: string | null): Record<string, string> {
