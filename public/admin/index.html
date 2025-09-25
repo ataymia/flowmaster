@@ -138,13 +138,8 @@
       <select id="p-role">
         <option value="AGENT">AGENT</option>
         <option value="ADMIN">ADMIN</option>
+        <option value="SUPERADMIN">SUPERADMIN</option>
       </select>
-
-      <div style="height:8px"></div>
-      <label class="switch">
-        <input id="p-active" type="checkbox" />
-        <span>Active</span>
-      </label>
 
       <div style="height:8px"></div>
       <label class="switch">
@@ -178,7 +173,6 @@
       <select id="n-role">
         <option value="AGENT">AGENT</option>
         <option value="ADMIN">ADMIN</option>
-        <option value="SUPERADMIN">SUPERADMIN</option>
       </select>
 
       <label class="label">Temp password (optional)</label>
@@ -213,7 +207,7 @@
       history: document.getElementById('tab-history'),
       news: document.getElementById('tab-news'),
     };
-    function activate(tab){ tabs.forEach(b=>b.classList.toggle('active', b.dataset.tab===tab)); Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==tab)); history.replaceState(null,'',`#${tab}`);}
+    function activate(tab){ tabs.forEach(b=>b.classList.toggle('active', b.dataset.tab===tab)); Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==tab)); history.replaceState(null,'',`#${tab}`); }
     tabs.forEach(b=> b.addEventListener('click', ()=> activate(b.dataset.tab)));
     const initial = location.hash.replace('#',''); if (initial && panels[initial]) activate(initial);
 
@@ -275,7 +269,6 @@
       pTitle: document.getElementById('p-title'),
       pUsername: document.getElementById('p-username'),
       pRole: document.getElementById('p-role'),
-      pActive: document.getElementById('p-active'),
       pForce: document.getElementById('p-force'),
       pSave: document.getElementById('p-save'),
       pDelete: document.getElementById('p-delete'),
@@ -291,12 +284,7 @@
     };
     let users = [];
     let selected = null;
-
-    function strongTemp(len=12){
-      const a='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^*';
-      let s=''; for(let i=0;i<len;i++) s+=a[Math.floor(Math.random()*a.length)];
-      return s;
-    }
+    let USERS_BASE = ''; // set when a probe wins
 
     function adaptUsers(payload){
       const arr = Array.isArray(payload) ? payload
@@ -304,22 +292,40 @@
                 : Array.isArray(payload?.data) ? payload.data
                 : [];
       return arr.map(u => ({
-        id: u.id,                                   // keep id for PATCH/DELETE
+        id: u.id || u.user_id || u._id || null,
         username: u.username || u.email || '',
         role: (u.role || 'AGENT').toUpperCase(),
+        // Active isn't a column in your Worker; keep UI but ignore backend write.
         active: ('active' in u) ? !!u.active : true,
-        forcePwReset: !!(u.forcePwReset || u.must_change_password || u.mustChangePassword),
-        created_at: u.created_at || null,
+        forcePwReset: !!(u.forcePwReset || u.mustChangePassword || u.must_change_password),
       })).filter(u => u.username);
     }
 
     async function listUsers(query=''){
       const qs = query ? ('?query=' + encodeURIComponent(query)) : '';
-      const p = '/api/users' + qs;
-      const {data} = await apiJSON(p, { method:'GET' });
-      const adapted = adaptUsers(data);
-      U.endpoint.textContent = 'API Endpoint in use: ' + p;
-      return adapted;
+      const probes = [
+        '/api/users'+qs,
+        '/api/users?format=json'+(qs? '&'+qs.slice(1):''),
+        '/api/users?list=1'+(qs? '&'+qs.slice(1):''),
+        '/api/users/list'+qs,
+        '/api/admin/users'+qs,
+        '/api/admin/users/list'+qs,
+        '/api/list-users'+qs,
+        '/api/user/list'+qs,
+      ];
+      let lastErr;
+      for (const p of probes){
+        try{
+          const {data} = await apiJSON(p, { method:'GET' });
+          const adapted = adaptUsers(data);
+          if (Array.isArray(adapted)){
+            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/users'); // best-effort base
+            U.endpoint.textContent = 'API Endpoint in use: ' + p;
+            return adapted;
+          }
+        }catch(e){ lastErr = e; }
+      }
+      throw lastErr || new Error('users_list_failed');
     }
 
     function renderUsers(){
@@ -365,11 +371,10 @@
     }
 
     function openPanel(u){
-      selected = {...u};
+      selected = {...u}; // includes id
       U.pTitle.textContent = u.username;
       U.pUsername.value = u.username;
       U.pRole.value = u.role || 'AGENT';
-      U.pActive.checked = !!u.active;
       U.pForce.checked = !!u.forcePwReset;
       U.pResetMsg.textContent = '';
       U.panel.classList.add('open');
@@ -379,25 +384,38 @@
 
     async function doSave(){
       if (!selected) return;
-      try{
-        await apiJSON(`/api/users/${encodeURIComponent(selected.id)}`, {
-          method:'PATCH',
-          body: JSON.stringify({
-            role: U.pRole.value,              // AGENT|ADMIN|SUPERADMIN (Worker normalizes)
-            mustChangePassword: !!U.pForce.checked
-          })
-        });
-        closePanel(); await refresh();
-      }catch(e){
-        showErr('Save failed: Request failed');
+      if (!selected.id){ showErr('Cannot save: user id missing. Refresh.'); return; }
+      const updates = [];
+      // role change (Worker: SUPERADMIN required for role changes)
+      const newRole = U.pRole.value;
+      if (newRole && newRole !== selected.role) updates.push({ role: newRole });
+      // must change password
+      const mustChange = !!U.pForce.checked;
+      if (mustChange !== !!selected.forcePwReset) updates.push({ mustChangePassword: mustChange });
+
+      if (!updates.length){ closePanel(); return; }
+
+      // Send each field individually to keep semantics clear
+      for (const body of updates){
+        try{
+          await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(selected.id)}`, {
+            method:'PATCH',
+            body: JSON.stringify(body)
+          });
+        }catch(e){
+          showErr('Save failed: Request failed');
+          return;
+        }
       }
+      closePanel(); await refresh();
     }
     U.pSave.addEventListener('click', doSave);
 
     async function doDelete(u){
+      if (!u?.id){ showErr('Cannot delete: user id missing. Refresh.'); return; }
       if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
       try{
-        await apiJSON(`/api/users/${encodeURIComponent(u.id)}`, { method:'DELETE' });
+        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, { method:'DELETE' });
         closePanel(); await refresh();
       }catch{
         showErr('Delete failed: Request failed');
@@ -406,9 +424,22 @@
     U.pDelete.addEventListener('click', ()=> selected && doDelete(selected));
 
     async function doReset(u){
-      // Simple flow: flag mustChangePassword = true
+      if (!u?.id){ showErr('Cannot reset: user id missing. Refresh.'); return; }
+      // Preferred path if you later add a dedicated endpoint:
+      const tryEndpoints = [
+        `${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}/reset-password`,
+      ];
+      for (const p of tryEndpoints){
+        try{
+          const {data} = await apiJSON(p, { method:'POST' });
+          const temp = (data && (data.tempPassword || data.password)) || '';
+          U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
+          return;
+        }catch{}
+      }
+      // Fallback: just force a change on next login
       try{
-        await apiJSON(`/api/users/${encodeURIComponent(u.id)}`, {
+        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, {
           method:'PATCH',
           body: JSON.stringify({ mustChangePassword: true })
         });
@@ -419,31 +450,40 @@
     }
     U.pReset.addEventListener('click', ()=> selected && doReset(selected));
 
-    // Create user (posts {username,password,role})
+    // Create user
     function openNew(){ U.nUser.value=''; U.nRole.value='AGENT'; U.nTemp.value=''; U.newModal.classList.add('open'); }
     function closeNew(){ U.newModal.classList.remove('open'); }
     U.nClose.addEventListener('click', closeNew);
     U.nCreate.addEventListener('click', async ()=>{
       const username = U.nUser.value.trim().toLowerCase();
-      const role = U.nRole.value.trim().toUpperCase();
-      let password = U.nTemp.value.trim();
+      const roleUpper = U.nRole.value;
+      let pw = U.nTemp.value.trim();
       if (!username){ showErr('Username is required.'); return; }
-      if (!password) password = strongTemp(12);
-      try{
-        await apiJSON('/api/users', {
-          method:'POST',
-          body: JSON.stringify({ username, password, role })
-        });
-        closeNew();
-        await refresh();
-        alert(`User created.\nTemp password: ${password}`);
-        showErr('');
-      }catch(e){
-        const msg = (e?.data?.error==='username already exists')
-          ? 'That username is taken.'
-          : (e?.data?.error || 'Create failed: Request failed');
-        showErr(msg);
+      if (!pw){
+        // generate simple temp (Worker enforces hash + mustChangePassword)
+        pw = Math.random().toString(36).slice(2,6) + Math.random().toString(36).slice(2,6);
       }
+      const payloads = [
+        { username, role: roleUpper, password: pw },
+        { email: username, role: roleUpper, password: pw }, // if Worker maps email->username
+      ];
+      const paths = [
+        USERS_BASE || '/api/users',
+        '/api/admin/users',
+      ];
+      for (const p of paths){
+        for (const body of payloads){
+          try{
+            await apiJSON(p, { method:'POST', body: JSON.stringify(body) });
+            closeNew();
+            await refresh();
+            alert(`User created.\nTemp password: ${pw}\n(They'll be forced to change on first login.)`);
+            showErr('');
+            return;
+          }catch{}
+        }
+      }
+      showErr('Create failed: Request failed');
     });
 
     // Search/refresh wiring
@@ -477,20 +517,22 @@
           const t1=performance.now();
           report.push(`✓ ${label} (${Math.round(t1-t0)}ms)\n` + JSON.stringify(res,null,2).slice(0,2000));
         }catch(e){
-          const summary = e && (e.text || e.message || e.toString());
+          const summary = e && (e.debug || e.text || e.message || e.toString());
           report.push(`✗ ${label}\n` + String(summary).slice(0,2000));
         }
       }
       await probe('whoami', async()=> (await apiJSON('/api/whoami',{method:'GET'})));
       try{
         const arr = await listUsers(document.getElementById('u-search').value.trim());
-        report.push(`✓ users list\n` + JSON.stringify({ using: '/api/users' , count: arr.length }, null, 2));
+        report.push(`✓ users list\n` + JSON.stringify({ using: USERS_BASE || '(not set — path variant)' , count: arr.length }, null, 2));
       }catch(e){
         report.push('✗ users list\n' + (e.text || e.message || 'fail'));
       }
       const sampleUser = 'diag_'+Math.random().toString(36).slice(2,7);
-      report.push('Create payload shape used:\n' + JSON.stringify(
-        { username: sampleUser, password:'<temp>', role:'ADMIN' }, null, 2));
+      report.push('Create payload shapes (preview only):\n' + JSON.stringify([
+        { username: sampleUser, role:'ADMIN', password:'Temp1234' },
+        { email: sampleUser, role:'ADMIN', password:'Temp1234' },
+      ], null, 2));
       diagBody.innerHTML = report.map(r=> `<pre>${r}</pre>`).join('');
     });
     diagClose.addEventListener('click', ()=> diag.classList.remove('open'));
