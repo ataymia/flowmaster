@@ -1,18 +1,28 @@
-import { type Env, proxyWithAuth, json } from "./_utils";
+// functions/api/presence.ts
+import { type Env, proxyWithAuth } from "./_utils";
 
+/**
+ * GET /api/presence
+ *  - Admin: list all users with presence
+ *  - Agent: returns own presence (Worker enforces)
+ * GET /api/presence?user=<username>  - specific user
+ */
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  // Supports: /api/presence            (admin list)
-  //           /api/presence?user=alice (self or specific user)
   const url = new URL(request.url);
-  const q = url.search ? url.search : "";
+  const q = url.search || "";
   return proxyWithAuth(request, env, `/presence${q}`, { method: "GET" });
 };
 
+/**
+ * POST /api/presence
+ *  - Heartbeat or an optional {status, ts}
+ *  - We forward to /presence/ping on the Worker
+ */
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  // Optional: allow admin to set a user status heartbeat via the UI later
+  const body = await request.text();
   return proxyWithAuth(request, env, `/presence/ping`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: await request.text(),
+    body,
   });
 };
