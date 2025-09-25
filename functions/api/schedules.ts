@@ -1,11 +1,20 @@
 // functions/api/schedules.ts
-import { Env, proxyWithAuth } from "./_utils";
+import { proxyWithAuth, Env } from "./_utils";
 
-export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
-  if (request.method === "POST") {
-    return proxyWithAuth(request, env, "/schedules", { method:"POST", body: request.body });
-  }
+/**
+ *  GET  /api/schedules?user=:u&date=:d  -> GET  /schedules?user=:u&date=:d
+ *  POST /api/schedules                  -> POST /schedules (body {username,date,blocks})
+ */
+
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
-  const qs = url.search ? url.search : "";
-  return proxyWithAuth(request, env, `/schedules${qs}`, { method:"GET" });
+  const search = url.search || "";
+  return proxyWithAuth(request, env, `/schedules${search}`);
+};
+
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  return proxyWithAuth(request, env, "/schedules", {
+    method: "POST",
+    body: await request.clone().text(),
+  });
 };
