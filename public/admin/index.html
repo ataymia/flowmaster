@@ -230,25 +230,34 @@
     })();
 
     // ---------- Generic API (force JSON) ----------
-    function looksLikeHtml(t){ return /<\/?[a-z][\s\S]*>/i.test(String(t||'')).trim(); }
-    async function apiJSON(path, opts={}){
+    function looksLikeHtml(t){
+      const s = String(t || '');
+      return /<\/?[a-z][\s\S]*>/i.test(s);
+    }
+    async function apiJSON(path, opts = {}){
       const init = {
-        credentials:'include',
-        mode:'cors',
-        cache:'no-store',
+        credentials: 'include',
+        mode: 'cors',
+        cache: 'no-store',
         ...opts,
-        headers:{
-          Accept:'application/json',
+        headers: {
+          Accept: 'application/json',
           ...(opts.body ? {'content-type':'application/json'} : {}),
-          ...(opts.headers||{})
+          ...(opts.headers || {})
         }
       };
       const r = await fetch(path, init);
       const text = await r.text().catch(()=> '');
-      let data = {};
-      try{ data = text ? JSON.parse(text) : {}; }catch{}
-      if (!r.ok || looksLikeHtml(text)){ const e=new Error('Request failed'); e.status=r.status; e.text=text; e.data=data; throw e; }
-      return { status:r.status, data, text };
+      let data;
+      try { data = text ? JSON.parse(text) : {}; } catch { data = undefined; }
+      if (!r.ok || looksLikeHtml(text) || (text && data === undefined)) {
+        const e = new Error('Request failed');
+        e.status = r.status;
+        e.text = text;
+        e.data = data;
+        throw e;
+      }
+      return { status: r.status, data, text };
     }
 
     // ---------- Users tab ----------
@@ -515,7 +524,6 @@
       }catch(e){
         report.push('✗ users list\n' + (e.text || e.message || 'fail'));
       }
-      // Show create payload shapes (we won’t POST in diagnostics)
       const sampleUser = 'diag_'+Math.random().toString(36).slice(2,7);
       report.push('Create payload shapes (preview only):\n' + JSON.stringify([
         { username: sampleUser, role:'ADMIN' },
