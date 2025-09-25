@@ -299,23 +299,49 @@
     let users = [];
     let selected = null;
 
+    // Generic API helper:
     async function api(path, opts={}){
-      const r = await fetch(path, {
+      const init = {
         credentials:'include',
-        ...opts,
-        headers:{ 'content-type':'application/json', ...(opts.headers||{}) }
-      });
+        ...opts
+      };
+      // Only set content-type if sending a body
+      if (opts.body && !((opts.headers||{})['content-type'])) {
+        init.headers = { ...(opts.headers||{}), 'content-type':'application/json' };
+      }
+      const r = await fetch(path, init);
       const ct = r.headers.get('content-type') || '';
-      const body = ct.includes('json') ? await r.json().catch(()=> ({})) : await r.text();
+      const bodyText = await r.text().catch(()=> '');
+      const body = ct.includes('json') ? (JSON.parse(bodyText||'{}')) : bodyText;
       if (!r.ok){
-        const msg = typeof body==='string' ? body : (body?.error || body?.message || r.statusText || 'Request failed');
+        const msg = typeof body==='string' && body ? body : (body?.error || body?.message || r.statusText || 'Request failed');
         throw new Error(msg);
       }
       return body;
     }
 
+    // Try multiple endpoints for listing users
+    async function tryUserList(query=''){
+      const qs = query ? ('?query=' + encodeURIComponent(query)) : '';
+      const paths = [
+        '/api/users' + qs,
+        '/api/users/list' + qs,
+        '/api/admin/users' + qs,
+      ];
+      let lastErr;
+      for (const p of paths){
+        try{
+          return await api(p, { method:'GET' });
+        }catch(e){ lastErr = e; }
+      }
+      throw lastErr || new Error('Request failed');
+    }
+
     function adaptUsers(payload){
-      const arr = Array.isArray(payload) ? payload : (Array.isArray(payload?.users) ? payload.users : []);
+      const arr = Array.isArray(payload) ? payload
+                : Array.isArray(payload?.users) ? payload.users
+                : Array.isArray(payload?.data) ? payload.data
+                : [];
       return arr.map(u => ({
         username: u.username || u.email || '',
         role: (u.role || 'AGENT').toUpperCase(),
@@ -326,11 +352,13 @@
 
     async function fetchUsers(query=''){
       try{
-        const data = await api('/api/users' + (query? ('?query=' + encodeURIComponent(query)) : ''));
+        const data = await tryUserList(query);
         users = adaptUsers(data);
         renderUsers();
+        showErr('');
       }catch(e){
         showErr('Failed to load users: ' + e.message);
+        console.warn('users_list_error', e);
       }
     }
 
@@ -368,7 +396,6 @@
         `;
         // open row click
         row.addEventListener('click', (ev)=>{
-          // ignore clicks on the menu button (handled below)
           if (ev.target.closest('.menu')) return;
           openPanel(u);
         });
@@ -377,7 +404,6 @@
         const btn = row.querySelector('.menu-btn');
         btn.addEventListener('click', (e)=>{
           e.stopPropagation();
-          // close others
           document.querySelectorAll('.menu.open').forEach(m=> m.classList.remove('open'));
           menu.classList.toggle('open');
         });
@@ -445,13 +471,31 @@
     U.pDelete.addEventListener('click', ()=> selected && doDelete(selected.username));
 
     async function doReset(username){
+      // Try common reset endpoints; fall back to PATCH flag if unsupported
+      const paths = [
+        `/api/users/${encodeURIComponent(username)}/reset-password`,
+        `/api/admin/users/${encodeURIComponent(username)}/reset-password`,
+      ];
+      let lastErr;
+      for (const p of paths){
+        try{
+          const res = await api(p, { method:'POST' });
+          const temp = res?.tempPassword || res?.password || '';
+          U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
+          showErr('');
+          return;
+        }catch(e){ lastErr = e; }
+      }
+      // Fallback: set forcePwReset=true
       try{
-        const res = await api(`/api/users/${encodeURIComponent(username)}/reset-password`, { method: 'POST' }).catch(()=> ({}));
-        const temp = res?.tempPassword || res?.password || '';
-        U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
+        await api(`/api/users/${encodeURIComponent(username)}`, {
+          method:'PATCH',
+          body: JSON.stringify({ forcePwReset:true })
+        });
+        U.pResetMsg.textContent = 'Flagged to change password on next login.';
         showErr('');
       }catch(e){
-        showErr('Reset password failed: ' + e.message);
+        showErr('Reset password failed: ' + (lastErr?.message || e.message));
       }
     }
     U.pReset.addEventListener('click', ()=> selected && doReset(selected.username));
@@ -472,7 +516,6 @@
         showErr('');
         closeNew();
         await fetchUsers(U.search.value.trim());
-        // If backend generated a password, surface it.
         const generated = res?.tempPassword || res?.password;
         if (generated){ alert(`User created.\nTemp password: ${generated}`); }
       }catch(e){
@@ -481,12 +524,10 @@
     });
 
     // Wiring
-    U.uTimer && clearInterval(U.uTimer);
     U.refreshBtn.addEventListener('click', ()=> fetchUsers(U.search.value.trim()));
     U.newBtn.addEventListener('click', openNew);
     U.search.addEventListener('input', (e)=>{
       const q = e.target.value.trim();
-      // debounce-lite
       clearTimeout(U._deb);
       U._deb = setTimeout(()=> fetchUsers(q), 250);
     });
