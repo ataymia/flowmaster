@@ -10,6 +10,7 @@
       --bg:#ffffff; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb;
       --chip:#f8fafc; --chip-ink:#0f172a; --shadow:0 10px 25px rgba(17,24,39,.08);
       --radius:18px;
+      --good:#16a34a; --warn:#f59e0b; --bad:#ef4444;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -25,6 +26,7 @@
     .btn:hover{background:#fafafa}
     .btn-danger{border-color:#fecaca;color:#b91c1c;background:#fff}
     .btn-danger:hover{background:#fff5f5}
+    .btn-brand{background:var(--brand);border-color:transparent;color:#fff}
     .main{max-width:1200px;margin:0 auto;padding:20px;flex:1;width:100%}
     .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
     .tab{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
@@ -36,6 +38,30 @@
     .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
     .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
     .hidden{display:none!important}
+
+    /* Users tab UI */
+    .row{display:flex;align-items:center;gap:10px}
+    .row-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+    input,select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
+    .table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .tr{display:grid;grid-template-columns:1.3fr .8fr .6fr .6fr .3fr;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
+    .th{font-weight:700;color:#334155}
+    .tag{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:#f8fafc}
+    .tag.admin{background:#eef2ff;color:#3730a3;border-color:#e0e7ff}
+    .menu{position:relative}
+    .menu-btn{border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:#fff;cursor:pointer}
+    .menu-pop{position:absolute;right:0;top:36px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);min-width:190px;display:none;overflow:hidden}
+    .menu.open .menu-pop{display:block}
+    .menu-item{padding:10px 12px;cursor:pointer}
+    .menu-item:hover{background:#f8fafc}
+    .panel{position:fixed;top:0;right:0;bottom:0;width:420px;max-width:100%;background:#fff;border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .2s ease;z-index:40;display:flex;flex-direction:column}
+    .panel.open{transform:translateX(0)}
+    .panel-hd{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+    .panel-bd{padding:16px;flex:1;overflow:auto}
+    .panel-ft{padding:16px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+    .label{display:block;margin:8px 0 4px 0;font-size:12px;color:#334155}
+    .switch{display:inline-flex;align-items:center;gap:8px}
+    .switch input{width:18px;height:18px}
   </style>
 </head>
 <body>
@@ -46,7 +72,7 @@
       <div class="header-inner">
         <div class="hl">
           <img class="logoimg" src="/allstar-logo.png" alt="Allstar" onerror="this.style.display='none'">
-        <div class="brand">Allstar Admin</div>
+          <div class="brand">Allstar Admin</div>
           <span class="pill">Admin only</span>
         </div>
         <div class="hl">
@@ -68,9 +94,18 @@
 
       <!-- Users -->
       <section class="card" id="tab-users">
-        <h2>Users</h2>
-        <p class="muted">Create/edit/delete users, reset passwords, and toggle “must change password”.</p>
-        <div class="muted">Coming in Step 2…</div>
+        <div class="row" style="justify-content:space-between">
+          <h2>Users</h2>
+          <div class="row">
+            <input id="u-search" placeholder="Search users…" />
+            <button class="btn" id="u-refresh">Refresh</button>
+            <button class="btn btn-brand" id="u-new">New User</button>
+          </div>
+        </div>
+        <div style="height:10px"></div>
+
+        <div id="u-empty" class="muted" style="display:none">No users found.</div>
+        <div id="u-list"></div>
       </section>
 
       <!-- Live Board -->
@@ -105,6 +140,70 @@
     <div class="footer">© Allstar — Admin Tools</div>
   </div>
 
+  <!-- Slide-over: User detail -->
+  <div id="panel" class="panel" aria-hidden="true">
+    <div class="panel-hd">
+      <div id="p-title" style="font-weight:700">User</div>
+      <button class="btn" id="p-close">Close</button>
+    </div>
+    <div class="panel-bd">
+      <label class="label">Username</label>
+      <input id="p-username" disabled />
+
+      <label class="label">Role</label>
+      <select id="p-role">
+        <option value="AGENT">AGENT</option>
+        <option value="ADMIN">ADMIN</option>
+      </select>
+
+      <div style="height:8px"></div>
+      <label class="switch">
+        <input id="p-active" type="checkbox" />
+        <span>Active</span>
+      </label>
+
+      <div style="height:8px"></div>
+      <label class="switch">
+        <input id="p-force" type="checkbox" />
+        <span>Must change password on next login</span>
+      </label>
+
+      <div style="height:14px"></div>
+      <div class="row">
+        <button class="btn" id="p-reset">Reset Password</button>
+        <div id="p-reset-msg" class="muted" style="font-size:12px"></div>
+      </div>
+    </div>
+    <div class="panel-ft">
+      <button class="btn btn-danger" id="p-delete">Delete</button>
+      <button class="btn btn-brand" id="p-save">Save</button>
+    </div>
+  </div>
+
+  <!-- Modal: Create user -->
+  <div id="new-modal" class="panel" aria-hidden="true" style="width:460px">
+    <div class="panel-hd">
+      <div style="font-weight:700">Create User</div>
+      <button class="btn" id="n-close">Close</button>
+    </div>
+    <div class="panel-bd">
+      <label class="label">Username</label>
+      <input id="n-username" placeholder="jane.doe" />
+
+      <label class="label">Role</label>
+      <select id="n-role">
+        <option value="AGENT">AGENT</option>
+        <option value="ADMIN">ADMIN</option>
+      </select>
+
+      <label class="label">Temp password (optional)</label>
+      <input id="n-temp" type="text" placeholder="leave blank to auto-generate" />
+    </div>
+    <div class="panel-ft">
+      <button class="btn btn-brand" id="n-create">Create</button>
+    </div>
+  </div>
+
   <script>
     // ========== Error banner ==========
     const errEl = document.getElementById('errbar');
@@ -131,64 +230,270 @@
     const initial = location.hash.replace('#','');
     if (initial && tabPanels[initial]) activate(initial);
 
-    // ========== Robust auth gate ==========
+    // ========== Auth gate ==========
     const meEl = document.getElementById('me');
-
     function normalizeMe(raw){
       const me = raw?.me ?? raw ?? {};
       const username = me.username || me.email || 'user';
       const role = String(me.role || 'AGENT').toUpperCase();
       return { username, role };
     }
-
     function isAdminRole(role){
       const r = String(role||'').toUpperCase();
       return r === 'ADMIN' || r === 'SUPERADMIN';
     }
-
     async function fetchWhoamiWithRetry(retries=2){
       let lastErr;
       for (let i=0;i<=retries;i++){
         try{
-          const r = await fetch('/api/whoami', {
-            credentials: 'include',
-            cache: 'no-store',
-            mode: 'cors'
-          });
+          const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store', mode:'cors' });
           if (!r.ok) throw new Error(`status_${r.status}`);
-          // Some backends send 204/empty; handle that gracefully.
-          const ct = r.headers.get('content-type') || '';
+          const ct = r.headers.get('content-type')||'';
           const data = ct.includes('json') ? (await r.json()) : {};
           return normalizeMe(data);
-        }catch(e){
-          lastErr = e;
-          await new Promise(res=>setTimeout(res, 250)); // brief backoff
-        }
+        }catch(e){ lastErr = e; await new Promise(res=>setTimeout(res,250)); }
       }
       throw lastErr || new Error('whoami_failed');
     }
-
     (async function gate(){
       try{
         const me = await fetchWhoamiWithRetry(2);
         if (!isAdminRole(me.role)){
-          // Non-admin: stay here and show a clear message (no surprise redirect).
           showErr('Access denied: admin role required.');
           meEl.textContent = `${me.username} · ${me.role}`;
-          // Optional: uncomment to hard-redirect
-          // location.replace('/');
           return;
         }
         meEl.textContent = `${me.username} · ${me.role}`;
-        showErr(''); // clear any prior errors
+        showErr('');
       }catch(e){
-        // Don’t auto-redirect on transient failures; show banner so you can diagnose.
         showErr('Unable to verify session (network/cookies/CORS). Please refresh or sign in again.');
         console.warn('whoami_error', e);
-        // Optional: after a grace period, redirect if you prefer:
-        // setTimeout(()=> location.replace('/'), 2000);
       }
     })();
+
+    // ========== Users Tab ==========
+    const U = {
+      listEl: document.getElementById('u-list'),
+      emptyEl: document.getElementById('u-empty'),
+      search: document.getElementById('u-search'),
+      refreshBtn: document.getElementById('u-refresh'),
+      newBtn: document.getElementById('u-new'),
+      panel: document.getElementById('panel'),
+      pClose: document.getElementById('p-close'),
+      pTitle: document.getElementById('p-title'),
+      pUsername: document.getElementById('p-username'),
+      pRole: document.getElementById('p-role'),
+      pActive: document.getElementById('p-active'),
+      pForce: document.getElementById('p-force'),
+      pSave: document.getElementById('p-save'),
+      pDelete: document.getElementById('p-delete'),
+      pReset: document.getElementById('p-reset'),
+      pResetMsg: document.getElementById('p-reset-msg'),
+      newModal: document.getElementById('new-modal'),
+      nClose: document.getElementById('n-close'),
+      nUser: document.getElementById('n-username'),
+      nRole: document.getElementById('n-role'),
+      nTemp: document.getElementById('n-temp'),
+      nCreate: document.getElementById('n-create'),
+    };
+    let users = [];
+    let selected = null;
+
+    async function api(path, opts={}){
+      const r = await fetch(path, {
+        credentials:'include',
+        ...opts,
+        headers:{ 'content-type':'application/json', ...(opts.headers||{}) }
+      });
+      const ct = r.headers.get('content-type') || '';
+      const body = ct.includes('json') ? await r.json().catch(()=> ({})) : await r.text();
+      if (!r.ok){
+        const msg = typeof body==='string' ? body : (body?.error || body?.message || r.statusText || 'Request failed');
+        throw new Error(msg);
+      }
+      return body;
+    }
+
+    function adaptUsers(payload){
+      const arr = Array.isArray(payload) ? payload : (Array.isArray(payload?.users) ? payload.users : []);
+      return arr.map(u => ({
+        username: u.username || u.email || '',
+        role: (u.role || 'AGENT').toUpperCase(),
+        active: ('active' in u) ? !!u.active : true,
+        forcePwReset: !!(u.forcePwReset || u.mustChangePassword),
+      })).filter(u => u.username);
+    }
+
+    async function fetchUsers(query=''){
+      try{
+        const data = await api('/api/users' + (query? ('?query=' + encodeURIComponent(query)) : ''));
+        users = adaptUsers(data);
+        renderUsers();
+      }catch(e){
+        showErr('Failed to load users: ' + e.message);
+      }
+    }
+
+    function renderUsers(){
+      U.listEl.innerHTML = '';
+      if (!users.length){ U.emptyEl.style.display='block'; return; }
+      U.emptyEl.style.display='none';
+      // Header row
+      const head = document.createElement('div');
+      head.className = 'tr th';
+      head.innerHTML = `
+        <div>Username</div>
+        <div>Role</div>
+        <div>Active</div>
+        <div>Must reset</div>
+        <div></div>`;
+      U.listEl.appendChild(head);
+
+      users.forEach(u => {
+        const row = document.createElement('div');
+        row.className = 'tr';
+        row.innerHTML = `
+          <div><strong>${u.username}</strong></div>
+          <div><span class="tag ${u.role==='ADMIN'?'admin':''}">${u.role}</span></div>
+          <div>${u.active?'<span class="tag">Yes</span>':'<span class="tag">No</span>'}</div>
+          <div>${u.forcePwReset?'<span class="tag">Yes</span>':'<span class="tag">No</span>'}</div>
+          <div class="menu">
+            <button class="menu-btn">⋯</button>
+            <div class="menu-pop">
+              <div class="menu-item" data-act="open">Open</div>
+              <div class="menu-item" data-act="reset">Reset password</div>
+              <div class="menu-item" data-act="delete">Delete</div>
+            </div>
+          </div>
+        `;
+        // open row click
+        row.addEventListener('click', (ev)=>{
+          // ignore clicks on the menu button (handled below)
+          if (ev.target.closest('.menu')) return;
+          openPanel(u);
+        });
+        // menu
+        const menu = row.querySelector('.menu');
+        const btn = row.querySelector('.menu-btn');
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          // close others
+          document.querySelectorAll('.menu.open').forEach(m=> m.classList.remove('open'));
+          menu.classList.toggle('open');
+        });
+        row.querySelectorAll('.menu-item').forEach(mi=>{
+          mi.addEventListener('click', async ()=>{
+            menu.classList.remove('open');
+            const act = mi.dataset.act;
+            if (act==='open'){ openPanel(u); }
+            else if (act==='reset'){ await doReset(u.username); }
+            else if (act==='delete'){ await doDelete(u.username); }
+          });
+        });
+        document.addEventListener('click', ()=> menu.classList.remove('open'));
+        U.listEl.appendChild(row);
+      });
+    }
+
+    function openPanel(u){
+      selected = {...u};
+      U.pTitle.textContent = u.username;
+      U.pUsername.value = u.username;
+      U.pRole.value = u.role || 'AGENT';
+      U.pActive.checked = !!u.active;
+      U.pForce.checked = !!u.forcePwReset;
+      U.pResetMsg.textContent = '';
+      U.panel.classList.add('open');
+    }
+    function closePanel(){ U.panel.classList.remove('open'); selected=null; }
+    U.pClose.addEventListener('click', closePanel);
+
+    // Actions
+    async function doSave(){
+      if (!selected) return;
+      const username = U.pUsername.value.trim();
+      const payload = {
+        role: U.pRole.value,
+        active: !!U.pActive.checked,
+        forcePwReset: !!U.pForce.checked,
+      };
+      try{
+        await api(`/api/users/${encodeURIComponent(username)}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload)
+        });
+        showErr('');
+        closePanel();
+        await fetchUsers(U.search.value.trim());
+      }catch(e){
+        showErr('Save failed: ' + e.message);
+      }
+    }
+    U.pSave.addEventListener('click', doSave);
+
+    async function doDelete(username){
+      if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+      try{
+        await api(`/api/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+        showErr('');
+        closePanel();
+        await fetchUsers(U.search.value.trim());
+      }catch(e){
+        showErr('Delete failed: ' + e.message);
+      }
+    }
+    U.pDelete.addEventListener('click', ()=> selected && doDelete(selected.username));
+
+    async function doReset(username){
+      try{
+        const res = await api(`/api/users/${encodeURIComponent(username)}/reset-password`, { method: 'POST' }).catch(()=> ({}));
+        const temp = res?.tempPassword || res?.password || '';
+        U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
+        showErr('');
+      }catch(e){
+        showErr('Reset password failed: ' + e.message);
+      }
+    }
+    U.pReset.addEventListener('click', ()=> selected && doReset(selected.username));
+
+    // New user modal
+    function openNew(){ U.nUser.value=''; U.nRole.value='AGENT'; U.nTemp.value=''; U.newModal.classList.add('open'); }
+    function closeNew(){ U.newModal.classList.remove('open'); }
+    U.nClose.addEventListener('click', closeNew);
+    U.nCreate.addEventListener('click', async ()=>{
+      const username = U.nUser.value.trim();
+      const role = U.nRole.value;
+      const tempPassword = U.nTemp.value.trim();
+      if (!username){ showErr('Username is required.'); return; }
+      try{
+        const payload = { username, role };
+        if (tempPassword) payload.tempPassword = tempPassword;
+        const res = await api('/api/users', { method: 'POST', body: JSON.stringify(payload) });
+        showErr('');
+        closeNew();
+        await fetchUsers(U.search.value.trim());
+        // If backend generated a password, surface it.
+        const generated = res?.tempPassword || res?.password;
+        if (generated){ alert(`User created.\nTemp password: ${generated}`); }
+      }catch(e){
+        showErr('Create failed: ' + e.message);
+      }
+    });
+
+    // Wiring
+    U.uTimer && clearInterval(U.uTimer);
+    U.refreshBtn.addEventListener('click', ()=> fetchUsers(U.search.value.trim()));
+    U.newBtn.addEventListener('click', openNew);
+    U.search.addEventListener('input', (e)=>{
+      const q = e.target.value.trim();
+      // debounce-lite
+      clearTimeout(U._deb);
+      U._deb = setTimeout(()=> fetchUsers(q), 250);
+    });
+
+    // Initial load (users tab only)
+    if (!initial || initial==='users') fetchUsers('');
+
   </script>
 </body>
 </html>
