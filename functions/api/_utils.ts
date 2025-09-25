@@ -160,20 +160,9 @@ export function ensureSession(
   };
 }
 
-/** Stronger check with token extraction for /users and proxied routes. */
-export function ensureAccess(
-  req: Request
-): { ok: true; token: string } | { ok: false; response: Response } {
-  const token = getCookie(req, "allstar_at") || getCookie(req, "access_token");
-  if (!token)
-    return {
-      ok: false as const,
-      response: json(
-        { error: "unauthorized" },
-        401,
-        { "cache-control": "no-store" }
-      ),
-    };
+export function ensureAccess(req: Request) {
+  const token = getCookie(req, "access_token") || getCookie(req, "allstar_at");
+  if (!token) return { ok: false as const, response: json({ error: "unauthorized" }, 401) };
   return { ok: true as const, token };
 }
 
