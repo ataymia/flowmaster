@@ -1,49 +1,32 @@
 // functions/api/users.ts
-import {
-  type Env,
-  proxyWithAuth,
-} from "./_utils";
-
-/**
- * Helper to map /api/... to backend /...
- *   /api/users            -> /users
- *   /api/users?role=AGENT -> /users?role=AGENT
- *   /api/users/123        -> /users/123
- */
-function backendPath(req: Request) {
-  const u = new URL(req.url);
-  const suffix = u.pathname.replace(/^\/api/, "");
-  return suffix + (u.search || "");
-}
+import { type Env, proxyWithAuth, safeJson, json } from "./_utils";
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  // List users (admin/superadmin only)
-  return proxyWithAuth(request, env, backendPath(request), {
-    method: "GET",
-  });
+  // Pass through to Worker /users (admins/SAs only, enforced by Worker)
+  return proxyWithAuth(request, env, "/users", { method: "GET" });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  // Create user; ensure JSON content-type even if caller forgot it
-  const raw = await request.clone().text();
-  return proxyWithAuth(request, env, backendPath(request), {
+  // Accept a few shapes and normalize to Worker shape
+  const incoming = await safeJson(request) as any;
+  if (!incoming) return json({ error: "bad_json" }, 400);
+
+  const username =
+    (incoming.username ?? incoming.email ?? "").toString().toLowerCase().trim();
+  const role = (incoming.role ?? "AGENT").toString().toUpperCase().trim();
+  const password =
+    (incoming.password ??
+      incoming.tempPassword ??
+      "").toString();
+
+  if (!username) return json({ error: "username_required" }, 400);
+  if (!password) return json({ error: "password_required" }, 400);
+
+  const body = JSON.stringify({ username, role, password });
+
+  return proxyWithAuth(request, env, "/users", {
     method: "POST",
-    body: raw,
     headers: { "content-type": "application/json" },
-  });
-};
-
-export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
-  const raw = await request.clone().text();
-  return proxyWithAuth(request, env, backendPath(request), {
-    method: "PATCH",
-    body: raw,
-    headers: { "content-type": "application/json" },
-  });
-};
-
-export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
-  return proxyWithAuth(request, env, backendPath(request), {
-    method: "DELETE",
+    body,
   });
 };
