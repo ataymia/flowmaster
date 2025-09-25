@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Allstar Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --brand:#e11d48; --brand-ink:#fff;
+      --bg:#ffffff; --ink:#0f172a; --muted:#6b7280; --line:#e5e7eb;
+      --chip:#f8fafc; --chip-ink:#0f172a; --shadow:0 10px 25px rgba(17,24,39,.08);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
+    .page{min-height:100vh;display:flex;flex-direction:column}
+    .header{position:sticky;top:0;z-index:10;backdrop-filter:blur(6px);background:rgba(255,255,255,.9);border-bottom:1px solid var(--line)}
+    .header-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px}
+    .hl{display:flex;align-items:center;gap:10px}
+    .logoimg{height:28px;width:auto;border-radius:8px}
+    .brand{font-weight:900;letter-spacing:.3px;color:var(--brand);font-size:18px}
+    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#fee2e2;color:#b91c1c;font-size:12px;border:1px solid #fecaca}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer;color:inherit;text-decoration:none;box-shadow:var(--shadow)}
+    .btn:hover{background:#fafafa}
+    .btn-danger{border-color:#fecaca;color:#b91c1c;background:#fff}
+    .btn-danger:hover{background:#fff5f5}
+    .main{max-width:1200px;margin:0 auto;padding:20px;flex:1;width:100%}
+    .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+    .tab{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+    .tab.active{background:var(--brand);color:#fff;border-color:transparent}
+    .grid{display:grid;gap:20px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+    .card h2{margin:0 0 8px 0}
+    .muted{color:var(--muted)}
+    .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
+    .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
+    .hidden{display:none!important}
+  </style>
+</head>
+<body>
+  <div id="errbar" class="errbar"></div>
+
+  <div class="page">
+    <div class="header">
+      <div class="header-inner">
+        <div class="hl">
+          <img class="logoimg" src="/allstar-logo.png" alt="Allstar" onerror="this.style.display='none'">
+          <div class="brand">Allstar Admin</div>
+          <span class="pill">Admin only</span>
+        </div>
+        <div class="hl">
+          <span id="me" class="muted">Checking session…</span>
+          <a class="btn" href="/hub.html">Back to Hub</a>
+          <a class="btn btn-danger" href="/api/logout">Sign out</a>
+        </div>
+      </div>
+    </div>
+
+    <main class="main">
+      <nav class="tabs">
+        <button class="tab active" data-tab="users">Users</button>
+        <button class="tab" data-tab="live">Live Board</button>
+        <button class="tab" data-tab="schedules">Schedules</button>
+        <button class="tab" data-tab="history">History</button>
+        <button class="tab" data-tab="news">News</button>
+      </nav>
+
+      <!-- Users -->
+      <section class="card" id="tab-users">
+        <h2>Users</h2>
+        <p class="muted">Create/edit/delete users, reset passwords, and toggle “must change password”.</p>
+        <div class="muted">Coming in Step 2…</div>
+      </section>
+
+      <!-- Live Board -->
+      <section class="card hidden" id="tab-live">
+        <h2>Live Board</h2>
+        <p class="muted">See all agents’ current status, since timer, today’s adherence %, and next block.</p>
+        <div class="muted">Coming in Step 3…</div>
+      </section>
+
+      <!-- Schedules -->
+      <section class="card hidden" id="tab-schedules">
+        <h2>Schedules</h2>
+        <p class="muted">Templates + assigner, plus existing single-day editor.</p>
+        <div class="muted">Coming in Step 4…</div>
+      </section>
+
+      <!-- History -->
+      <section class="card hidden" id="tab-history">
+        <h2>Adherence History</h2>
+        <p class="muted">Daily rollups, filters, drill-in, and exports.</p>
+        <div class="muted">Coming in Step 6…</div>
+      </section>
+
+      <!-- News -->
+      <section class="card hidden" id="tab-news">
+        <h2>News</h2>
+        <p class="muted">Publish updates to Notion (or open Notion if env vars aren’t set).</p>
+        <div class="muted">Coming in Step 7…</div>
+      </section>
+    </main>
+
+    <div class="footer">© Allstar — Admin Tools</div>
+  </div>
+
+  <script>
+    // ---------- Error banner ----------
+    const errEl = document.getElementById('errbar');
+    function showErr(msg){
+      errEl.textContent = String(msg||'');
+      errEl.style.display = msg ? 'block' : 'none';
+    }
+
+    // ---------- Tabs ----------
+    const tabButtons = Array.from(document.querySelectorAll('.tab'));
+    const tabPanels = {
+      users: document.getElementById('tab-users'),
+      live: document.getElementById('tab-live'),
+      schedules: document.getElementById('tab-schedules'),
+      history: document.getElementById('tab-history'),
+      news: document.getElementById('tab-news'),
+    };
+    function activate(tab){
+      tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      Object.entries(tabPanels).forEach(([k,el]) => el.classList.toggle('hidden', k !== tab));
+      history.replaceState(null, '', `#${tab}`);
+    }
+    tabButtons.forEach(b => b.addEventListener('click', ()=> activate(b.dataset.tab)));
+    // Hash routing on load
+    const initial = location.hash.replace('#','');
+    if (initial && tabPanels[initial]) activate(initial);
+
+    // ---------- Auth gate ----------
+    const meEl = document.getElementById('me');
+    async function whoami(){
+      try{
+        const r = await fetch('/api/whoami', { credentials:'include', cache:'no-store' });
+        if (!r.ok) throw new Error('not_authed');
+        const raw = await r.json().catch(()=> ({}));
+        const me = raw.me ? raw.me : raw;
+        const role = (me.role || 'AGENT').toUpperCase();
+        if (role !== 'ADMIN'){
+          // non-admin → bounce to Hub
+          location.replace('/');
+          return;
+        }
+        meEl.textContent = `${me.username || 'admin'} · ${role}`;
+      }catch(e){
+        showErr('You are not signed in or do not have admin access.');
+        setTimeout(()=> location.replace('/'), 1000);
+      }
+    }
+    whoami();
+  </script>
+</body>
+</html>
