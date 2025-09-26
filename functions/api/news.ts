@@ -1,5 +1,5 @@
 // functions/api/news.ts
-import { Env as BaseEnv, json, ensureSession } from "../_utils";
+import { Env as BaseEnv, json, ensureSession } from "./_utils";
 
 const NOTION_VERSION = "2022-06-28";
 
