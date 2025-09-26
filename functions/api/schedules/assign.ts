@@ -1,6 +1,3 @@
-// POST /api/schedules/assign
-import { type Env, proxyWithAuth } from "../_utils";
-
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) =>
-  proxyWithAuth(request, env, "/schedules/assign", { method: "POST", body: request.body });
- 
+import { type Env, proxyWithSession } from "./_utils";
+export const onRequestPost: PagesFunction<Env> = ({ request, env }) =>
+  proxyWithSession(request, env, "/schedules/assign", { method: "POST", body: request.body });
