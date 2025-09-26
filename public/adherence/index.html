@@ -20,8 +20,7 @@
     .hl{display:flex;align-items:center;gap:10px}
     .logoimg{height:28px;width:auto;border-radius:8px}
     .brand{font-weight:900;letter-spacing:.3px;color:var(--brand);font-size:18px}
-    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#f8fafc;color:#334155}
-    .pill .dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#fee2e2;color:#b91c1c;font-size:12px;border:1px solid #fecaca}
     .main{max-width:1200px;margin:0 auto;padding:20px;flex:1;width:100%}
     .grid{display:grid;gap:20px}
     @media (min-width:1000px){ .grid-2{grid-template-columns:2fr 1fr} }
@@ -44,17 +43,14 @@
     input,select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
     .meter{width:100%;height:10px;background:#f1f5f9;border-radius:999px;overflow:hidden;border:1px solid var(--line)}
     .meter > div{height:100%}
-
     .bar-wrap{flex:1}
     .bar{position:relative;border:1px solid var(--line);background:#fff;border-radius:10px;overflow:hidden;height:28px}
     .bar .seg{position:absolute;top:0;bottom:0;opacity:.55}
     .bar .seg.actual{opacity:.7}
     .bar .now{position:absolute;top:0;bottom:0;width:2px;background:#0f172a}
-
     .ticks{position:relative;height:18px;margin-top:8px}
     .tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
     .tick-label{position:absolute;top:18px;transform:translateX(-50%);font-size:10px;color:#64748b}
-
     .legend{display:flex;flex-wrap:wrap;gap:10px}
     .chip{display:flex;align-items:center;gap:6px;font-size:12px}
     .dot{width:10px;height:10px;border-radius:999px}
@@ -64,9 +60,9 @@
     .status-btn{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #fecaca;border-radius:12px;background:#fff}
     .status-btn:hover{background:#fff5f5}
     .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
+    .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
     .exports{display:flex;flex-wrap:wrap;gap:8px}
     .hidden{display:none!important}
-    .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
   </style>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -78,6 +74,9 @@
 
   <script type="text/babel">
     const {useEffect,useMemo,useState,useRef} = React;
+
+    /*********** Feature flag (keep code, hide UI) ***********/
+    const ENABLE_SCHED_EDITOR = false; // ← flip to true when the dedicated Scheduling tool is ready
 
     /*********** Config ***********/
     const STATUS_DEFS = {
@@ -121,32 +120,16 @@
       if (!r.ok) { const e = new Error("api_error"); e.status=r.status; e.body=body; throw e; }
       return body;
     }
-    const whoami       = ()=> api("/api/whoami").catch(()=>({authed:false}));
-    const getSchedule  = (user,date)=> api(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`);
+    const whoami = ()=> api("/api/whoami").catch(()=>({authed:false}));
+    const getSchedule = (user,date)=> api(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`);
     const saveSchedule = (user,date,blocks)=> api(`/api/schedules`, {method:"POST", body: JSON.stringify({ user, date, blocks })});
     async function listEvents(user, fromMs, toMs){
-      try{
-        return await api(`/api/events?user=${encodeURIComponent(user)}&from=${fromMs}&to=${toMs}`);
-      }catch(e){
-        return api(`/api/presence?user=${encodeURIComponent(user)}&from=${fromMs}&to=${toMs}`);
-      }
+      try{ return await api(`/api/events?user=${encodeURIComponent(user)}&from=${fromMs}&to=${toMs}`); }
+      catch(e){ return api(`/api/presence?user=${encodeURIComponent(user)}&from=${fromMs}&to=${toMs}`); }
     }
     async function pushEvent(user, status, tsMs){
-      try{
-        return await api(`/api/events`, {method:"POST", body: JSON.stringify({ user, status, ts: tsMs })});
-      }catch(e){
-        return api(`/api/presence`, {method:"POST", body: JSON.stringify({ user, status, ts: tsMs })});
-      }
-    }
-    // NEW: heartbeat (no status needed; Worker will just bump last_seen)
-    async function pingPresence(status=null, ts=null){
-      const body = status ? { status, ...(ts?{ts}:{}) } : {};
-      try {
-        await api(`/api/presence/ping`, { method:"POST", body: JSON.stringify(body) });
-        return { ok:true };
-      } catch (e) {
-        return { ok:false, err:e };
-      }
+      try{ return await api(`/api/events`, {method:"POST", body: JSON.stringify({ user, status, ts: tsMs })}); }
+      catch(e){ return api(`/api/presence`, {method:"POST", body: JSON.stringify({ user, status, ts: tsMs })}); }
     }
 
     /*********** Domain ***********/
@@ -173,7 +156,7 @@
       let idx=0;
       for(let m=startMin;m<endMin;m++){
         const ms = minuteToMs(m,dateStr);
-        while (idx+1<ev.length && ev[idx+1].ts<=ms){ idx++; cur=ev[idx].status; }
+        while(idx+1<ev.length && ev[idx+1].ts<=ms){ idx++; cur=ev[idx].status; }
         minuteActual[m-startMin]=cur;
       }
       let inMin=0, outMin=0;
@@ -212,7 +195,10 @@
     function assembleActualBlocksPastOnly(events, dayStartMs, dayEndMs, nowMs){
       const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
       const until = Math.min(dayEndMs, nowMs);
-      let cur = statusAtTs(events, dayStartMs) || 'offline';
+      let cur = (function(){ // status at start of day, default offline
+        const prior = ev.filter(e=>e.ts<=dayStartMs).slice(-1)[0];
+        return prior ? (prior.status||'offline') : 'offline';
+      })();
       let curStart = dayStartMs;
       const out=[];
       for (let i=0;i<ev.length;i++){
@@ -225,9 +211,7 @@
         }
         cur = e.status || 'offline';
       }
-      if (curStart < until){
-        out.push({start:curStart,end:until,status:cur});
-      }
+      if (curStart < until) out.push({start:curStart,end:until,status:cur});
       return out;
     }
 
@@ -256,9 +240,9 @@
       return <div className="meter"><div style={{width:`${Math.min(100,Math.max(0,value))}%`,background:col}}></div></div>;
     };
 
-    const StatusLegend = ()=>(<div className="legend">
-      {DEFAULT_STATUSES.map(s=>(<div key={s} className="chip"><span className="dot" style={{background:STATUS_DEFS[s].color}}></span><span style={{fontSize:13}}>{STATUS_DEFS[s].label}</span></div>))}
-    </div>);
+    const StatusLegend = ()=>(<div className="legend">{Object.keys(STATUS_DEFS).map(s=>(
+      <div key={s} className="chip"><span className="dot" style={{background:STATUS_DEFS[s].color}}></span><span style={{fontSize:13}}>{STATUS_DEFS[s].label}</span></div>
+    ))}</div>);
 
     const DualBars = ({schedule, events, dateStr})=>{
       const [, setTick] = React.useState(0);
@@ -268,14 +252,9 @@
       const now      = Date.now();
 
       const expectedBlocks = (function(){
-        const segs = (schedule||[]).map(b=>({start:hhmmToMinutes(b.start), end:hhmmToMinutes(b.end), status:b.status}));
-        segs.sort((a,b)=>a.start-b.start);
+        const segs = (schedule||[]).map(b=>({start:hhmmToMinutes(b.start), end:hhmmToMinutes(b.end), status:b.status})).sort((a,b)=>a.start-b.start);
         const full=[]; let cursor=0;
-        for (const s of segs){
-          if (s.start>cursor){ full.push({start:cursor,end:s.start,status:'offline'}); }
-          full.push({start:s.start,end:s.end,status:s.status});
-          cursor = Math.max(cursor, s.end);
-        }
+        for (const s of segs){ if (s.start>cursor) full.push({start:cursor,end:s.start,status:'offline'}); full.push({start:s.start,end:s.end,status:s.status}); cursor=Math.max(cursor,s.end); }
         if (cursor<1440) full.push({start:cursor,end:1440,status:'offline'});
         return full.map(x=>({startMs: minuteToMs(x.start, dateStr), endMs: minuteToMs(x.end, dateStr), status:x.status}));
       })();
@@ -292,22 +271,13 @@
             <div style={{width:80,fontSize:12,color:"#374151"}}>Projected</div>
             <div style={{flex:1}}>
               <div className="bar">
-                {expectedBlocks.map((b,i)=>{
-                  const l=leftPctMs(b.startMs), w=pct(b.startMs, b.endMs);
-                  return <div key={i} className="seg" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color, opacity:.35}} />;
-                })}
+                {expectedBlocks.map((b,i)=>{ const l=leftPctMs(b.startMs), w=pct(b.startMs,b.endMs);
+                  return <div key={i} className="seg" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color, opacity:.35}} />; })}
                 {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
               </div>
               <div className="ticks">
-                {hours.map(h=>{
-                  const x=leftPctMs(dayStart + h*3600000);
-                  return (
-                    <React.Fragment key={h}>
-                      <div className="tick" style={{left:`${x}%`}}></div>
-                      {(h%2===0) && <div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}
-                    </React.Fragment>
-                  );
-                })}
+                {hours.map(h=>{ const x=leftPctMs(dayStart + h*3600000);
+                  return (<React.Fragment key={h}><div className="tick" style={{left:`${x}%`}}></div>{(h%2===0)&&<div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}</React.Fragment>); })}
               </div>
             </div>
           </div>
@@ -317,22 +287,13 @@
             <div style={{flex:1}}>
               <div className="bar">
                 <div className="seg actual" style={{left:0, width:'100%', background:'#9ca3af', opacity:.18}} />
-                {actualPast.map((b,i)=>{
-                  const l=leftPctMs(b.start), w=pct(b.start, b.end);
-                  return <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}} />;
-                })}
+                {actualPast.map((b,i)=>{ const l=leftPctMs(b.start), w=pct(b.start,b.end);
+                  return <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}} />; })}
                 {(now>=dayStart && now<=dayEnd) && <div className="now" style={{left:`${leftPctMs(now)}%`}}></div>}
               </div>
               <div className="ticks">
-                {hours.map(h=>{
-                  const x=leftPctMs(dayStart + h*3600000);
-                  return (
-                    <React.Fragment key={h}>
-                      <div className="tick" style={{left:`${x}%`}}></div>
-                      {(h%2===0) && <div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}
-                    </React.Fragment>
-                  );
-                })}
+                {hours.map(h=>{ const x=leftPctMs(dayStart + h*3600000);
+                  return (<React.Fragment key={h}><div className="tick" style={{left:`${x}%`}}></div>{(h%2===0)&&<div className="tick-label" style={{left:`${x}%`}}>{labelFor(h)}</div>}</React.Fragment>); })}
               </div>
             </div>
           </div>
@@ -341,7 +302,7 @@
     };
 
     /*********** Screens ***********/
-    function AgentView({ me, dateStr, schedule, events, onSetStatus, lastPingAt, pingOk }){
+    function AgentView({ me, dateStr, schedule, events, onSetStatus }){
       const live = computeLiveAdherence(schedule, events, dateStr);
       const [tick, setTick] = useState(0);
       useEffect(()=>{ const id=setInterval(()=>setTick(t=>t+1),1000); return ()=>clearInterval(id); },[]);
@@ -351,7 +312,7 @@
 
       const nowMin = nowMinutes();
       const expectedNow = expectedAt(schedule, nowMin);
-      const current = statusAtTs(events, Date.now());
+      const current = (events||[]).slice().sort((a,b)=>a.ts-b.ts).slice(-1)[0]?.status || null;
       const inAdh = !!expectedNow && current === expectedNow;
 
       const {start:dayStart,end:dayEnd} = getBounds(dateStr);
@@ -399,27 +360,28 @@
               {recent.map((e,i)=>(
                 <li key={i}>
                   <span className="dot" style={{background:STATUS_DEFS[e.status]?.color}}></span>
-                  <span className="pill" style={{background:"#f1f5f9",color:"#334155"}}>{fmtHm(e.ts)}</span>
+                  <span className="pill">{fmtHm(e.ts)}</span>
                   <span style={{color:"#475569"}}>→ {STATUS_DEFS[e.status]?.label}</span>
                 </li>
               ))}
               {(!recent || !recent.length) && <li className="muted">No events yet today.</li>}
             </ul>
             <div style={{height:6}}></div>
-            <div className="pill" title="Presence heartbeat">
-              <span className="dot" style={{background: pingOk ? '#16a34a' : '#ef4444'}}></span>
-              <span style={{fontSize:12}}>{lastPingAt ? `Last ping ${new Date(lastPingAt).toLocaleTimeString()}` : 'No pings yet'}</span>
-            </div>
-            <div style={{height:8}}></div>
             <StatusLegend/>
           </div>
         </div>
       );
     }
 
-    function AdminView({ allUsers, selectedUser, setSelectedUser, dateStr, setDateStr, schedule, events, adherence, perStatus, timeline, onAddBlock, onUpdateBlock, onDeleteBlock, onSaveSchedule, lastPingAt, pingOk }){
+    function AdminView({
+      allUsers, selectedUser, setSelectedUser,
+      dateStr, setDateStr,
+      schedule, events, adherence, perStatus, timeline,
+      onAddBlock, onUpdateBlock, onDeleteBlock, onSaveSchedule
+    }){
       return (
         <div className="grid grid-2">
+          {/* Left: analytics only (kept) */}
           <div className="card">
             <div className="row">
               <h2>Active Calendar</h2>
@@ -429,10 +391,6 @@
                   {allUsers.map(u => <option key={u.username||u} value={(u.username||u)}>{u.username||u}</option>)}
                 </select>
                 <input type="date" value={dateStr} onChange={e=>setDateStr(e.target.value)} />
-                <div className="pill" title="Presence heartbeat">
-                  <span className="dot" style={{background: pingOk ? '#16a34a' : '#ef4444'}}></span>
-                  <span style={{fontSize:12}}>{lastPingAt ? `Last ping ${new Date(lastPingAt).toLocaleTimeString()}` : 'No pings yet'}</span>
-                </div>
               </div>
             </div>
 
@@ -471,41 +429,44 @@
             </ul>
           </div>
 
-          <div className="card">
-            <div className="row">
-              <h2>Schedule Editor</h2>
-              <button className="btn btn-brand btn-small" onClick={onAddBlock} disabled={!selectedUser}>+ Block</button>
-            </div>
-            {!selectedUser && <div className="muted">Select a user to edit today’s schedule.</div>}
-            {selectedUser && (
-              <div className="row-wrap" style={{gap:8}}>
-                {schedule.map((blk,i)=>(
-                  <div key={i} className="row-wrap" style={{gap:6,alignItems:"center",border:"1px solid var(--line)",padding:8,borderRadius:10}}>
-                    <select value={blk.status} onChange={e=>onUpdateBlock(i,"status",e.target.value)}>
-                      {DEFAULT_STATUSES.map(s=>(<option key={s} value={s}>{STATUS_DEFS[s].label}</option>))}
-                    </select>
-                    <input value={blk.start} onChange={e=>onUpdateBlock(i,"start",e.target.value)} placeholder="HH:MM" />
-                    <input value={blk.end}   onChange={e=>onUpdateBlock(i,"end",e.target.value)}   placeholder="HH:MM" />
-                    <button className="btn btn-small btn-danger" onClick={()=>onDeleteBlock(i)}>Delete</button>
-                  </div>
-                ))}
-                {!schedule.length && <div className="muted">No blocks. Add one to begin.</div>}
-                <div style={{width:"100%",display:"flex",justifyContent:"flex-end",marginTop:8}}>
-                  <button className="btn btn-brand" onClick={onSaveSchedule} disabled={!selectedUser}>Save Schedule</button>
-                </div>
+          {/* Right: schedule editor/exports hidden behind flag */}
+          {ENABLE_SCHED_EDITOR && (
+            <div className="card">
+              <div className="row">
+                <h2>Schedule Editor</h2>
+                <button className="btn btn-brand btn-small" onClick={onAddBlock} disabled={!selectedUser}>+ Block</button>
               </div>
-            )}
+              {!selectedUser && <div className="muted">Select a user to edit today’s schedule.</div>}
+              {selectedUser && (
+                <div className="row-wrap" style={{gap:8}}>
+                  {schedule.map((blk,i)=>(
+                    <div key={i} className="row-wrap" style={{gap:6,alignItems:"center",border:"1px solid var(--line)",padding:8,borderRadius:10}}>
+                      <select value={blk.status} onChange={e=>onUpdateBlock(i,"status",e.target.value)}>
+                        {DEFAULT_STATUSES.map(s=>(<option key={s} value={s}>{STATUS_DEFS[s].label}</option>))}
+                      </select>
+                      <input value={blk.start} onChange={e=>onUpdateBlock(i,"start",e.target.value)} placeholder="HH:MM" />
+                      <input value={blk.end}   onChange={e=>onUpdateBlock(i,"end",e.target.value)}   placeholder="HH:MM" />
+                      <button className="btn btn-small btn-danger" onClick={()=>onDeleteBlock(i)}>Delete</button>
+                    </div>
+                  ))}
+                  {!schedule.length && <div className="muted">No blocks. Add one to begin.</div>}
+                  <div style={{width:"100%",display:"flex",justifyContent:"flex-end",marginTop:8}}>
+                    <button className="btn btn-brand" onClick={onSaveSchedule} disabled={!selectedUser}>Save Schedule</button>
+                  </div>
+                </div>
+              )}
 
-            <div style={{height:12}}></div>
-            <h3 style={{margin:"0 0 6px 0"}}>Exports</h3>
-            <div className="exports">
-              <a className="btn btn-small" href="#" id="expDay">Events (Day)</a>
-              <a className="btn btn-small" href="#" id="expWeek">Events (Week)</a>
-              <a className="btn btn-small" href="#" id="expMonth">Events (Month)</a>
-              <a className="btn btn-small" href="#" id="expSched">Schedules (Month)</a>
-              <a className="btn btn-small" href="#" id="expAdh">Adherence (Month)</a>
+              <div style={{height:12}}></div>
+              <h3 style={{margin:"0 0 6px 0"}}>Exports</h3>
+              <div className="exports">
+                <a className="btn btn-small" href="#" id="expDay">Events (Day)</a>
+                <a className="btn btn-small" href="#" id="expWeek">Events (Week)</a>
+                <a className="btn btn-small" href="#" id="expMonth">Events (Month)</a>
+                <a className="btn btn-small" href="#" id="expSched">Schedules (Month)</a>
+                <a className="btn btn-small" href="#" id="expAdh">Adherence (Month)</a>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       );
     }
@@ -514,14 +475,12 @@
     function App(){
       const [me,setMe] = useState(null);
       const [role,setRole] = useState("AGENT");
+
       const [dateStr,setDateStr] = useState(todayStr());
       const [selectedUser,setSelectedUser] = useState("");
+
       const [schedule,setSchedule]=useState([]);
       const [events,setEvents]=useState([]);
-
-      // Heartbeat state
-      const [lastPingAt, setLastPingAt] = useState(null);
-      const [pingOk, setPingOk] = useState(true);
 
       const adherence = useMemo(()=>{
         const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
@@ -536,8 +495,7 @@
         for (let i=0;i<ev.length;i++){ if (ev[i].ts<=start){ cur=ev[i].status; curStart=start; } else break; }
         const per={}, timeline=[];
         for (let i=0;i<ev.length && ev[i].ts<end;i++){
-          const e=ev[i];
-          const segEnd=Math.min(e.ts,end);
+          const e=ev[i], segEnd=Math.min(e.ts,end);
           if (cur){
             const mins=Math.max(0,Math.floor((Math.min(segEnd,Date.now())-curStart)/60000));
             if(mins){ per[cur] = (per[cur] || 0) + mins; timeline.push({start:curStart,end:segEnd,status:cur,minutes:mins}); }
@@ -555,119 +513,64 @@
 
       const [users,setUsers]=useState([]);
 
-      const errDiv=useRef(null);
+      const errRef=useRef(""); const errDiv=useRef(null);
       useEffect(()=>{ errDiv.current = document.getElementById("errbar"); },[]);
-      function showErr(msg){
-        if(!errDiv.current) return;
-        errDiv.current.textContent = String(msg||"");
-        errDiv.current.style.display = msg ? "block" : "none";
-      }
+      function showErr(msg){ if(!errDiv.current) return; errRef.current = String(msg||""); errDiv.current.textContent = errRef.current; errDiv.current.style.display = errRef.current ? "block" : "none"; }
 
-      // Boot: whoami + preload users
-      useEffect(()=>{
-        (async()=>{
+      useEffect(()=>{ (async()=>{
+        try{
+          const w = await whoami();
+          const authed = w?.authed || w?.username || w?.role;
+          if(!authed){ location.replace("/"); return; }
+          const you = w.me ? w.me : w;
+          setMe(you);
+          const r = (you.role||"AGENT").toUpperCase();
+          setRole(r);
+          setSelectedUser(r==="ADMIN" ? (you.defaultUser||you.username) : you.username);
           try{
-            const w = await whoami();
-            const authed = w?.authed || w?.username || w?.role;
-            if(!authed){ location.replace("/"); return; }
-            const you = w.me ? w.me : w;
-            setMe(you);
-            const r = (you.role||"AGENT").toUpperCase();
-            setRole(r);
-            setSelectedUser(r==="ADMIN" ? (you.defaultUser||you.username) : you.username);
-            try{
-              const ul = await api("/api/users");
-              const arr = Array.isArray(ul) ? ul : (ul?.users || []);
-              if (arr?.length) setUsers(arr);
-              else setUsers([{username: you.username}]);
-            }catch{ setUsers([{username: you.username}]); }
-          }catch(e){
-            showErr("Unable to verify session. Please sign in again.");
-            setTimeout(()=>location.replace("/"), 1200);
-          }
-        })();
-      },[]);
+            const ul = await api("/api/users");
+            const arr = Array.isArray(ul) ? ul : (ul?.users || []);
+            if (arr?.length) setUsers(arr);
+            else setUsers([{username: you.username}]);
+          }catch{ setUsers([{username: you.username}]); }
+        }catch(e){
+          showErr("Unable to verify session. Please sign in again.");
+          setTimeout(()=>location.replace("/"), 1200);
+        }
+      })(); },[]);
 
-      // Fetch schedule/events
       async function refetch(){
         try{
           if(!selectedUser || !dateStr) return;
           const sch = await getSchedule(selectedUser,dateStr);
           setSchedule(Array.isArray(sch) ? sch : (sch.blocks||[]));
-        }catch{ showErr("Failed to load schedule."); }
+        }catch(e){ showErr("Failed to load schedule."); }
         try{
           const {start,end}=getBounds(dateStr);
           const ev = await listEvents(selectedUser, start, end);
           const incoming = Array.isArray(ev) ? ev : (ev.events||[]);
-          setEvents(prev => {
-            const merged = mergeEvents(prev, incoming, {start, end});
-            saveLS(selectedUser, dateStr, merged);
-            return merged;
-          });
-        }catch{ showErr("Failed to load events."); }
+          setEvents(prev => { const merged = mergeEvents(prev, incoming, {start, end}); saveLS(selectedUser, dateStr, merged); return merged; });
+        }catch(e){ showErr("Failed to load events."); }
       }
-      useEffect(()=>{
-        if (!selectedUser || !dateStr) return;
-        setEvents(loadLS(selectedUser, dateStr));
-        refetch();
-      }, [selectedUser, dateStr]);
 
-      // Poll data occasionally
+      useEffect(()=>{ if (!selectedUser || !dateStr) return; setEvents(loadLS(selectedUser, dateStr)); refetch(); }, [selectedUser, dateStr]);
       useEffect(()=>{ const id = setInterval(()=> refetch(), 15000); return ()=> clearInterval(id); }, [selectedUser, dateStr]);
 
-      // Heartbeat every 30s (no status; Worker updates last_seen)
-      useEffect(()=>{
-        let timer;
-        async function beat(){
-          const res = await pingPresence();
-          setLastPingAt(Date.now());
-          setPingOk(!!res.ok);
-        }
-        beat(); // first ping immediately
-        timer = setInterval(beat, 30000);
-        return ()=> clearInterval(timer);
-      }, []);
-
-      // When user explicitly changes status, also ping with that status & ts
       async function setStatus(s){
         try{
           const {start,end}=getBounds(dateStr);
           const ts = Date.now();
-          if (within(ts,{start,end})) {
-            setEvents(prev => {
-              const merged = mergeEvents(prev, [{status:s, ts}], {start,end});
-              saveLS(selectedUser, dateStr, merged);
-              return merged;
-            });
-          }
+          if (within(ts,{start,end})) setEvents(prev => { const merged = mergeEvents(prev, [{status:s, ts}], {start,end}); saveLS(selectedUser, dateStr, merged); return merged; });
           await pushEvent(me.username, s, ts);
-          await pingPresence(s, ts);          // keep presence table in sync right away
-          setLastPingAt(Date.now()); setPingOk(true);
-          setTimeout(()=>{ refetch(); }, 800);
-        }catch{
-          showErr("Could not update status (check session/CORS).");
-          setPingOk(false);
-        }
+          setTimeout(()=>{ refetch(); }, 1000);
+        }catch(e){ showErr("Could not update status (check session/CORS)."); }
       }
 
-      function addBlock(){
-        setSchedule(prev=>{
-          const lastEnd = prev?.length ? prev[prev.length-1].end : "08:00";
-          return [...(prev||[]), {status:"available", start:lastEnd, end:lastEnd}];
-        });
-      }
-      function updateBlock(i, field, val){
-        setSchedule(prev=>{ const next=[...(prev||[])]; next[i]={...next[i],[field]:val}; return next; });
-      }
-      function deleteBlock(i){
-        setSchedule(prev=>{ const next=[...(prev||[])]; next.splice(i,1); return next; });
-      }
-      async function saveBlocks(){
-        try{
-          await saveSchedule(selectedUser, dateStr, schedule);
-          refetch();
-        }catch{ showErr("Saving schedule failed."); }
-      }
+      // --- Schedule editor helpers kept for future Scheduling tool ---
+      function addBlock(){ setSchedule(prev=>{ const lastEnd = prev?.length ? prev[prev.length-1].end : "08:00"; return [...(prev||[]), {status:"available", start:lastEnd, end:lastEnd}]; }); }
+      function updateBlock(i, field, val){ setSchedule(prev=>{ const next=[...(prev||[])]; next[i]={...next[i],[field]:val}; return next; }); }
+      function deleteBlock(i){ setSchedule(prev=>{ const next=[...(prev||[])]; next.splice(i,1); return next; }); }
+      async function saveBlocks(){ try{ await saveSchedule(selectedUser, dateStr, schedule); refetch(); }catch(e){ showErr("Saving schedule failed."); } }
 
       if (!me) return null;
 
@@ -680,10 +583,6 @@
               <span className="pill">Real-time</span>
             </div>
             <div className="hl">
-              <span className="pill" title="Presence heartbeat">
-                <span className="dot" style={{background: pingOk ? '#16a34a' : '#ef4444'}}></span>
-                <span style={{fontSize:12}}>{lastPingAt ? `Last ping ${new Date(lastPingAt).toLocaleTimeString()}` : 'No pings yet'}</span>
-              </span>
               <span style={{fontSize:13,color:"#475569"}}>Logged in as <strong>{me.username}</strong> · <span style={{textTransform:'capitalize'}}>{(me.role||'agent').toLowerCase()}</span></span>
               <a className="btn" href="/hub.html">Back to Hub</a>
               <a className="btn btn-danger" href="/api/logout">Sign out</a>
@@ -712,8 +611,6 @@
                 onUpdateBlock={updateBlock}
                 onDeleteBlock={deleteBlock}
                 onSaveSchedule={saveBlocks}
-                lastPingAt={lastPingAt}
-                pingOk={pingOk}
               />
             ) : (
               <AgentView
@@ -722,8 +619,6 @@
                 schedule={schedule}
                 events={events}
                 onSetStatus={setStatus}
-                lastPingAt={lastPingAt}
-                pingOk={pingOk}
               />
             )}
           </main>
