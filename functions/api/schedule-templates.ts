@@ -1,5 +1,5 @@
 // GET(list) / POST(create) / DELETE(/:id)
-import { type Env, proxyWithSession } from "./_utils";
+import { type Env, proxyWithSession } from "../_utils";
 export const onRequestGet: PagesFunction<Env> = ({ request, env }) =>
   proxyWithSession(request, env, "/schedule-templates");
 export const onRequestPost: PagesFunction<Env> = ({ request, env }) =>
