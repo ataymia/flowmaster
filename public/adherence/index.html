@@ -20,7 +20,8 @@
     .hl{display:flex;align-items:center;gap:10px}
     .logoimg{height:28px;width:auto;border-radius:8px}
     .brand{font-weight:900;letter-spacing:.3px;color:var(--brand);font-size:18px}
-    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#fee2e2;color:#b91c1c;font-size:12px;border:1px solid #fecaca}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#f8fafc;color:#334155}
+    .pill .dot{width:8px;height:8px;border-radius:999px;display:inline-block}
     .main{max-width:1200px;margin:0 auto;padding:20px;flex:1;width:100%}
     .grid{display:grid;gap:20px}
     @media (min-width:1000px){ .grid-2{grid-template-columns:2fr 1fr} }
@@ -50,7 +51,6 @@
     .bar .seg.actual{opacity:.7}
     .bar .now{position:absolute;top:0;bottom:0;width:2px;background:#0f172a}
 
-    /* Ticks with extra bottom room + spacing between bars */
     .ticks{position:relative;height:18px;margin-top:8px}
     .tick{position:absolute;top:0;bottom:0;width:1px;background:#e5e7eb}
     .tick-label{position:absolute;top:18px;transform:translateX(-50%);font-size:10px;color:#64748b}
@@ -64,9 +64,9 @@
     .status-btn{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #fecaca;border-radius:12px;background:#fff}
     .status-btn:hover{background:#fff5f5}
     .footer{padding:16px 20px;color:var(--muted);border-top:1px solid var(--line);text-align:center;font-size:12px;margin-top:20px}
-    .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
     .exports{display:flex;flex-wrap:wrap;gap:8px}
     .hidden{display:none!important}
+    .errbar{position:fixed;left:20px;right:20px;bottom:16px;z-index:60;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);display:none}
   </style>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -109,9 +109,7 @@
     function mergeEvents(prev, incoming, bounds){
       const key = (e)=> `${e.ts}-${e.status}`;
       const map = new Map();
-      [...(prev||[]), ...(incoming||[])]
-        .filter(e => e && typeof e.ts==='number' && within(e.ts, bounds))
-        .forEach(e => { map.set(key(e), e); });
+      [...(prev||[]), ...(incoming||[])].filter(e => e && typeof e.ts==='number' && within(e.ts, bounds)).forEach(e => { map.set(key(e), e); });
       return Array.from(map.values()).sort((a,b)=>a.ts-b.ts);
     }
 
@@ -123,8 +121,8 @@
       if (!r.ok) { const e = new Error("api_error"); e.status=r.status; e.body=body; throw e; }
       return body;
     }
-    const whoami = ()=> api("/api/whoami").catch(()=>({authed:false}));
-    const getSchedule = (user,date)=> api(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`);
+    const whoami       = ()=> api("/api/whoami").catch(()=>({authed:false}));
+    const getSchedule  = (user,date)=> api(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`);
     const saveSchedule = (user,date,blocks)=> api(`/api/schedules`, {method:"POST", body: JSON.stringify({ user, date, blocks })});
     async function listEvents(user, fromMs, toMs){
       try{
@@ -138,6 +136,16 @@
         return await api(`/api/events`, {method:"POST", body: JSON.stringify({ user, status, ts: tsMs })});
       }catch(e){
         return api(`/api/presence`, {method:"POST", body: JSON.stringify({ user, status, ts: tsMs })});
+      }
+    }
+    // NEW: heartbeat (no status needed; Worker will just bump last_seen)
+    async function pingPresence(status=null, ts=null){
+      const body = status ? { status, ...(ts?{ts}:{}) } : {};
+      try {
+        await api(`/api/presence/ping`, { method:"POST", body: JSON.stringify(body) });
+        return { ok:true };
+      } catch (e) {
+        return { ok:false, err:e };
       }
     }
 
@@ -201,25 +209,9 @@
       return res;
     }
 
-    // Expected 24h, fill gaps with offline
-    function assembleExpectedBlocks24h(schedule, dateStr){
-      const segs = (schedule||[]).map(b=>({start:hhmmToMinutes(b.start), end:hhmmToMinutes(b.end), status:b.status}));
-      segs.sort((a,b)=>a.start-b.start);
-      const full=[]; let cursor=0;
-      for (const s of segs){
-        if (s.start>cursor){ full.push({start:cursor,end:s.start,status:'offline'}); }
-        full.push({start:s.start,end:s.end,status:s.status});
-        cursor = Math.max(cursor, s.end);
-      }
-      if (cursor<1440) full.push({start:cursor,end:1440,status:'offline'});
-      return full.map(x=>({startMs: minuteToMs(x.start, dateStr), endMs: minuteToMs(x.end, dateStr), status:x.status}));
-    }
-
-    // Actual blocks only up to "now" (no future painting)
     function assembleActualBlocksPastOnly(events, dayStartMs, dayEndMs, nowMs){
       const ev=(events||[]).slice().sort((a,b)=>a.ts-b.ts);
       const until = Math.min(dayEndMs, nowMs);
-      // determine status in effect at start of day
       let cur = statusAtTs(events, dayStartMs) || 'offline';
       let curStart = dayStartMs;
       const out=[];
@@ -264,26 +256,17 @@
       return <div className="meter"><div style={{width:`${Math.min(100,Math.max(0,value))}%`,background:col}}></div></div>;
     };
 
-    const StatusLegend = ()=>(
-      <div className="legend">
-        {DEFAULT_STATUSES.map(s=>(
-          <div key={s} className="chip">
-            <span className="dot" style={{background:STATUS_DEFS[s].color}}></span>
-            <span style={{fontSize:13}}>{STATUS_DEFS[s].label}</span>
-          </div>
-        ))}
-      </div>
-    );
+    const StatusLegend = ()=>(<div className="legend">
+      {DEFAULT_STATUSES.map(s=>(<div key={s} className="chip"><span className="dot" style={{background:STATUS_DEFS[s].color}}></span><span style={{fontSize:13}}>{STATUS_DEFS[s].label}</span></div>))}
+    </div>);
 
     const DualBars = ({schedule, events, dateStr})=>{
       const [, setTick] = React.useState(0);
       React.useEffect(()=>{ const id=setInterval(()=>setTick(t=>t+1),1000); return ()=>clearInterval(id); },[]);
-
       const dayStart = minuteToMs(0, dateStr);
       const dayEnd   = minuteToMs(1440, dateStr);
       const now      = Date.now();
 
-      // Projected: full 24h with gaps filled as 'offline'
       const expectedBlocks = (function(){
         const segs = (schedule||[]).map(b=>({start:hhmmToMinutes(b.start), end:hhmmToMinutes(b.end), status:b.status}));
         segs.sort((a,b)=>a.start-b.start);
@@ -297,18 +280,14 @@
         return full.map(x=>({startMs: minuteToMs(x.start, dateStr), endMs: minuteToMs(x.end, dateStr), status:x.status}));
       })();
 
-      // Actual: only up to now (no future fill)
       const actualPast = assembleActualBlocksPastOnly(events, dayStart, dayEnd, now);
-
       const pct       = (l,r)=> ((r-l)/(dayEnd-dayStart))*100;
       const leftPctMs = (ms)=> ((ms-dayStart)/(dayEnd-dayStart))*100;
-
       const hours = new Array(25).fill(0).map((_,i)=>i);
       const labelFor = (h)=> new Date(dayStart + h*3600000).toLocaleTimeString([], {hour:'2-digit'});
 
       return (
         <div className="bar-wrap">
-          {/* Projected */}
           <div className="row" style={{gap:10}}>
             <div style={{width:80,fontSize:12,color:"#374151"}}>Projected</div>
             <div style={{flex:1}}>
@@ -333,14 +312,11 @@
             </div>
           </div>
 
-          {/* Actual (extra spacing so labels don’t overlap) */}
           <div className="row" style={{gap:10, marginTop:26}}>
             <div style={{width:80,fontSize:12,color:"#374151"}}>Actual</div>
             <div style={{flex:1}}>
               <div className="bar">
-                {/* faint offline background across the full 24h */}
                 <div className="seg actual" style={{left:0, width:'100%', background:'#9ca3af', opacity:.18}} />
-                {/* draw only past segments up to 'now' */}
                 {actualPast.map((b,i)=>{
                   const l=leftPctMs(b.start), w=pct(b.start, b.end);
                   return <div key={i} className="seg actual" style={{left:`${l}%`, width:`${w}%`, background:STATUS_DEFS[b.status]?.color}} />;
@@ -365,12 +341,11 @@
     };
 
     /*********** Screens ***********/
-    function AgentView({ me, dateStr, schedule, events, onSetStatus }){
+    function AgentView({ me, dateStr, schedule, events, onSetStatus, lastPingAt, pingOk }){
       const live = computeLiveAdherence(schedule, events, dateStr);
-
       const [tick, setTick] = useState(0);
       useEffect(()=>{ const id=setInterval(()=>setTick(t=>t+1),1000); return ()=>clearInterval(id); },[]);
-      const tsStart = useMemo(()=> currentStatusStartTs(events, dateStr), [events, dateStr]);
+      const tsStart = React.useMemo(()=> currentStatusStartTs(events, dateStr), [events, dateStr]);
       const hasCurrent = tsStart !== null;
       const elapsedMs = hasCurrent ? (Date.now() - tsStart) : 0;
 
@@ -383,10 +358,7 @@
       const recent = (events||[])
         .filter(e => within(e.ts,{start:dayStart,end:dayEnd}))
         .sort((a,b)=>b.ts-a.ts)
-        .reduce((acc, e)=>{
-          if (!acc.length || acc[acc.length-1].status !== e.status) acc.push(e);
-          return acc;
-        }, [])
+        .reduce((acc, e)=>{ if (!acc.length || acc[acc.length-1].status !== e.status) acc.push(e); return acc; }, [])
         .slice(0,50);
 
       return (
@@ -427,20 +399,25 @@
               {recent.map((e,i)=>(
                 <li key={i}>
                   <span className="dot" style={{background:STATUS_DEFS[e.status]?.color}}></span>
-                  <span className="pill">{fmtHm(e.ts)}</span>
+                  <span className="pill" style={{background:"#f1f5f9",color:"#334155"}}>{fmtHm(e.ts)}</span>
                   <span style={{color:"#475569"}}>→ {STATUS_DEFS[e.status]?.label}</span>
                 </li>
               ))}
               {(!recent || !recent.length) && <li className="muted">No events yet today.</li>}
             </ul>
             <div style={{height:6}}></div>
+            <div className="pill" title="Presence heartbeat">
+              <span className="dot" style={{background: pingOk ? '#16a34a' : '#ef4444'}}></span>
+              <span style={{fontSize:12}}>{lastPingAt ? `Last ping ${new Date(lastPingAt).toLocaleTimeString()}` : 'No pings yet'}</span>
+            </div>
+            <div style={{height:8}}></div>
             <StatusLegend/>
           </div>
         </div>
       );
     }
 
-    function AdminView({ allUsers, selectedUser, setSelectedUser, dateStr, setDateStr, schedule, events, adherence, perStatus, timeline, onAddBlock, onUpdateBlock, onDeleteBlock, onSaveSchedule }){
+    function AdminView({ allUsers, selectedUser, setSelectedUser, dateStr, setDateStr, schedule, events, adherence, perStatus, timeline, onAddBlock, onUpdateBlock, onDeleteBlock, onSaveSchedule, lastPingAt, pingOk }){
       return (
         <div className="grid grid-2">
           <div className="card">
@@ -452,6 +429,10 @@
                   {allUsers.map(u => <option key={u.username||u} value={(u.username||u)}>{u.username||u}</option>)}
                 </select>
                 <input type="date" value={dateStr} onChange={e=>setDateStr(e.target.value)} />
+                <div className="pill" title="Presence heartbeat">
+                  <span className="dot" style={{background: pingOk ? '#16a34a' : '#ef4444'}}></span>
+                  <span style={{fontSize:12}}>{lastPingAt ? `Last ping ${new Date(lastPingAt).toLocaleTimeString()}` : 'No pings yet'}</span>
+                </div>
               </div>
             </div>
 
@@ -533,12 +514,14 @@
     function App(){
       const [me,setMe] = useState(null);
       const [role,setRole] = useState("AGENT");
-
       const [dateStr,setDateStr] = useState(todayStr());
       const [selectedUser,setSelectedUser] = useState("");
-
       const [schedule,setSchedule]=useState([]);
       const [events,setEvents]=useState([]);
+
+      // Heartbeat state
+      const [lastPingAt, setLastPingAt] = useState(null);
+      const [pingOk, setPingOk] = useState(true);
 
       const adherence = useMemo(()=>{
         const minStart = schedule?.length ? Math.min(...schedule.map(b=>hhmmToMinutes(b.start))) : 8*60;
@@ -557,10 +540,7 @@
           const segEnd=Math.min(e.ts,end);
           if (cur){
             const mins=Math.max(0,Math.floor((Math.min(segEnd,Date.now())-curStart)/60000));
-            if(mins){
-              per[cur] = (per[cur] || 0) + mins;
-              timeline.push({start:curStart,end:segEnd,status:cur,minutes:mins});
-            }
+            if(mins){ per[cur] = (per[cur] || 0) + mins; timeline.push({start:curStart,end:segEnd,status:cur,minutes:mins}); }
           }
           cur=e.status; curStart=e.ts;
         }
@@ -575,15 +555,15 @@
 
       const [users,setUsers]=useState([]);
 
-      const errRef=useRef(""); const errDiv=useRef(null);
+      const errDiv=useRef(null);
       useEffect(()=>{ errDiv.current = document.getElementById("errbar"); },[]);
       function showErr(msg){
         if(!errDiv.current) return;
-        errRef.current = String(msg||"");
-        errDiv.current.textContent = errRef.current;
-        errDiv.current.style.display = errRef.current ? "block" : "none";
+        errDiv.current.textContent = String(msg||"");
+        errDiv.current.style.display = msg ? "block" : "none";
       }
 
+      // Boot: whoami + preload users
       useEffect(()=>{
         (async()=>{
           try{
@@ -608,12 +588,13 @@
         })();
       },[]);
 
+      // Fetch schedule/events
       async function refetch(){
         try{
           if(!selectedUser || !dateStr) return;
           const sch = await getSchedule(selectedUser,dateStr);
           setSchedule(Array.isArray(sch) ? sch : (sch.blocks||[]));
-        }catch(e){ showErr("Failed to load schedule."); }
+        }catch{ showErr("Failed to load schedule."); }
         try{
           const {start,end}=getBounds(dateStr);
           const ev = await listEvents(selectedUser, start, end);
@@ -623,20 +604,31 @@
             saveLS(selectedUser, dateStr, merged);
             return merged;
           });
-        }catch(e){ showErr("Failed to load events."); }
+        }catch{ showErr("Failed to load events."); }
       }
-
       useEffect(()=>{
         if (!selectedUser || !dateStr) return;
         setEvents(loadLS(selectedUser, dateStr));
         refetch();
       }, [selectedUser, dateStr]);
 
-      useEffect(()=>{
-        const id = setInterval(()=> refetch(), 15000);
-        return ()=> clearInterval(id);
-      }, [selectedUser, dateStr]);
+      // Poll data occasionally
+      useEffect(()=>{ const id = setInterval(()=> refetch(), 15000); return ()=> clearInterval(id); }, [selectedUser, dateStr]);
 
+      // Heartbeat every 30s (no status; Worker updates last_seen)
+      useEffect(()=>{
+        let timer;
+        async function beat(){
+          const res = await pingPresence();
+          setLastPingAt(Date.now());
+          setPingOk(!!res.ok);
+        }
+        beat(); // first ping immediately
+        timer = setInterval(beat, 30000);
+        return ()=> clearInterval(timer);
+      }, []);
+
+      // When user explicitly changes status, also ping with that status & ts
       async function setStatus(s){
         try{
           const {start,end}=getBounds(dateStr);
@@ -649,9 +641,12 @@
             });
           }
           await pushEvent(me.username, s, ts);
-          setTimeout(()=>{ refetch(); }, 1000);
-        }catch(e){
+          await pingPresence(s, ts);          // keep presence table in sync right away
+          setLastPingAt(Date.now()); setPingOk(true);
+          setTimeout(()=>{ refetch(); }, 800);
+        }catch{
           showErr("Could not update status (check session/CORS).");
+          setPingOk(false);
         }
       }
 
@@ -662,9 +657,7 @@
         });
       }
       function updateBlock(i, field, val){
-        setSchedule(prev=>{
-          const next=[...(prev||[])]; next[i]={...next[i],[field]:val}; return next;
-        });
+        setSchedule(prev=>{ const next=[...(prev||[])]; next[i]={...next[i],[field]:val}; return next; });
       }
       function deleteBlock(i){
         setSchedule(prev=>{ const next=[...(prev||[])]; next.splice(i,1); return next; });
@@ -673,7 +666,7 @@
         try{
           await saveSchedule(selectedUser, dateStr, schedule);
           refetch();
-        }catch(e){ showErr("Saving schedule failed."); }
+        }catch{ showErr("Saving schedule failed."); }
       }
 
       if (!me) return null;
@@ -687,6 +680,10 @@
               <span className="pill">Real-time</span>
             </div>
             <div className="hl">
+              <span className="pill" title="Presence heartbeat">
+                <span className="dot" style={{background: pingOk ? '#16a34a' : '#ef4444'}}></span>
+                <span style={{fontSize:12}}>{lastPingAt ? `Last ping ${new Date(lastPingAt).toLocaleTimeString()}` : 'No pings yet'}</span>
+              </span>
               <span style={{fontSize:13,color:"#475569"}}>Logged in as <strong>{me.username}</strong> · <span style={{textTransform:'capitalize'}}>{(me.role||'agent').toLowerCase()}</span></span>
               <a className="btn" href="/hub.html">Back to Hub</a>
               <a className="btn btn-danger" href="/api/logout">Sign out</a>
@@ -715,6 +712,8 @@
                 onUpdateBlock={updateBlock}
                 onDeleteBlock={deleteBlock}
                 onSaveSchedule={saveBlocks}
+                lastPingAt={lastPingAt}
+                pingOk={pingOk}
               />
             ) : (
               <AgentView
@@ -723,6 +722,8 @@
                 schedule={schedule}
                 events={events}
                 onSetStatus={setStatus}
+                lastPingAt={lastPingAt}
+                pingOk={pingOk}
               />
             )}
           </main>
