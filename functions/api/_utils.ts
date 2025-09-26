@@ -2,8 +2,11 @@
 // Shared helpers for Pages Functions → Auth Worker proxying
 
 export interface Env {
-  // Your Worker base URL, e.g. "https://allstar-auth.ataymia.workers.dev"
+  // Primary: Your Worker base URL, e.g. "https://allstar-auth.ataymia.workers.dev"
   AUTH_BASE: string;
+
+  // Alias supported as well (so older snippets using WORKER_URL still work)
+  WORKER_URL?: string;
 
   // (used by /api/news widget; unchanged)
   NOTION_TOKEN?: string;
@@ -110,8 +113,11 @@ export function pickCookieFromSetCookie(src: Headers, name: string): string | nu
 /* ---------------- Upstream (Auth Worker) ---------------- */
 
 function resolveBase(env: Env) {
-  // Hard fallback so /whoami & login keep working during misconfig
-  return (env as any)?.AUTH_BASE || "https://allstar-auth.ataymia.workers.dev";
+  // Support both AUTH_BASE and WORKER_URL (alias), with a sane fallback for dev
+  return (
+    (env && (env.AUTH_BASE || env.WORKER_URL)) ||
+    "https://allstar-auth.ataymia.workers.dev"
+  );
 }
 export async function upstream(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
   const base = resolveBase(env);
@@ -131,7 +137,9 @@ export function ensureSession(req: Request): { ok: true } | { ok: false; respons
   };
 }
 
-export function ensureAccess(req: Request): { ok: true; token: string } | { ok: false; response: Response } {
+export function ensureAccess(
+  req: Request
+): { ok: true; token: string } | { ok: false; response: Response } {
   // Accept either site cookie (allstar_at) or worker cookie (access_token)
   const token = getCookie(req, "allstar_at") || getCookie(req, "access_token");
   if (!token) {
@@ -145,6 +153,11 @@ export function ensureAccess(req: Request): { ok: true; token: string } | { ok: 
 
 /* ---------------- Proxies (ALWAYS forward cookie + bearer) ---------------- */
 
+function hasHeader(h: Headers, keyLower: string) {
+  for (const [k] of (h as any)) if (String(k).toLowerCase() === keyLower) return true;
+  return false;
+}
+
 function buildAuthHeaders(req: Request, token: string, extra?: HeadersInit) {
   const headers = new Headers(extra || {});
   // Always send both auth forms; the Worker accepts either.
@@ -153,11 +166,11 @@ function buildAuthHeaders(req: Request, token: string, extra?: HeadersInit) {
 
   // Preserve JSON content-type if present on incoming request
   const ct = req.headers.get("content-type");
-  if (ct && !headers.has("content-type")) headers.set("content-type", ct);
+  if (ct && !hasHeader(headers, "content-type")) headers.set("content-type", ct);
 
   // Preserve Accept if present (some callers require it)
   const accept = req.headers.get("accept");
-  if (accept && !headers.has("accept")) headers.set("accept", accept);
+  if (accept && !hasHeader(headers, "accept")) headers.set("accept", accept);
 
   return headers;
 }
@@ -197,13 +210,26 @@ export async function proxyWithSession(
 ) {
   const headers = new Headers(init.headers || {});
   const cookie = req.headers.get("cookie");
-  if (cookie && !headers.has("cookie")) headers.set("cookie", cookie);
+  if (cookie && !hasHeader(headers, "cookie")) headers.set("cookie", cookie);
+
+  // If the incoming request already has Authorization, preserve it
+  const incomingAuth =
+    req.headers.get("authorization") || req.headers.get("Authorization");
+  if (incomingAuth && !hasHeader(headers, "authorization")) {
+    headers.set("authorization", incomingAuth);
+  } else {
+    // Otherwise, synthesize a Bearer from our session cookie if present
+    const token = getCookie(req, "allstar_at") || getCookie(req, "access_token");
+    if (token && !hasHeader(headers, "authorization")) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+  }
 
   const ct = req.headers.get("content-type");
-  if (ct && !headers.has("content-type")) headers.set("content-type", ct);
+  if (ct && !hasHeader(headers, "content-type")) headers.set("content-type", ct);
 
   const accept = req.headers.get("accept");
-  if (accept && !headers.has("accept")) headers.set("accept", accept);
+  if (accept && !hasHeader(headers, "accept")) headers.set("accept", accept);
 
   const res = await upstream(env, path, {
     ...init,
