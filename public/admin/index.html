@@ -1,4 +1,4 @@
-<!doctype html>
+<!doctype html> 
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -27,6 +27,7 @@
     .btn-danger{border-color:#fecaca;color:#b91c1c;background:#fff}
     .btn-danger:hover{background:#fff5f5}
     .btn-brand{background:var(--brand);border-color:transparent;color:#fff}
+    .btn-small{padding:6px 8px;border-radius:10px}
     .main{max-width:1200px;margin:0 auto;padding:20px;flex:1;width:100%}
     .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
     .tab{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
@@ -39,7 +40,7 @@
     .hidden{display:none!important}
     /* Rows / inputs */
     .row{display:flex;align-items:center;gap:10px}
-    input,select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
+    input,select,textarea{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit}
     /* Grid row */
     .tr{display:grid;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
     .th{font-weight:700;color:#334155}
@@ -67,6 +68,21 @@
     .modal-card{width:min(900px,95vw);max-height:85vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px}
     pre{white-space:pre-wrap;background:#f8fafc;border:1px solid var(--line);padding:10px;border-radius:10px;font-size:12px;max-height:300px;overflow:auto}
     .hint{font-size:12px;color:#64748b}
+    /* --- Schedules tab additions --- */
+    .row-between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .subtabs{display:flex;gap:6px;margin:12px 0}
+    .subtab{padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;font-size:13px}
+    .subtab.active{background:#f1f5f9}
+    .grid{display:grid;gap:12px}
+    @media (min-width:1000px){ .grid-2{grid-template-columns:1.8fr 1.2fr} }
+    .blk{display:flex;gap:6px;align-items:center;border:1px solid var(--line);padding:8px;border-radius:10px}
+    .tbl{width:100%;border-collapse:collapse}
+    .tbl th,.tbl td{border-bottom:1px solid #f1f5f9;padding:8px;text-align:left;font-size:13px}
+    .pill-ui{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#f8fafc;font-size:12px}
+    .drop{border:2px dashed #e5e7eb;border-radius:12px;padding:16px;text-align:center}
+    .ok{color:#166534;background:#dcfce7;border-color:#bbf7d0}
+    .warn{color:#92400e;background:#fef3c7;border-color:#fde68a}
+    .bad{color:#991b1b;background:#fee2e2;border-color:#fecaca}
   </style>
 </head>
 <body>
@@ -117,7 +133,7 @@
         <div id="u-list"></div>
       </section>
 
-      <!-- Live Board -->
+      <!-- Live Board (unchanged) -->
       <section class="card hidden" id="tab-live">
         <div class="row" style="justify-content:space-between">
           <div>
@@ -140,8 +156,119 @@
         <div id="lb-list"></div>
       </section>
 
+      <!-- Schedules (new, fully functional) -->
+      <section class="card hidden" id="tab-schedules">
+        <div class="row-between">
+          <h2 style="margin:0">Schedules</h2>
+          <div class="hint">Reads/writes via <code>/api/schedules</code></div>
+        </div>
+
+        <div class="subtabs">
+          <button class="subtab active" data-sub="edit">Edit</button>
+          <button class="subtab" data-sub="dup">Duplicate</button>
+          <button class="subtab" data-sub="import">Import CSV</button>
+        </div>
+
+        <!-- Edit single day -->
+        <div id="sch-edit">
+          <div class="grid grid-2">
+            <div>
+              <div class="row" style="flex-wrap:wrap">
+                <select id="se-user"></select>
+                <input id="se-date" type="date" />
+                <button class="btn" id="se-load">Load</button>
+                <button class="btn btn-brand" id="se-save">Save</button>
+              </div>
+              <div class="hint">Statuses: available, break, lunch, bathroom, training, meeting, offline</div>
+              <div id="se-list" style="margin-top:10px"></div>
+              <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px">
+                <button class="btn btn-small" id="se-add">+ Block</button>
+                <button class="btn btn-small" id="se-clear">Clear</button>
+              </div>
+            </div>
+
+            <div>
+              <div class="pill-ui">Preview</div>
+              <table class="tbl" id="se-preview">
+                <thead><tr><th>Status</th><th>Start</th><th>End</th></tr></thead>
+                <tbody></tbody>
+              </table>
+              <div id="se-warnings" class="hint"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Duplicate -->
+        <div id="sch-dup" class="hidden">
+          <div class="grid grid-2">
+            <div>
+              <h3 style="margin:0 0 8px 0">Source</h3>
+              <div class="row" style="flex-wrap:wrap">
+                <select id="sd-src-user"></select>
+                <input id="sd-src-date" type="date" />
+                <button class="btn" id="sd-preview">Preview</button>
+              </div>
+              <div id="sd-src-list" class="hint"></div>
+
+              <div style="height:12px"></div>
+              <h3 style="margin:0 0 8px 0">Targets</h3>
+              <div class="row" style="flex-wrap:wrap">
+                <select id="sd-dst-users" multiple size="6" style="min-width:220px"></select>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <label>From <input id="sd-from" type="date" /></label>
+                  <label>To <input id="sd-to" type="date" /></label>
+                  <label>Weekdays
+                    <div class="row">
+                      <label><input type="checkbox" class="sd-wd" value="0" checked />Sun</label>
+                      <label><input type="checkbox" class="sd-wd" value="1" checked />Mon</label>
+                      <label><input type="checkbox" class="sd-wd" value="2" checked />Tue</label>
+                      <label><input type="checkbox" class="sd-wd" value="3" checked />Wed</label>
+                      <label><input type="checkbox" class="sd-wd" value="4" checked />Thu</label>
+                      <label><input type="checkbox" class="sd-wd" value="5" />Fri</label>
+                      <label><input type="checkbox" class="sd-wd" value="6" />Sat</label>
+                    </div>
+                  </label>
+                  <label><input id="sd-overwrite" type="checkbox" /> Overwrite existing days</label>
+                </div>
+              </div>
+              <div class="row" style="margin-top:8px">
+                <button class="btn btn-brand" id="sd-commit">Duplicate</button>
+              </div>
+            </div>
+
+            <div>
+              <div class="pill-ui">Plan</div>
+              <div id="sd-plan" class="hint">Preview a source day to build a plan.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Import CSV -->
+        <div id="sch-import" class="hidden">
+          <div class="grid">
+            <div class="drop" id="imp-drop">
+              <div><strong>Drag & drop CSV here</strong> or <label class="btn"><input id="imp-file" type="file" accept=".csv,text/csv" style="display:none" />Choose file</label></div>
+              <div class="hint" style="margin-top:6px">
+                Supported formats:
+                <ul>
+                  <li><code>username,date,status,start,end</code> (tall)</li>
+                  <li><code>username,date,blocks</code> where blocks like <em>available@08:00-10:00; break@10:00-10:15</em></li>
+                </ul>
+              </div>
+            </div>
+            <div id="imp-summary" class="hint"></div>
+            <table class="tbl" id="imp-table" style="display:none">
+              <thead><tr><th>User</th><th>Date</th><th>Blocks</th><th>Notes</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <div class="row" style="justify-content:flex-end">
+              <button class="btn btn-brand" id="imp-commit" disabled>Commit</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Stubs -->
-      <section class="card hidden" id="tab-schedules"><h2>Schedules</h2><div class="muted">Coming soon…</div></section>
       <section class="card hidden" id="tab-history"><h2>Adherence History</h2><div class="muted">Coming soon…</div></section>
       <section class="card hidden" id="tab-news"><h2>News</h2><div class="muted">Coming soon…</div></section>
     </main>
@@ -491,6 +618,8 @@
         users = arr;
         renderUsers();
         showErr('');
+        // also seed schedule dropdowns
+        SCH.seedUserDropdowns();
       }catch{
         showErr('Failed to load users: Request failed');
       }
@@ -600,6 +729,253 @@
       }
     }
     window.addEventListener('hashchange', onTabChange);
+
+    // ---------- Schedules tab (new) ----------
+    const SCH = (function(){
+      // Elements
+      const subBtns = Array.from(document.querySelectorAll('.subtab'));
+      const views = {
+        edit: document.getElementById('sch-edit'),
+        dup: document.getElementById('sch-dup'),
+        import: document.getElementById('sch-import'),
+      };
+      function subActivate(k){ subBtns.forEach(b=>b.classList.toggle('active', b.dataset.sub===k)); Object.entries(views).forEach(([key,el])=> el.classList.toggle('hidden', key!==k)); }
+      subBtns.forEach(b=> b.addEventListener('click', ()=> subActivate(b.dataset.sub)));
+      subActivate('edit');
+
+      // Shared helpers
+      const STATUSES = ['available','break','lunch','bathroom','training','meeting','offline'];
+      const isHHMM = (s)=> /^[0-2]\d:[0-5]\d$/.test(String(s||''));
+      const hhmmToMin = (s)=>{ const [h,m]=String(s||'').split(':').map(Number); return (h*60+m)|0; };
+      function overlap(blocks){
+        const arr = (blocks||[]).map(b=>({s:hhmmToMin(b.start), e:hhmmToMin(b.end)})).sort((a,b)=>a.s-b.s);
+        for (let i=1;i<arr.length;i++){ if (arr[i].s < arr[i-1].e) return true; }
+        return false;
+      }
+      async function getSchedule(user,date){ const r = await apiJSON(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`, {method:'GET'}); const d=r.data; return Array.isArray(d)? d : (d.blocks||[]); }
+      async function saveSchedule(user,date,blocks){ return apiJSON(`/api/schedules`, { method:'POST', body: JSON.stringify({ username:user, date, blocks }) }); }
+
+      // Populate user dropdowns
+      const seUser = document.getElementById('se-user');
+      const sdSrcUser = document.getElementById('sd-src-user');
+      const sdDstUsers = document.getElementById('sd-dst-users');
+      function seedUserDropdowns(){
+        if (!Array.isArray(users) || !users.length) return;
+        const opts = users.map(u=> `<option value="${u.username}">${u.username}</option>`).join('');
+        seUser.innerHTML = `<option value="">Select user…</option>${opts}`;
+        sdSrcUser.innerHTML = `<option value="">Select source…</option>${opts}`;
+        sdDstUsers.innerHTML = opts;
+      }
+
+      // --- Edit single day ---
+      const seDate = document.getElementById('se-date');
+      const seLoad = document.getElementById('se-load');
+      const seSave = document.getElementById('se-save');
+      const seList = document.getElementById('se-list');
+      const seAdd = document.getElementById('se-add');
+      const seClear = document.getElementById('se-clear');
+      const sePrevT = document.querySelector('#se-preview tbody');
+      const seWarn = document.getElementById('se-warnings');
+
+      let seBlocks = [];
+      function renderEdit(){
+        seList.innerHTML=''; sePrevT.innerHTML=''; seWarn.textContent='';
+        seBlocks.forEach((b,i)=>{
+          const row=document.createElement('div'); row.className='blk';
+          row.innerHTML=`
+            <select data-i="${i}" data-k="status">${STATUSES.map(s=>`<option ${s===b.status?'selected':''} value="${s}">${s}</option>`).join('')}</select>
+            <input data-i="${i}" data-k="start" placeholder="HH:MM" value="${b.start||''}" />
+            <input data-i="${i}" data-k="end" placeholder="HH:MM" value="${b.end||''}" />
+            <button class="btn btn-small btn-danger" data-i="${i}" data-k="del">Delete</button>`;
+          seList.appendChild(row);
+        });
+        seBlocks.forEach((b)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`; sePrevT.appendChild(tr); });
+        if (overlap(seBlocks)) seWarn.textContent='⚠️ Overlapping blocks detected.';
+      }
+      seList.addEventListener('input', (e)=>{
+        const t=e.target, i=+t.dataset.i, k=t.dataset.k; if (Number.isNaN(i)||!k) return;
+        seBlocks[i]={...seBlocks[i],[k]:t.value}; renderEdit();
+      });
+      seList.addEventListener('click', (e)=>{
+        if (e.target.matches('button[data-k="del"]')){ const i=+e.target.dataset.i; seBlocks.splice(i,1); renderEdit(); }
+      });
+      seAdd.addEventListener('click', ()=>{ const lastEnd = seBlocks.length? seBlocks[seBlocks.length-1].end : '08:00'; seBlocks.push({status:'available',start:lastEnd,end:lastEnd}); renderEdit(); });
+      seClear.addEventListener('click', ()=>{ if (confirm('Clear all blocks?')){ seBlocks=[]; renderEdit(); }});
+      seLoad.addEventListener('click', async ()=>{
+        const u=seUser.value, d=seDate.value; if (!u||!d){ showErr('Select a user and date.'); return; }
+        try{ seBlocks=await getSchedule(u,d); renderEdit(); showErr(''); }catch{ showErr('Failed to load schedule.'); }
+      });
+      seSave.addEventListener('click', async ()=>{
+        const u=seUser.value, d=seDate.value; if (!u||!d){ showErr('Select a user and date.'); return; }
+        if (!seBlocks.every(b=> isHHMM(b.start)&&isHHMM(b.end)&&STATUSES.includes(b.status))){ showErr('Fix invalid rows (status/time).'); return; }
+        if (overlap(seBlocks) && !confirm('Blocks overlap. Save anyway?')) return;
+        try{ await saveSchedule(u,d,seBlocks); alert('Saved.'); showErr(''); }catch{ showErr('Save failed.'); }
+      });
+
+      // --- Duplicate ---
+      const sdSrcDate = document.getElementById('sd-src-date');
+      const sdPreview = document.getElementById('sd-preview');
+      const sdPlan = document.getElementById('sd-plan');
+      const sdSrcList = document.getElementById('sd-src-list');
+      const sdFrom = document.getElementById('sd-from');
+      const sdTo = document.getElementById('sd-to');
+      const sdWD = Array.from(document.querySelectorAll('.sd-wd'));
+      const sdOverwrite = document.getElementById('sd-overwrite');
+      const sdCommit = document.getElementById('sd-commit');
+
+      let sdSourceBlocks = [];
+      function dateIter(from,to,weekdays){
+        const out=[]; const start=new Date(from+'T00:00:00'); const end=new Date(to+'T00:00:00');
+        for (let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){ if (weekdays.has(d.getDay())) out.push(d.toISOString().slice(0,10)); }
+        return out;
+      }
+      sdPreview.addEventListener('click', async ()=>{
+        const u=sdSrcUser.value, d=sdSrcDate.value; if(!u||!d){ showErr('Pick source user & date.'); return; }
+        try{
+          sdSourceBlocks = await getSchedule(u,d);
+          sdSrcList.textContent = sdSourceBlocks.length? `${u} ${d}: ${sdSourceBlocks.length} blocks` : `${u} ${d}: (no blocks)`;
+          const toUsers = Array.from(sdDstUsers.selectedOptions).map(o=>o.value);
+          const weekdays = new Set(sdWD.filter(cb=>cb.checked).map(cb=>+cb.value));
+          const days = (sdFrom.value && sdTo.value) ? dateIter(sdFrom.value, sdTo.value, weekdays) : [];
+          sdPlan.innerHTML = days.length && toUsers.length
+            ? `Plan to write <strong>${sdSourceBlocks.length}</strong> blocks to <strong>${toUsers.length}</strong> users across <strong>${days.length}</strong> days.`
+            : 'Select destinations (users, date range, weekdays).';
+          showErr('');
+        }catch{ showErr('Failed to load source schedule.'); }
+      });
+      sdCommit.addEventListener('click', async ()=>{
+        const toUsers = Array.from(sdDstUsers.selectedOptions).map(o=>o.value);
+        const weekdays = new Set(sdWD.filter(cb=>cb.checked).map(cb=>+cb.value));
+        if (!sdSourceBlocks.length){ showErr('Preview first to load source blocks.'); return; }
+        if (!toUsers.length || !sdFrom.value || !sdTo.value){ showErr('Pick target users and range.'); return; }
+        const days = dateIter(sdFrom.value, sdTo.value, weekdays);
+        if (!days.length){ showErr('Range has no matching weekdays.'); return; }
+        // NOTE: client-side overwrite check can be added later if needed
+        let ok=0, fail=0;
+        for (const u of toUsers){
+          for (const d of days){
+            try{ await saveSchedule(u,d,sdSourceBlocks); ok++; }catch{ fail++; }
+          }
+        }
+        alert(`Duplicate complete.\nSuccess: ${ok}\nFailed: ${fail}`);
+      });
+
+      // --- Import CSV ---
+      const impDrop = document.getElementById('imp-drop');
+      const impFile = document.getElementById('imp-file');
+      const impSummary = document.getElementById('imp-summary');
+      const impTable = document.getElementById('imp-table');
+      const impTBody = document.querySelector('#imp-table tbody');
+      const impCommit = document.getElementById('imp-commit');
+
+      function parseCSV(text){
+        const out=[]; let row=[]; let cur=''; let q=false;
+        for (let i=0;i<text.length;i++){
+          const c=text[i], n=text[i+1];
+          if (q){
+            if (c==='"' && n==='"'){ cur+='"'; i++; }
+            else if (c==='\"'){ q=false; }
+            else { cur+=c; }
+          } else {
+            if (c==='\"'){ q=true; }
+            else if (c===','){ row.push(cur); cur=''; }
+            else if (c==='\n' || c==='\r'){ if (cur!=='' || row.length){ row.push(cur); out.push(row); row=[]; cur=''; } }
+            else { cur+=c; }
+          }
+        }
+        if (cur!=='' || row.length) { row.push(cur); out.push(row); }
+        return out;
+      }
+      function normStatus(s){
+        const m=String(s||'').toLowerCase().trim()
+          .replace('avail','available').replace('brk','break');
+        return STATUSES.includes(m)? m : m;
+      }
+      function parseBlocksString(str){
+        const parts=String(str||'').split(';').map(s=>s.trim()).filter(Boolean);
+        const blocks=[];
+        for (const p of parts){
+          const m = p.match(/^([a-zA-Z]+)\s*@\s*([0-2]\d:[0-5]\d)\s*-\s*([0-2]\d:[0-5]\d)$/);
+          if (!m) continue;
+          const status=normStatus(m[1]);
+          blocks.push({ status, start:m[2], end:m[3] });
+        }
+        return blocks;
+      }
+      let impRows = [];
+      function renderImport(){
+        impTBody.innerHTML=''; let ok=0, warn=0, bad=0;
+        for (const r of impRows){
+          const tr=document.createElement('tr');
+          const cls = r.ok? 'ok' : r.warn? 'warn' : 'bad';
+          if      (!r.ok && r.warn) warn++;
+          else if (!r.ok) bad++;
+          else ok++;
+          tr.innerHTML = `<td>${r.user}</td><td>${r.date}</td><td>${r.blocks.map(b=>`${b.status} ${b.start}-${b.end}`).join('; ')}</td><td><span class="pill-ui ${cls}">${r.notes|| (r.ok?'OK': r.warn?'WARN':'ERROR')}</span></td>`;
+          impTBody.appendChild(tr);
+        }
+        impSummary.innerHTML = impRows.length
+          ? `Parsed <strong>${impRows.length}</strong> rows · <span class="ok">OK ${ok}</span> · <span class="warn">Warn ${warn}</span> · <span class="bad">Err ${bad}</span>`
+          : '';
+        impTable.style.display = impRows.length? '' : 'none';
+        impCommit.disabled = !impRows.some(r=> r.ok);
+      }
+      function handleCSV(text){
+        const rows = parseCSV(text).filter(r=> r.length && r.join('').trim());
+        if (!rows.length){ showErr('CSV empty.'); return; }
+        const hdr = rows[0].map(h=>h.trim().toLowerCase());
+        let mode;
+        if (hdr.includes('blocks')) mode='blocks';
+        else if (hdr.includes('status')) mode='tall';
+        else { if (rows[0].length>=5) mode='tall'; else if (rows[0].length>=3) mode='blocks'; }
+        const out=[];
+        for (let i=1;i<rows.length;i++){
+          const r = rows[i]; if (!r) continue;
+          let user='', date='', blocks=[], notes='';
+          if (mode==='tall'){
+            const [u,d,s,start,end] = r;
+            user=String(u||'').trim().toLowerCase();
+            date=String(d||'').trim();
+            const status=normStatus(s);
+            blocks=[{ status, start:String(start||''), end:String(end||'') }];
+          } else {
+            const [u,d,b] = r;
+            user=String(u||'').trim().toLowerCase();
+            date=String(d||'').trim();
+            blocks=parseBlocksString(b);
+          }
+          let ok=true, warn=false;
+          const isValid = blocks.every(b=> isHHMM(b.start)&&isHHMM(b.end)&&STATUSES.includes(b.status));
+          if (!user || !date || !blocks.length){ ok=false; notes='Missing fields'; }
+          else if (!isValid){ ok=false; notes='Bad status/time'; }
+          else if (overlap(blocks)){ warn=true; notes='Overlap'; }
+          out.push({ user, date, blocks, ok, warn, notes });
+        }
+        impRows = out;
+        renderImport();
+      }
+      function setDropHover(v){ impDrop.style.background = v? '#fafafa' : ''; }
+      impDrop.addEventListener('dragover', (e)=>{ e.preventDefault(); setDropHover(true); });
+      impDrop.addEventListener('dragleave', ()=> setDropHover(false));
+      impDrop.addEventListener('drop', (e)=>{ e.preventDefault(); setDropHover(false); const f=e.dataTransfer.files?.[0]; if(!f) return; f.text().then(handleCSV); });
+      impFile.addEventListener('change', ()=>{ const f=impFile.files?.[0]; if(!f) return; f.text().then(handleCSV); });
+      impCommit.addEventListener('click', async ()=>{
+        let ok=0, fail=0;
+        const map=new Map();
+        for (const r of impRows.filter(r=>r.ok)){
+          const k=`${r.user}|${r.date}`;
+          const cur = map.get(k)||{user:r.user,date:r.date,blocks:[]};
+          cur.blocks.push(...r.blocks);
+          map.set(k,cur);
+        }
+        for (const {user,date,blocks} of map.values()){
+          try{ await saveSchedule(user,date,blocks); ok++; }catch{ fail++; }
+        }
+        alert(`Import complete.\nDays written: ${ok}\nFailed: ${fail}`);
+      });
+
+      return { seedUserDropdowns };
+    })();
 
     // ---------- Diagnostics ----------
     const diag = document.getElementById('diag');
