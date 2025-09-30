@@ -239,6 +239,11 @@
             <div>
               <div class="pill-ui">Plan</div>
               <div id="sd-plan" class="hint">Preview a source day to build a plan.</div>
+              <!-- NEW: actual block preview for Duplicate -->
+              <table class="tbl" id="sd-preview-table" style="margin-top:8px; display:none">
+                <thead><tr><th>Status</th><th>Start</th><th>End</th></tr></thead>
+                <tbody></tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -352,10 +357,6 @@
     const errEl = document.getElementById('errbar');
     function showErr(msg){ errEl.textContent = String(msg||''); errEl.style.display = msg ? 'block' : 'none'; }
 
-    // Global safety net so a bug never blanks the page
-    window.addEventListener('error', (e)=> showErr(e?.message || 'Unexpected error'));
-    window.addEventListener('unhandledrejection', (e)=> showErr(e?.reason?.message || 'Unexpected error'));
-
     const tabs = Array.from(document.querySelectorAll('.tab'));
     const panels = {
       users: document.getElementById('tab-users'),
@@ -365,12 +366,10 @@
       news: document.getElementById('tab-news'),
     };
     function activate(tab){
-      try{
-        tabs.forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
-        Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==tab));
-        history.replaceState(null,'',`#${tab}`);
-        onTabChange(); // hook for live board polling
-      }catch(e){ showErr('Failed to open tab: ' + (e.message||e)); }
+      tabs.forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+      Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==tab));
+      history.replaceState(null,'',`#${tab}`);
+      onTabChange(); // hook for live board polling
     }
     tabs.forEach(b=> b.addEventListener('click', ()=> activate(b.dataset.tab)));
     const initial = location.hash.replace('#',''); if (initial && panels[initial]) activate(initial);
@@ -456,7 +455,7 @@
           const {data} = await apiJSON(p, { method:'GET' });
           const adapted = adaptUsers(data);
           if (Array.isArray(adapted)){
-            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/users');
+            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/users'); // normalized base towards Worker semantics
             U.endpoint.textContent = 'API Endpoint in use: ' + p;
             return adapted;
           }
@@ -504,7 +503,6 @@
             if (act==='delete') await doDelete(u);
           });
         });
-        // (kept as-is for behavior parity)
         document.addEventListener('click', ()=> menu.classList.remove('open'));
         U.list.appendChild(row);
       });
@@ -754,13 +752,41 @@
       const STATUSES = ['available','break','lunch','bathroom','training','meeting','offline'];
       const isHHMM = (s)=> /^[0-2]\d:[0-5]\d$/.test(String(s||''));
       const hhmmToMin = (s)=>{ const [h,m]=String(s||'').split(':').map(Number); return (h*60+m)|0; };
+      const minToHHMM = (n)=> {
+        if (typeof n !== 'number' || !isFinite(n)) return '';
+        const h = Math.floor(n/60), m = n%60;
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      };
       function overlap(blocks){
         const arr = (blocks||[]).map(b=>({s:hhmmToMin(b.start), e:hhmmToMin(b.end)})).sort((a,b)=>a.s-b.s);
         for (let i=1;i<arr.length;i++){ if (arr[i].s < arr[i-1].e) return true; }
         return false;
       }
-      async function getSchedule(user,date){ const r = await apiJSON(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`, {method:'GET'}); const d=r.data; return Array.isArray(d)? d : (d.blocks||[]); }
-      async function saveSchedule(user,date,blocks){ return apiJSON(`/api/schedules`, { method:'POST', body: JSON.stringify({ username:user, date, blocks }) }); }
+
+      // API helpers (normalize times to HH:MM on read)
+      async function getSchedule(user,date){
+        const r = await apiJSON(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`, {method:'GET'});
+        const raw = Array.isArray(r.data) ? r.data : (r.data?.blocks || []);
+        return raw.map(b=>{
+          const start = isHHMM(b.start) ? b.start : minToHHMM(b.start);
+          const end   = isHHMM(b.end)   ? b.end   : minToHHMM(b.end);
+          return { status: String(b.status||'').toLowerCase(), start, end };
+        });
+      }
+      async function saveSchedule(user,date,blocks){
+        return apiJSON(`/api/schedules`, { method:'POST', body: JSON.stringify({ username:user, date, blocks }) });
+      }
+      async function assignSchedules(users,from,to,weekdays,template,overwrite){
+        return apiJSON(`/api/schedules/assign`,{
+          method:'POST',
+          body: JSON.stringify({
+            users, dateRange:{ from, to }, weekdays, overwrite: !!overwrite,
+            // allow back-end either template id or raw blocks
+            templateId: null,
+            blocks: template
+          })
+        });
+      }
 
       // Populate user dropdowns
       const seUser = document.getElementById('se-user');
@@ -785,56 +811,36 @@
       const seWarn = document.getElementById('se-warnings');
 
       let seBlocks = [];
-
-      function renderPreviewOnly(){
-        sePrevT.innerHTML = '';
-        for (const b of seBlocks) {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${b.status||''}</td><td>${b.start||''}</td><td>${b.end||''}</td>`;
-          sePrevT.appendChild(tr);
-        }
-        seWarn.textContent = overlap(seBlocks) ? '⚠️ Overlapping blocks detected.' : '';
-      }
-
       function renderEdit(){
         seList.innerHTML=''; sePrevT.innerHTML=''; seWarn.textContent='';
         seBlocks.forEach((b,i)=>{
           const row=document.createElement('div'); row.className='blk';
           row.innerHTML=`
             <select data-i="${i}" data-k="status">${STATUSES.map(s=>`<option ${s===b.status?'selected':''} value="${s}">${s}</option>`).join('')}</select>
-            <input data-i="${i}" data-k="start" placeholder="HH:MM" inputmode="numeric" value="${b.start||''}" />
-            <input data-i="${i}" data-k="end" placeholder="HH:MM" inputmode="numeric" value="${b.end||''}" />
+            <input data-i="${i}" data-k="start" placeholder="HH:MM" value="${b.start||''}" />
+            <input data-i="${i}" data-k="end" placeholder="HH:MM" value="${b.end||''}" />
             <button class="btn btn-small btn-danger" data-i="${i}" data-k="del">Delete</button>`;
           seList.appendChild(row);
         });
-        for (const b of seBlocks){
-          const tr=document.createElement('tr');
-          tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`;
-          sePrevT.appendChild(tr);
+        if (!seBlocks.length){
+          sePrevT.innerHTML = `<tr><td colspan="3" class="muted">No blocks</td></tr>`;
+        }else{
+          seBlocks.forEach((b)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`; sePrevT.appendChild(tr); });
         }
         if (overlap(seBlocks)) seWarn.textContent='⚠️ Overlapping blocks detected.';
       }
-
-      // live typing: update data + preview only (keeps caret)
       seList.addEventListener('input', (e)=>{
-        const t=e.target; if (!t || t.dataset==null) return;
-        const i=+t.dataset.i, k=t.dataset.k; if (Number.isNaN(i)||!k) return;
-        seBlocks[i]={...seBlocks[i],[k]:t.value};
-        renderPreviewOnly();
+        const t=e.target, i=+t.dataset.i, k=t.dataset.k; if (Number.isNaN(i)||!k) return;
+        seBlocks[i]={...seBlocks[i],[k]:t.value}; renderEdit();
       });
-
-      // commit DOM for selects/finished edits
-      seList.addEventListener('change', (e)=>{
-        const t=e.target; if (!t || t.dataset==null) return;
-        const i=+t.dataset.i, k=t.dataset.k; if (Number.isNaN(i)||!k) return;
-        seBlocks[i]={...seBlocks[i],[k]:t.value};
-        renderEdit();
-      });
-
       seList.addEventListener('click', (e)=>{
         if (e.target.matches('button[data-k="del"]')){ const i=+e.target.dataset.i; seBlocks.splice(i,1); renderEdit(); }
       });
-      seAdd.addEventListener('click', ()=>{ const lastEnd = seBlocks.length? seBlocks[seBlocks.length-1].end : '08:00'; seBlocks.push({status:'available',start:lastEnd,end:lastEnd}); renderEdit(); });
+      seAdd.addEventListener('click', ()=>{
+        const lastEnd = seBlocks.length? seBlocks[seBlocks.length-1].end : '08:00';
+        seBlocks.push({status:'available',start:lastEnd,end:lastEnd});
+        renderEdit();
+      });
       seClear.addEventListener('click', ()=>{ if (confirm('Clear all blocks?')){ seBlocks=[]; renderEdit(); }});
       seLoad.addEventListener('click', async ()=>{
         const u=seUser.value, d=seDate.value; if (!u||!d){ showErr('Select a user and date.'); return; }
@@ -857,6 +863,8 @@
       const sdWD = Array.from(document.querySelectorAll('.sd-wd'));
       const sdOverwrite = document.getElementById('sd-overwrite');
       const sdCommit = document.getElementById('sd-commit');
+      const sdPrevTbl = document.getElementById('sd-preview-table');
+      const sdPrevTBody = sdPrevTbl.querySelector('tbody');
 
       let sdSourceBlocks = [];
       function dateIter(from,to,weekdays){
@@ -864,17 +872,33 @@
         for (let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){ if (weekdays.has(d.getDay())) out.push(d.toISOString().slice(0,10)); }
         return out;
       }
+      function renderDupPreviewTable(blocks){
+        sdPrevTBody.innerHTML = '';
+        if (!blocks.length){
+          sdPrevTbl.style.display='none';
+          return;
+        }
+        sdPrevTbl.style.display='';
+        blocks.forEach(b=>{
+          const tr=document.createElement('tr');
+          tr.innerHTML = `<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`;
+          sdPrevTBody.appendChild(tr);
+        });
+      }
       sdPreview.addEventListener('click', async ()=>{
         const u=sdSrcUser.value, d=sdSrcDate.value; if(!u||!d){ showErr('Pick source user & date.'); return; }
         try{
           sdSourceBlocks = await getSchedule(u,d);
           sdSrcList.textContent = sdSourceBlocks.length? `${u} ${d}: ${sdSourceBlocks.length} blocks` : `${u} ${d}: (no blocks)`;
+
           const toUsers = Array.from(sdDstUsers.selectedOptions).map(o=>o.value);
           const weekdays = new Set(sdWD.filter(cb=>cb.checked).map(cb=>+cb.value));
           const days = (sdFrom.value && sdTo.value) ? dateIter(sdFrom.value, sdTo.value, weekdays) : [];
           sdPlan.innerHTML = days.length && toUsers.length
             ? `Plan to write <strong>${sdSourceBlocks.length}</strong> blocks to <strong>${toUsers.length}</strong> users across <strong>${days.length}</strong> days.`
             : 'Select destinations (users, date range, weekdays).';
+
+          renderDupPreviewTable(sdSourceBlocks);
           showErr('');
         }catch{ showErr('Failed to load source schedule.'); }
       });
@@ -885,6 +909,16 @@
         if (!toUsers.length || !sdFrom.value || !sdTo.value){ showErr('Pick target users and range.'); return; }
         const days = dateIter(sdFrom.value, sdTo.value, weekdays);
         if (!days.length){ showErr('Range has no matching weekdays.'); return; }
+
+        // Try bulk assign; if unavailable, fallback to per-day writes.
+        try{
+          await assignSchedules(toUsers, sdFrom.value, sdTo.value, Array.from(weekdays), sdSourceBlocks, sdOverwrite.checked);
+          alert('Duplicate complete.');
+          return;
+        }catch(e){
+          // fallback
+        }
+
         let ok=0, fail=0;
         for (const u of toUsers){
           for (const d of days){
