@@ -776,17 +776,6 @@
       async function saveSchedule(user,date,blocks){
         return apiJSON(`/api/schedules`, { method:'POST', body: JSON.stringify({ username:user, date, blocks }) });
       }
-      async function assignSchedules(users,from,to,weekdays,template,overwrite){
-        return apiJSON(`/api/schedules/assign`,{
-          method:'POST',
-          body: JSON.stringify({
-            users, dateRange:{ from, to }, weekdays, overwrite: !!overwrite,
-            // allow back-end either template id or raw blocks
-            templateId: null,
-            blocks: template
-          })
-        });
-      }
 
       // Populate user dropdowns
       const seUser = document.getElementById('se-user');
@@ -811,30 +800,57 @@
       const seWarn = document.getElementById('se-warnings');
 
       let seBlocks = [];
+
+      // NEW: preview-only render (does NOT touch inputs, avoids caret jump)
+      function renderPreviewOnly(){
+        sePrevT.innerHTML = '';
+        if (!seBlocks.length){
+          sePrevT.innerHTML = `<tr><td colspan="3" class="muted">No blocks</td></tr>`;
+        } else {
+          seBlocks.forEach((b)=> {
+            const tr=document.createElement('tr');
+            tr.innerHTML = `<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`;
+            sePrevT.appendChild(tr);
+          });
+        }
+        seWarn.textContent = overlap(seBlocks) ? '⚠️ Overlapping blocks detected.' : '';
+      }
+
       function renderEdit(){
-        seList.innerHTML=''; sePrevT.innerHTML=''; seWarn.textContent='';
+        seList.innerHTML=''; 
+        seWarn.textContent='';
         seBlocks.forEach((b,i)=>{
           const row=document.createElement('div'); row.className='blk';
           row.innerHTML=`
             <select data-i="${i}" data-k="status">${STATUSES.map(s=>`<option ${s===b.status?'selected':''} value="${s}">${s}</option>`).join('')}</select>
-            <input data-i="${i}" data-k="start" placeholder="HH:MM" value="${b.start||''}" />
-            <input data-i="${i}" data-k="end" placeholder="HH:MM" value="${b.end||''}" />
+            <input data-i="${i}" data-k="start" type="time" step="60" value="${b.start||''}" />
+            <input data-i="${i}" data-k="end"   type="time" step="60" value="${b.end||''}" />
             <button class="btn btn-small btn-danger" data-i="${i}" data-k="del">Delete</button>`;
           seList.appendChild(row);
         });
-        if (!seBlocks.length){
-          sePrevT.innerHTML = `<tr><td colspan="3" class="muted">No blocks</td></tr>`;
-        }else{
-          seBlocks.forEach((b)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`; sePrevT.appendChild(tr); });
-        }
-        if (overlap(seBlocks)) seWarn.textContent='⚠️ Overlapping blocks detected.';
+        renderPreviewOnly();
       }
+
+      // Update data live, but DO NOT re-render inputs on each keystroke
       seList.addEventListener('input', (e)=>{
         const t=e.target, i=+t.dataset.i, k=t.dataset.k; if (Number.isNaN(i)||!k) return;
-        seBlocks[i]={...seBlocks[i],[k]:t.value}; renderEdit();
+        seBlocks[i]={...seBlocks[i],[k]:t.value};
+        renderPreviewOnly();
       });
+
+      // Commit full re-render when a control is finished (select/time blur/change)
+      seList.addEventListener('change', (e)=>{
+        const t=e.target, i=+t.dataset.i, k=t.dataset.k; if (Number.isNaN(i)||!k) return;
+        seBlocks[i]={...seBlocks[i],[k]:t.value};
+        renderEdit();
+      });
+
       seList.addEventListener('click', (e)=>{
-        if (e.target.matches('button[data-k="del"]')){ const i=+e.target.dataset.i; seBlocks.splice(i,1); renderEdit(); }
+        if (e.target.matches('button[data-k="del"]')){
+          const i=+e.target.dataset.i; 
+          seBlocks.splice(i,1); 
+          renderEdit();
+        }
       });
       seAdd.addEventListener('click', ()=>{
         const lastEnd = seBlocks.length? seBlocks[seBlocks.length-1].end : '08:00';
@@ -854,6 +870,7 @@
       });
 
       // --- Duplicate ---
+      const sdSrcUser = document.getElementById('sd-src-user');
       const sdSrcDate = document.getElementById('sd-src-date');
       const sdPreview = document.getElementById('sd-preview');
       const sdPlan = document.getElementById('sd-plan');
@@ -910,15 +927,7 @@
         const days = dateIter(sdFrom.value, sdTo.value, weekdays);
         if (!days.length){ showErr('Range has no matching weekdays.'); return; }
 
-        // Try bulk assign; if unavailable, fallback to per-day writes.
-        try{
-          await assignSchedules(toUsers, sdFrom.value, sdTo.value, Array.from(weekdays), sdSourceBlocks, sdOverwrite.checked);
-          alert('Duplicate complete.');
-          return;
-        }catch(e){
-          // fallback
-        }
-
+        // Fallback per-day writes (kept simple and unchanged in behavior)
         let ok=0, fail=0;
         for (const u of toUsers){
           for (const d of days){
