@@ -68,6 +68,7 @@
     .modal-card{width:min(900px,95vw);max-height:85vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px}
     pre{white-space:pre-wrap;background:#f8fafc;border:1px solid var(--line);padding:10px;border-radius:10px;font-size:12px;max-height:300px;overflow:auto}
     .hint{font-size:12px;color:#64748b}
+
     /* --- Schedules tab additions --- */
     .row-between{display:flex;align-items:center;justify-content:space-between;gap:10px}
     .subtabs{display:flex;gap:6px;margin:12px 0}
@@ -83,6 +84,15 @@
     .ok{color:#166534;background:#dcfce7;border-color:#bbf7d0}
     .warn{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .bad{color:#991b1b;background:#fee2e2;border-color:#fecaca}
+
+    /* Preview visibility + scrolling */
+    #se-preview{border:1px solid var(--line);border-radius:10px}
+    #se-preview tbody{display:block;max-height:260px;overflow:auto}
+    #se-preview thead, #se-preview tbody tr{display:table;width:100%;table-layout:fixed}
+    #se-warnings{margin-top:6px}
+
+    /* Time inputs tidy */
+    .blk input[placeholder="HH:MM"]{width:88px;text-align:center}
   </style>
 </head>
 <body>
@@ -133,7 +143,7 @@
         <div id="u-list"></div>
       </section>
 
-      <!-- Live Board (unchanged) -->
+      <!-- Live Board -->
       <section class="card hidden" id="tab-live">
         <div class="row" style="justify-content:space-between">
           <div>
@@ -156,7 +166,7 @@
         <div id="lb-list"></div>
       </section>
 
-      <!-- Schedules (new, fully functional) -->
+      <!-- Schedules -->
       <section class="card hidden" id="tab-schedules">
         <div class="row-between">
           <h2 style="margin:0">Schedules</h2>
@@ -730,7 +740,7 @@
     }
     window.addEventListener('hashchange', onTabChange);
 
-    // ---------- Schedules tab (new) ----------
+    // ---------- Schedules tab ----------
     const SCH = (function(){
       // Elements
       const subBtns = Array.from(document.querySelectorAll('.subtab'));
@@ -747,13 +757,42 @@
       const STATUSES = ['available','break','lunch','bathroom','training','meeting','offline'];
       const isHHMM = (s)=> /^[0-2]\d:[0-5]\d$/.test(String(s||''));
       const hhmmToMin = (s)=>{ const [h,m]=String(s||'').split(':').map(Number); return (h*60+m)|0; };
+
+      // NEW: time formatting helpers
+      const minToHHMM = (m) => {
+        const n = Number(m);
+        if (!Number.isFinite(n)) return '';
+        const h = Math.floor((n % 1440) / 60);
+        const mm = n % 60;
+        return String(h).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+      };
+      const normalizeHHMM = (v) => {
+        if (isHHMM(v)) return v;
+        const n = Number(String(v||'').trim());
+        if (Number.isFinite(n)) return minToHHMM(n);
+        return '';
+      };
+
       function overlap(blocks){
         const arr = (blocks||[]).map(b=>({s:hhmmToMin(b.start), e:hhmmToMin(b.end)})).sort((a,b)=>a.s-b.s);
         for (let i=1;i<arr.length;i++){ if (arr[i].s < arr[i-1].e) return true; }
         return false;
       }
-      async function getSchedule(user,date){ const r = await apiJSON(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`, {method:'GET'}); const d=r.data; return Array.isArray(d)? d : (d.blocks||[]); }
-      async function saveSchedule(user,date,blocks){ return apiJSON(`/api/schedules`, { method:'POST', body: JSON.stringify({ username:user, date, blocks }) }); }
+
+      // Modified: normalize loaded times to HH:MM
+      async function getSchedule(user,date){
+        const r = await apiJSON(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`, {method:'GET'});
+        const d = r.data;
+        const arr = Array.isArray(d) ? d : (d.blocks || []);
+        return arr.map(b => ({
+          status: b.status,
+          start: normalizeHHMM(b.start),
+          end:   normalizeHHMM(b.end),
+        }));
+      }
+      async function saveSchedule(user,date,blocks){
+        return apiJSON(`/api/schedules`, { method:'POST', body: JSON.stringify({ username:user, date, blocks }) });
+      }
 
       // Populate user dropdowns
       const seUser = document.getElementById('se-user');
@@ -777,6 +816,10 @@
       const sePrevT = document.querySelector('#se-preview tbody');
       const seWarn = document.getElementById('se-warnings');
 
+      // Default dates = today
+      const today = new Date().toISOString().slice(0,10);
+      seDate.value ||= today;
+
       let seBlocks = [];
       function renderEdit(){
         seList.innerHTML=''; sePrevT.innerHTML=''; seWarn.textContent='';
@@ -784,8 +827,8 @@
           const row=document.createElement('div'); row.className='blk';
           row.innerHTML=`
             <select data-i="${i}" data-k="status">${STATUSES.map(s=>`<option ${s===b.status?'selected':''} value="${s}">${s}</option>`).join('')}</select>
-            <input data-i="${i}" data-k="start" placeholder="HH:MM" value="${b.start||''}" />
-            <input data-i="${i}" data-k="end" placeholder="HH:MM" value="${b.end||''}" />
+            <input data-i="${i}" data-k="start" placeholder="HH:MM" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" value="${b.start||''}" />
+            <input data-i="${i}" data-k="end"   placeholder="HH:MM" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" value="${b.end||''}" />
             <button class="btn btn-small btn-danger" data-i="${i}" data-k="del">Delete</button>`;
           seList.appendChild(row);
         });
@@ -796,10 +839,27 @@
         const t=e.target, i=+t.dataset.i, k=t.dataset.k; if (Number.isNaN(i)||!k) return;
         seBlocks[i]={...seBlocks[i],[k]:t.value}; renderEdit();
       });
+      // NEW: auto-format plain minutes to HH:MM on blur
+      seList.addEventListener('blur', (e)=>{
+        const t=e.target;
+        if (t.matches('input[data-k="start"], input[data-k="end"]')) {
+          const i=+t.dataset.i, k=t.dataset.k;
+          const v = normalizeHHMM(t.value);
+          if (v) {
+            seBlocks[i] = { ...seBlocks[i], [k]: v };
+            t.value = v;
+            renderEdit();
+          }
+        }
+      }, true);
+
       seList.addEventListener('click', (e)=>{
         if (e.target.matches('button[data-k="del"]')){ const i=+e.target.dataset.i; seBlocks.splice(i,1); renderEdit(); }
       });
-      seAdd.addEventListener('click', ()=>{ const lastEnd = seBlocks.length? seBlocks[seBlocks.length-1].end : '08:00'; seBlocks.push({status:'available',start:lastEnd,end:lastEnd}); renderEdit(); });
+      seAdd.addEventListener('click', ()=>{
+        const lastEnd = seBlocks.length? seBlocks[seBlocks.length-1].end : '08:00';
+        seBlocks.push({status:'available',start:lastEnd,end:lastEnd}); renderEdit();
+      });
       seClear.addEventListener('click', ()=>{ if (confirm('Clear all blocks?')){ seBlocks=[]; renderEdit(); }});
       seLoad.addEventListener('click', async ()=>{
         const u=seUser.value, d=seDate.value; if (!u||!d){ showErr('Select a user and date.'); return; }
@@ -813,15 +873,22 @@
       });
 
       // --- Duplicate ---
+      const sdSrcUser = document.getElementById('sd-src-user');
       const sdSrcDate = document.getElementById('sd-src-date');
       const sdPreview = document.getElementById('sd-preview');
       const sdPlan = document.getElementById('sd-plan');
       const sdSrcList = document.getElementById('sd-src-list');
+      const sdDstUsers = document.getElementById('sd-dst-users');
       const sdFrom = document.getElementById('sd-from');
       const sdTo = document.getElementById('sd-to');
       const sdWD = Array.from(document.querySelectorAll('.sd-wd'));
       const sdOverwrite = document.getElementById('sd-overwrite');
       const sdCommit = document.getElementById('sd-commit');
+
+      // Default duplicate dates = today
+      sdSrcDate.value ||= today;
+      sdFrom.value ||= today;
+      sdTo.value ||= today;
 
       let sdSourceBlocks = [];
       function dateIter(from,to,weekdays){
@@ -874,10 +941,10 @@
           const c=text[i], n=text[i+1];
           if (q){
             if (c==='"' && n==='"'){ cur+='"'; i++; }
-            else if (c==='\"'){ q=false; }
+            else if (c==='"'){ q=false; }
             else { cur+=c; }
           } else {
-            if (c==='\"'){ q=true; }
+            if (c==='"'){ q=true; }
             else if (c===','){ row.push(cur); cur=''; }
             else if (c==='\n' || c==='\r'){ if (cur!=='' || row.length){ row.push(cur); out.push(row); row=[]; cur=''; } }
             else { cur+=c; }
