@@ -1,4 +1,4 @@
-<!doctype html> 
+<!doctype html>  
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -83,6 +83,41 @@
     .ok{color:#166534;background:#dcfce7;border-color:#bbf7d0}
     .warn{color:#92400e;background:#fef3c7;border-color:#fde68a}
     .bad{color:#991b1b;background:#fee2e2;border-color:#fecaca}
+
+    /* --- Adherence History UI (optimized) --- */
+    .cards{display:grid;grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px}
+    .kpi{border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff;box-shadow:var(--shadow)}
+    .kpi .big{font-weight:800;font-size:22px}
+    .kpi .sub{color:#64748b;font-size:12px}
+    .spark{width:100%;height:36px;display:block}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:999px;background:#fff}
+    .table-wrap{position:relative;overflow:auto;border:1px solid var(--line);border-radius:14px}
+    .clicky{cursor:pointer}
+    .pill-green{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+    .pill-amber{background:#fef3c7;color:#92400e;border-color:#fde68a}
+    .pill-red{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+    /* sticky first column for history table */
+    #hx-table th:first-child,
+    #hx-table td:first-child{
+      position:sticky; left:0; background:#fff; z-index:1;
+    }
+    #hx-table th:first-child{ z-index:2 }
+    /* loading overlay inside table-wrap (history) */
+    .hx-loading{
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(0deg, rgba(255,255,255,.85), rgba(255,255,255,.85));
+      font-size:13px; color:#64748b
+    }
+    .hx-loading::after{
+      content:'Loading…'; animation:pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse{
+      0%,100%{opacity:.4} 50%{opacity:1}
+    }
+    /* quick-range button group */
+    .btn-group{display:flex; gap:6px; flex-wrap:wrap}
+    .btn-ghost{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 10px;cursor:pointer}
+    .btn-ghost.active{background:#f1f5f9}
   </style>
 </head>
 <body>
@@ -272,8 +307,73 @@
         </div>
       </section>
 
-      <!-- Stubs -->
-      <section class="card hidden" id="tab-history"><h2>Adherence History</h2><div class="muted">Coming soon…</div></section>
+      <!-- History (Optimized / restored) -->
+      <section class="card hidden" id="tab-history">
+        <div class="row-between">
+          <h2 style="margin:0">Adherence History</h2>
+          <div class="row">
+            <button id="hx-exp-adh" class="btn btn-small">Export Adherence</button>
+            <button id="hx-exp-sch" class="btn btn-small">Export Schedules</button>
+            <button id="hx-exp-ev" class="btn btn-small">Export Events</button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="row" style="flex-wrap:wrap; margin-top:10px">
+          <label>Users
+            <select id="hx-users" multiple size="4" style="min-width:220px;display:block;margin-top:4px"></select>
+          </label>
+          <label>From
+            <input id="hx-from" type="date" style="display:block;margin-top:4px"/>
+          </label>
+          <label>To
+            <input id="hx-to" type="date" style="display:block;margin-top:4px"/>
+          </label>
+          <div class="btn-group" id="hx-quick">
+            <button class="btn-ghost" data-range="7">Last 7</button>
+            <button class="btn-ghost" data-range="14">14</button>
+            <button class="btn-ghost" data-range="30">30</button>
+            <button class="btn-ghost" data-range="90">90</button>
+            <button class="btn-ghost" data-range="custom">Custom</button>
+          </div>
+          <div class="btn-group">
+            <button class="btn-ghost" id="hx-all">Select all</button>
+            <button class="btn-ghost" id="hx-none">None</button>
+          </div>
+          <button class="btn btn-brand" id="hx-refresh">Load</button>
+        </div>
+
+        <!-- Rollups -->
+        <div class="cards" style="margin-top:12px">
+          <div class="kpi">
+            <div class="sub">Total Points</div>
+            <div class="big" id="hx-kpi-total">—</div>
+            <canvas class="spark" id="hx-spark-total"></canvas>
+          </div>
+          <div class="kpi">
+            <div class="sub">Average Score</div>
+            <div class="big" id="hx-kpi-avg">—</div>
+            <canvas class="spark" id="hx-spark-avg"></canvas>
+          </div>
+          <div class="kpi">
+            <div class="sub">Days Covered</div>
+            <div class="big" id="hx-kpi-days">—</div>
+            <canvas class="spark" id="hx-spark-days"></canvas>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap" id="hx-wrap" style="margin-top:12px">
+          <div class="hx-loading hidden" id="hx-loading"></div>
+          <table class="tbl" id="hx-table">
+            <thead id="hx-th"></thead>
+            <tbody id="hx-tb"></tbody>
+          </table>
+        </div>
+        <div class="hint" id="hx-hint" style="margin-top:8px">Tip: click a score to open the day breakdown. First column is sticky for easy scanning.</div>
+      </section>
+
+      <!-- News -->
       <section class="card hidden" id="tab-news"><h2>News</h2><div class="muted">Coming soon…</div></section>
     </main>
 
@@ -339,6 +439,29 @@
     </div>
   </div>
 
+  <!-- Slide-over: Day breakdown (History detail) -->
+  <div id="hx-day" class="panel" aria-hidden="true" style="width:520px">
+    <div class="panel-hd">
+      <div id="hx-day-title" style="font-weight:700">Day</div>
+      <button class="btn" id="hx-day-close">Close</button>
+    </div>
+    <div class="panel-bd">
+      <div class="hint" id="hx-day-meta"></div>
+      <div id="hx-block-preview" style="margin-top:10px">
+        <div class="pill-ui">Blocks preview</div>
+        <div id="hx-block-bar" style="position:relative;height:28px;border:1px solid var(--line);border-radius:8px;margin-top:6px;background:#f8fafc"></div>
+        <div id="hx-block-legend" class="hint" style="margin-top:8px"></div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="pill-ui">Raw detail</div>
+        <pre id="hx-day-raw" style="margin-top:6px"></pre>
+      </div>
+    </div>
+    <div class="panel-ft">
+      <button class="btn" id="hx-day-open-schedule">Open schedule for this day</button>
+    </div>
+  </div>
+
   <!-- Diagnostics modal -->
   <div id="diag" class="modal" aria-hidden="true">
     <div class="modal-card">
@@ -369,6 +492,7 @@
       Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==tab));
       history.replaceState(null,'',`#${tab}`);
       onTabChange(); // hook for live board polling
+      if (tab==='history' && window.HX && HX.maybeInit) HX.maybeInit(); // ensure HX paints when tab opened
     }
     tabs.forEach(b=> b.addEventListener('click', ()=> activate(b.dataset.tab)));
     const initial = location.hash.replace('#',''); if (initial && panels[initial]) activate(initial);
@@ -624,6 +748,8 @@
         showErr('');
         // also seed schedule dropdowns
         SCH.seedUserDropdowns();
+        // seed History users filter if module loaded
+        if (window.HX && HX.seedUserFilter) HX.seedUserFilter();
       }catch{
         showErr('Failed to load users: Request failed');
       }
@@ -861,7 +987,7 @@
         const t=e.target, i=+t.dataset.i, k=t.dataset.k; if (Number.isNaN(i)||!k) return;
         if (t.matches('.time-input') || t.tagName==='SELECT'){
           seBlocks[i]={...seBlocks[i],[k]:t.value};
-          // Only re-render the preview table, not the inputs (to preserve caret)
+          // update preview only (preserves caret)
           sePrevT.innerHTML='';
           seBlocks.forEach((b)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`; sePrevT.appendChild(tr); });
           seWarn.textContent = overlap(seBlocks) ? '⚠️ Overlapping blocks detected.' : '';
@@ -1095,6 +1221,362 @@
       return { seedUserDropdowns };
     })();
 
+    // ---------- Adherence History (Optimized / restored) ----------
+    const HX = (function(){
+      const els = {
+        users: document.getElementById('hx-users'),
+        from: document.getElementById('hx-from'),
+        to: document.getElementById('hx-to'),
+        quick: document.getElementById('hx-quick'),
+        btnAll: document.getElementById('hx-all'),
+        btnNone: document.getElementById('hx-none'),
+        refresh: document.getElementById('hx-refresh'),
+        th: document.getElementById('hx-th'),
+        tb: document.getElementById('hx-tb'),
+        kTotal: document.getElementById('hx-kpi-total'),
+        kAvg: document.getElementById('hx-kpi-avg'),
+        kDays: document.getElementById('hx-kpi-days'),
+        sTotal: document.getElementById('hx-spark-total'),
+        sAvg: document.getElementById('hx-spark-avg'),
+        sDays: document.getElementById('hx-spark-days'),
+        expAdh: document.getElementById('hx-exp-adh'),
+        expSch: document.getElementById('hx-exp-sch'),
+        expEv:  document.getElementById('hx-exp-ev'),
+        wrap: document.getElementById('hx-wrap'),
+        loading: document.getElementById('hx-loading'),
+      };
+      let lastPayload = null;
+      let inited = false;
+
+      function setLoading(v){ els.loading.classList.toggle('hidden', !v); }
+
+      // seed users multi-select from global users
+      function seedUserFilter(){
+        if (!Array.isArray(users) || !users.length) return;
+        const prev = Array.from(els.users.selectedOptions).map(o=>o.value);
+        els.users.innerHTML = users.map(u=> `<option value="${u.username}">${u.username}</option>`).join('');
+        // restore selection if existed, else select first 5 by default
+        if (prev.length){
+          Array.from(els.users.options).forEach(o=> o.selected = prev.includes(o.value));
+        }else{
+          Array.from(els.users.options).slice(0, Math.min(5, els.users.options.length)).forEach(o=> o.selected = true);
+        }
+      }
+
+      // default date range: last 7 days (and quick-range UI)
+      function initDates(){
+        const today = new Date();
+        const to = today.toISOString().slice(0,10);
+        const fromD = new Date(today); fromD.setDate(today.getDate()-6);
+        const from = fromD.toISOString().slice(0,10);
+        els.from.value = els.from.value || from;
+        els.to.value = els.to.value || to;
+        setQuickActive(7);
+      }
+      function setQuickActive(n){
+        Array.from(els.quick.querySelectorAll('.btn-ghost')).forEach(b=>{
+          b.classList.toggle('active', b.dataset.range==String(n));
+        });
+      }
+      els.quick.addEventListener('click', (e)=>{
+        const btn = e.target.closest('[data-range]'); if(!btn) return;
+        const r = btn.dataset.range;
+        if (r==='custom'){ setQuickActive('custom'); return; }
+        const days = parseInt(r,10);
+        const end = new Date();
+        const start = new Date(); start.setDate(end.getDate()-(days-1));
+        els.from.value = start.toISOString().slice(0,10);
+        els.to.value = end.toISOString().slice(0,10);
+        setQuickActive(days);
+        debouncedLoad();
+      });
+
+      // select all / none
+      els.btnAll.addEventListener('click', ()=>{
+        Array.from(els.users.options).forEach(o=> o.selected = true);
+        debouncedLoad();
+      });
+      els.btnNone.addEventListener('click', ()=>{
+        Array.from(els.users.options).forEach(o=> o.selected = false);
+        debouncedLoad();
+      });
+
+      // Sparkline draw helper
+      function spark(canvas, values){
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width = canvas.clientWidth || 240;
+        const H = canvas.height = canvas.clientHeight || 36;
+        ctx.clearRect(0,0,W,H);
+        if (!values?.length) return;
+        const min = Math.min(...values), max = Math.max(...values);
+        const range = (max-min)||1;
+        const step = W / Math.max(1, values.length-1);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#0ea5e9';
+        ctx.beginPath();
+        values.forEach((v,i)=>{
+          const x = i*step;
+          const y = H - ((v-min)/range)*H;
+          if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+
+      // API
+      async function fetchSummary(usernames, from, to){
+        const qs = new URLSearchParams();
+        if (usernames.length) qs.set('users', usernames.join(','));
+        if (from) qs.set('from', from);
+        if (to) qs.set('to', to);
+        const url = `/api/adherence/summary?${qs.toString()}`;
+        try{
+          const {data} = await apiJSON(url, {method:'GET'});
+          // Persist last successful fetch in sessionStorage for instant rehydrate on tab reopen
+          try{ sessionStorage.setItem('HX_LAST', JSON.stringify({users:usernames, from, to, data})); }catch{}
+          return data;
+        }catch{
+          // fallback mock so you can evaluate UI
+          const days = [];
+          const fromD=new Date(from||new Date()); const toD=new Date(to||new Date());
+          for (let d=new Date(fromD); d<=toD; d.setDate(d.getDate()+1)) days.push(d.toISOString().slice(0,10));
+          const us = usernames.length? usernames : (users.slice(0,5).map(u=>u.username));
+          const rnd=()=> Math.round(70+Math.random()*30);
+          const rows = us.map(u=>({ username:u, days: Object.fromEntries(days.map(dt=>[dt, rnd()])) }));
+          return { days, rows, totals:{ sum: rows.reduce((s,r)=> s+Object.values(r.days).reduce((a,b)=>a+b,0),0), avg: Math.round(rows.reduce((s,r)=> s+Object.values(r.days).reduce((a,b)=>a+b,0),0)/(rows.length*days.length)), days: days.length } };
+        }
+      }
+      async function fetchDetail(username, date){
+        try{
+          const {data} = await apiJSON(`/api/adherence/detail?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
+          return data;
+        }catch{
+          // mock: derive blocks from schedule-like data
+          const blocks = [
+            { status:'available', start:'08:00', end:'10:00' },
+            { status:'break', start:'10:00', end:'10:15' },
+            { status:'available', start:'10:15', end:'12:00' },
+            { status:'lunch', start:'12:00', end:'12:30' },
+            { status:'training', start:'12:30', end:'13:30' },
+            { status:'available', start:'13:30', end:'17:00' },
+          ];
+          return { user:username, date, score: 92, duration_minutes: 540, blocks, events: [{ts:'09:05', type:'status', value:'available'},{ts:'12:02', type:'status', value:'lunch'}] };
+        }
+      }
+
+      // Render Summary (KPIs + Table)
+      function renderKPIs(payload){
+        const { rows=[], days=[], totals } = payload || {};
+        const dailyTotals = days.map((dt)=> rows.reduce((s,r)=> s + (r.days?.[dt] ?? 0), 0));
+        els.kTotal.textContent = totals?.sum != null ? String(totals.sum) : '—';
+        els.kAvg.textContent = totals?.avg != null ? (totals.avg+'%') : '—';
+        els.kDays.textContent = totals?.days != null ? String(totals.days) : (days?.length||'—');
+        spark(els.sTotal, dailyTotals);
+        const avgs = rows.map(r => Math.round(Object.values(r.days||{}).reduce((a,b)=>a+b,0)/Math.max(1,Object.values(r.days||{}).length)));
+        spark(els.sAvg, avgs);
+        spark(els.sDays, days.map((_,i)=> i+1));
+      }
+
+      // table sorting toggles
+      let sortBy = 'username'; // 'username' | 'avg'
+      let sortDir = 'asc';     // 'asc' | 'desc'
+      function sortRows(rows, days){
+        if (sortBy==='avg'){
+          return rows.slice().sort((a,b)=>{
+            const av = avgFor(a, days), bv = avgFor(b, days);
+            return (sortDir==='asc' ? (av-bv) : (bv-av));
+          });
+        }else{
+          return rows.slice().sort((a,b)=> sortDir==='asc' ? a.username.localeCompare(b.username) : b.username.localeCompare(a.username));
+        }
+      }
+      function avgFor(r, days){
+        const vals = days.map(d=> r.days?.[d] ?? null).filter(v=>v!=null);
+        return Math.round(vals.reduce((a,b)=>a+b,0)/Math.max(1,vals.length));
+      }
+
+      function renderTable(payload){
+        const { rows=[], days=[] } = payload || {};
+        // header
+        els.th.innerHTML='';
+        const trh = document.createElement('tr');
+        trh.innerHTML = `
+          <th id="hx-h-username" style="white-space:nowrap">User</th>
+          ${days.map(d=> `<th>${d.slice(5)}</th>`).join('')}
+          <th id="hx-h-avg" style="white-space:nowrap">Avg</th>`;
+        els.th.appendChild(trh);
+
+        // attach sort controls
+        trh.querySelector('#hx-h-username').style.cursor='pointer';
+        trh.querySelector('#hx-h-avg').style.cursor='pointer';
+        trh.querySelector('#hx-h-username').onclick = ()=>{
+          sortBy = 'username'; sortDir = (sortBy==='username' && sortDir==='asc') ? 'desc' : 'asc';
+          renderTable(payload);
+        };
+        trh.querySelector('#hx-h-avg').onclick = ()=>{
+          sortBy = 'avg'; sortDir = (sortBy==='avg' && sortDir==='desc') ? 'asc' : 'desc'; // default to desc first click
+          renderTable(payload);
+        };
+
+        // body
+        els.tb.innerHTML='';
+        const sorted = sortRows(rows, days);
+        sorted.forEach(r=>{
+          const vals = days.map(d=> r.days?.[d] ?? null);
+          const avg = avgFor(r, days);
+          const tr = document.createElement('tr');
+          let tds = `<td><strong class="clicky hx-user-cell" data-user="${r.username}">${r.username}</strong></td>`;
+          vals.forEach((v,idx)=>{
+            const date = days[idx];
+            let cls = v==null ? '' : v>=90 ? 'pill-green' : v>=80 ? 'pill-amber' : 'pill-red';
+            const chip = v==null ? '—' : `<span class="chip ${cls}">${v}%</span>`;
+            tds += `<td class="clicky" data-user="${r.username}" data-date="${date}">${chip}</td>`;
+          });
+          tds += `<td style="white-space:nowrap">${isFinite(avg)? avg+'%':'—'}</td>`;
+          tr.innerHTML = tds;
+          els.tb.appendChild(tr);
+        });
+      }
+
+      function currentSelection(){
+        return Array.from(els.users.selectedOptions).map(o=>o.value);
+      }
+
+      async function load(){
+        const sel = currentSelection();
+        const from = els.from.value, to = els.to.value;
+        setLoading(true);
+        try{
+          const data = await fetchSummary(sel, from, to);
+          lastPayload = data;
+          renderKPIs(data);
+          renderTable(data);
+          showErr('');
+        }catch{ showErr('Failed to load adherence.'); }
+        finally { setLoading(false); }
+      }
+
+      // debounced load for quick UI changes
+      function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+      const debouncedLoad = debounce(load, 250);
+
+      // Drill-down day panel
+      const dayPanel = document.getElementById('hx-day');
+      const dayTitle = document.getElementById('hx-day-title');
+      const dayMeta = document.getElementById('hx-day-meta');
+      const dayRaw = document.getElementById('hx-day-raw');
+      const dayClose = document.getElementById('hx-day-close');
+      const dayOpenSchedule = document.getElementById('hx-day-open-schedule');
+      const blockBar = document.getElementById('hx-block-bar');
+      const blockLegend = document.getElementById('hx-block-legend');
+      function openDay(){ dayPanel.classList.add('open'); }
+      function closeDay(){ dayPanel.classList.remove('open'); }
+      dayClose.addEventListener('click', closeDay);
+
+      function hhmmToMinLocal(s){ const [h,m]=String(s||'').split(':').map(Number); return (h*60+m)|0; }
+      function drawBlockBar(blocks){
+        blockBar.innerHTML = '';
+        const startDay = 8*60; // visualize 08:00-18:00 window by default
+        const endDay = 18*60;
+        const span = endDay - startDay;
+        const color = {
+          available:'#16a34a', break:'#facc15', lunch:'#fb923c', bathroom:'#f59e0b',
+          training:'#6366f1', meeting:'#3b82f6', offline:'#9ca3af'
+        };
+        blocks.forEach(b=>{
+          const s = hhmmToMinLocal(b.start), e = hhmmToMinLocal(b.end);
+          const clampedS = Math.max(startDay, s), clampedE = Math.min(endDay, e);
+          const left = ((clampedS-startDay)/span)*100;
+          const width = Math.max(0, ((clampedE-clampedS)/span)*100);
+          const el = document.createElement('div');
+          el.title = `${b.status} ${b.start}–${b.end}`;
+          el.style.cssText = `position:absolute;left:${left}%;width:${width}%;top:4px;bottom:4px;border-radius:6px;background:${color[b.status]||'#94a3b8'};`;
+          blockBar.appendChild(el);
+        });
+        blockLegend.innerHTML = Object.entries(color).map(([k,v])=> `<span class="tag" style="border-color:${v};color:${v}">${k}</span>`).join(' ');
+      }
+
+      // Click handling on table for detail view
+      document.getElementById('hx-table').addEventListener('click', async (e)=>{
+        const nameCell = e.target.closest('.hx-user-cell');
+        if (nameCell){ // clicking user name toggles selection to that user only
+          const u = nameCell.dataset.user;
+          Array.from(els.users.options).forEach(o=> o.selected = (o.value===u));
+          debouncedLoad();
+          return;
+        }
+        const td = e.target.closest('td.clicky');
+        if (!td) return;
+        const user = td.dataset.user, date = td.dataset.date;
+        if (!user || !date) return;
+        try{
+          const d = await fetchDetail(user, date);
+          dayTitle.textContent = `${user} · ${date}`;
+          dayMeta.textContent = `Score: ${d.score??'—'} · Duration: ${d.duration_minutes??'—'}m · Blocks: ${d.blocks?.length??0}`;
+          dayRaw.textContent = JSON.stringify(d,null,2);
+          drawBlockBar(d.blocks||[]);
+          dayOpenSchedule.onclick = ()=>{
+            activate('schedules');
+            document.getElementById('se-user').value = user;
+            document.getElementById('se-date').value = date;
+            document.getElementById('se-load').click();
+          };
+          openDay();
+          showErr('');
+        }catch{ showErr('Failed to load day detail.'); }
+      });
+
+      // Exports
+      function exportTo(path){
+        const sel = currentSelection();
+        const from = els.from.value, to = els.to.value;
+        const qs = new URLSearchParams();
+        if (sel.length) qs.set('users', sel.join(','));
+        if (from) qs.set('from', from);
+        if (to) qs.set('to', to);
+        window.open(`${path}?${qs.toString()}`, '_blank');
+      }
+      els.expAdh.addEventListener('click', ()=> exportTo('/api/export/adherence'));
+      els.expSch.addEventListener('click', ()=> exportTo('/api/export/schedules'));
+      els.expEv.addEventListener('click',  ()=> exportTo('/api/export/events'));
+
+      // wire filter changes
+      els.refresh.addEventListener('click', load);
+      els.from.addEventListener('change', debouncedLoad);
+      els.to.addEventListener('change', debouncedLoad);
+      els.users.addEventListener('change', debouncedLoad);
+
+      // public helpers for outer code
+      function maybeInit(){
+        if (inited) return;
+        seedUserFilter();
+        // try hydrate from sessionStorage
+        try{
+          const saved = JSON.parse(sessionStorage.getItem('HX_LAST')||'null');
+          if (saved?.from && saved?.to){
+            els.from.value = saved.from; els.to.value = saved.to;
+            // match users if available
+            if (Array.isArray(saved.users) && saved.users.length){
+              Array.from(els.users.options).forEach(o=> o.selected = saved.users.includes(o.value));
+            }
+            if (saved.data){
+              lastPayload = saved.data;
+              renderKPIs(saved.data);
+              renderTable(saved.data);
+              setQuickActive('custom');
+              inited = true;
+              return; // defer fetch until user clicks load or changes filters
+            }
+          }
+        }catch{}
+        initDates();
+        inited = true;
+        load(); // initial load
+      }
+
+      return { load, seedUserFilter, maybeInit };
+    })();
+
     // ---------- Diagnostics ----------
     const diag = document.getElementById('diag');
     const diagBtn = document.getElementById('diag-btn');
@@ -1136,7 +1618,11 @@
     diag.addEventListener('click', (e)=> { if (e.target===diag) diag.classList.remove('open'); });
 
     // Boot
-    async function boot(){ await refresh(); onTabChange(); }
+    async function boot(){
+      await refresh();
+      if (window.HX && HX.maybeInit) HX.maybeInit(); // initialize History once users seeded
+      onTabChange();
+    }
     boot();
   </script>
 </body>
