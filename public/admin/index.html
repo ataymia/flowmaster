@@ -245,7 +245,7 @@
             <div>
               <div class="pill-ui">Plan</div>
               <div id="sd-plan" class="hint">Preview a source day to build a plan.</div>
-              <table class="tbl" id="sd-preview-table" style="margin-top:8px, display:none">
+              <table class="tbl" id="sd-preview-table" style="margin-top:8px; display:none">
                 <thead><tr><th>Status</th><th>Start</th><th>End</th></tr></thead>
                 <tbody></tbody>
               </table>
@@ -444,13 +444,15 @@
     
     // ========== UTILITIES ==========
     const errEl = document.getElementById('errbar');
+    let errTimer;
     function showErr(msg){ 
+      clearTimeout(errTimer);
       errEl.textContent = String(msg||''); 
       errEl.style.display = msg ? 'block' : 'none'; 
-      if (msg) setTimeout(() => showErr(''), 5000);
+      if (msg) errTimer = setTimeout(() => showErr(''), 5000);
     }
 
-    // Memoization helper
+    // Memoization
     function memoize(fn, maxSize = MAX_CACHE_SIZE) {
       const cache = new Map();
       return function(...args) {
@@ -466,7 +468,7 @@
       };
     }
 
-    // Debounce helper
+    // Debounce
     function debounce(fn, delay) {
       let timer;
       return function(...args) {
@@ -519,4 +521,1126 @@
     
     async function who(){ 
       const r = await fetch('/api/whoami', {
-        credentials:'include',
+        credentials:'include', 
+        cache:'no-store', 
+        mode:'cors', 
+        headers:{Accept:'application/json'}
+      }); 
+      if(!r.ok) throw new Error('whoami_fail'); 
+      return r.json(); 
+    }
+    
+    (async ()=>{ 
+      try{ 
+        const m = normalizeMe(await who()); 
+        meEl.textContent = `${m.username} · ${m.role}`; 
+        if (!isAdminRole(m.role)) showErr('Access denied: admin role required.'); 
+      }catch{ 
+        showErr('Unable to verify session.'); 
+      } 
+    })();
+
+    // ========== GENERIC API ==========
+    function looksLikeHtml(t){ 
+      const s = String(t || ''); 
+      return /<\/?[a-z][\s\S]*>/i.test(s); 
+    }
+    
+    async function apiJSON(path, opts = {}){
+      const init = { 
+        credentials:'include', 
+        mode:'cors', 
+        cache:'no-store', 
+        ...opts,
+        headers:{ 
+          Accept:'application/json', 
+          ...(opts.body?{'content-type':'application/json'}:{}), 
+          ...(opts.headers||{}) 
+        } 
+      };
+      const r = await fetch(path, init);
+      const text = await r.text().catch(()=> '');
+      let data; 
+      try { data = text ? JSON.parse(text) : {}; } catch { data = undefined; }
+      if (!r.ok || looksLikeHtml(text) || (text && data === undefined)) { 
+        const e = new Error('Request failed'); 
+        e.status=r.status; 
+        e.text=text; 
+        e.data=data; 
+        throw e; 
+      }
+      return { status:r.status, data, text };
+    }
+
+    // ========== USERS TAB ==========
+    const U = {
+      list: document.getElementById('u-list'),
+      empty: document.getElementById('u-empty'),
+      q: document.getElementById('u-search'),
+      refresh: document.getElementById('u-refresh'),
+      newBtn: document.getElementById('u-new'),
+      endpoint: document.getElementById('u-endpoint'),
+      panel: document.getElementById('panel'),
+      pClose: document.getElementById('p-close'),
+      pTitle: document.getElementById('p-title'),
+      pUsername: document.getElementById('p-username'),
+      pRole: document.getElementById('p-role'),
+      pForce: document.getElementById('p-force'),
+      pSave: document.getElementById('p-save'),
+      pDelete: document.getElementById('p-delete'),
+      pReset: document.getElementById('p-reset'),
+      pResetMsg: document.getElementById('p-reset-msg'),
+      newModal: document.getElementById('new-modal'),
+      nClose: document.getElementById('n-close'),
+      nUser: document.getElementById('n-username'),
+      nRole: document.getElementById('n-role'),
+      nTemp: document.getElementById('n-temp'),
+      nCreate: document.getElementById('n-create'),
+    };
+    
+    let users = [];
+    let selected = null;
+    let USERS_BASE = '';
+
+    function adaptUsers(payload){
+      const arr = Array.isArray(payload) ? payload
+                : Array.isArray(payload?.users) ? payload.users
+                : Array.isArray(payload?.data) ? payload.data
+                : [];
+      return arr.map(u => ({
+        id: u.id || u.user_id || u._id || null,
+        username: u.username || u.email || '',
+        role: (u.role || 'AGENT').toUpperCase(),
+        forcePwReset: !!(u.forcePwReset || u.mustChangePassword || u.must_change_password),
+      })).filter(u => u.username);
+    }
+
+    async function listUsers(query=''){
+      // Use cached endpoint if available
+      if (API_CACHE.users) {
+        const qs = query ? ('?query=' + encodeURIComponent(query)) : '';
+        try {
+          const {data} = await apiJSON(API_CACHE.users + qs, { method:'GET' });
+          return adaptUsers(data);
+        } catch(e) {
+          // Cache might be stale, clear it and retry
+          API_CACHE.users = null;
+        }
+      }
+      
+      // Probe endpoints
+      const qs = query ? ('?query=' + encodeURIComponent(query)) : '';
+      const probes = [
+        '/api/users'+qs,
+        '/api/users?format=json'+(qs? '&'+qs.slice(1):''),
+        '/api/users?list=1'+(qs? '&'+qs.slice(1):''),
+        '/api/users/list'+qs,
+        '/api/admin/users'+qs,
+        '/api/admin/users/list'+qs,
+        '/api/list-users'+qs,
+        '/api/user/list'+qs,
+      ];
+      
+      let lastErr;
+      for (const p of probes){
+        try{
+          const {data} = await apiJSON(p, { method:'GET' });
+          const adapted = adaptUsers(data);
+          if (Array.isArray(adapted)){
+            API_CACHE.users = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/users');
+            USERS_BASE = API_CACHE.users;
+            U.endpoint.textContent = 'API Endpoint: ' + p;
+            return adapted;
+          }
+        }catch(e){ lastErr = e; }
+      }
+      throw lastErr || new Error('users_list_failed');
+    }
+
+    // Event delegation for user rows
+    function handleUserListClick(ev) {
+      const row = ev.target.closest('.tr:not(.th)');
+      if (!row) return;
+      
+      const idx = parseInt(row.dataset.idx);
+      if (isNaN(idx) || !users[idx]) return;
+      
+      const user = users[idx];
+      
+      // Menu button
+      if (ev.target.closest('.menu-btn')) {
+        const menu = row.querySelector('.menu');
+        document.querySelectorAll('.menu.open').forEach(m => {
+          if (m !== menu) m.classList.remove('open');
+        });
+        menu.classList.toggle('open');
+        ev.stopPropagation();
+        return;
+      }
+      
+      // Menu item
+      const menuItem = ev.target.closest('.menu-item');
+      if (menuItem) {
+        const act = menuItem.dataset.act;
+        const menu = menuItem.closest('.menu');
+        if (menu) menu.classList.remove('open');
+        
+        if (act==='open') openPanel(user);
+        else if (act==='reset') doReset(user);
+        else if (act==='delete') doDelete(user);
+        return;
+      }
+      
+      // Row click (not menu)
+      if (!ev.target.closest('.menu')) {
+        openPanel(user);
+      }
+    }
+
+    function renderUsers(){
+      // Clean up old listener
+      U.list.removeEventListener('click', handleUserListClick);
+      U.list.innerHTML = '';
+      
+      if (!users.length){ 
+        U.empty.style.display='block'; 
+        return; 
+      }
+      
+      U.empty.style.display='none';
+      
+      const head = document.createElement('div');
+      head.className = 'tr th';
+      head.style.gridTemplateColumns = '1.3fr .8fr .6fr .6fr .3fr';
+      head.innerHTML = `<div>Username</div><div>Role</div><div>Active</div><div>Must reset</div><div></div>`;
+      U.list.appendChild(head);
+      
+      users.forEach((u, idx)=>{
+        const row = document.createElement('div');
+        row.className = 'tr';
+        row.dataset.idx = idx;
+        row.style.gridTemplateColumns = head.style.gridTemplateColumns;
+        row.innerHTML = `
+          <div><strong>${u.username}</strong></div>
+          <div><span class="tag ${u.role==='ADMIN'||u.role==='SUPERADMIN'?'admin':''}">${u.role}</span></div>
+          <div><span class="tag">Yes</span></div>
+          <div>${u.forcePwReset?'<span class="tag">Yes</span>':'<span class="tag">No</span>'}</div>
+          <div class="menu">
+            <button class="menu-btn" aria-label="Menu">⋯</button>
+            <div class="menu-pop">
+              <div class="menu-item" data-act="open">Open</div>
+              <div class="menu-item" data-act="reset">Reset password</div>
+              <div class="menu-item" data-act="delete">Delete</div>
+            </div>
+          </div>
+        `;
+        U.list.appendChild(row);
+      });
+      
+      // Add single delegated listener
+      U.list.addEventListener('click', handleUserListClick);
+    }
+
+    // Close menus when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.menu')) {
+        document.querySelectorAll('.menu.open').forEach(m=>m.classList.remove('open'));
+      }
+    });
+
+    function openPanel(u){
+      selected = {...u};
+      U.pTitle.textContent = u.username;
+      U.pUsername.value = u.username;
+      U.pRole.value = u.role || 'AGENT';
+      U.pForce.checked = !!u.forcePwReset;
+      U.pResetMsg.textContent = '';
+      U.panel.classList.add('open');
+      U.panel.setAttribute('aria-hidden', 'false');
+    }
+    
+    function closePanel(){ 
+      U.panel.classList.remove('open'); 
+      U.panel.setAttribute('aria-hidden', 'true');
+      selected=null; 
+    }
+    
+    U.pClose.addEventListener('click', closePanel);
+
+    async function doSave(){
+      if (!selected) return;
+      if (!selected.id){ showErr('Cannot save: user id missing.'); return; }
+      
+      U.pSave.disabled = true;
+      const updates = [];
+      const newRole = U.pRole.value;
+      if (newRole && newRole !== selected.role) updates.push({ role: newRole });
+      const mustChange = !!U.pForce.checked;
+      if (mustChange !== !!selected.forcePwReset) updates.push({ mustChangePassword: mustChange });
+
+      if (!updates.length){ closePanel(); U.pSave.disabled = false; return; }
+
+      try {
+        for (const body of updates){
+          await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(selected.id)}`, {
+            method:'PATCH',
+            body: JSON.stringify(body)
+          });
+        }
+        closePanel(); 
+        await refresh();
+        showErr('');
+      } catch(e) {
+        showErr('Save failed');
+      } finally {
+        U.pSave.disabled = false;
+      }
+    }
+    U.pSave.addEventListener('click', doSave);
+
+    async function doDelete(u){
+      if (!u?.id){ showErr('Cannot delete: user id missing.'); return; }
+      if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+      
+      try{
+        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, { method:'DELETE' });
+        closePanel(); 
+        await refresh();
+        showErr('');
+      }catch{
+        showErr('Delete failed');
+      }
+    }
+    U.pDelete.addEventListener('click', ()=> selected && doDelete(selected));
+
+    async function doReset(u){
+      if (!u?.id){ showErr('Cannot reset: user id missing.'); return; }
+      
+      const tryEndpoints = [
+        `${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}/reset-password`,
+      ];
+      
+      for (const p of tryEndpoints){
+        try{
+          const {data} = await apiJSON(p, { method:'POST' });
+          const temp = (data && (data.tempPassword || data.password)) || '';
+          U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
+          return;
+        }catch{}
+      }
+      
+      try{
+        await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, {
+          method:'PATCH',
+          body: JSON.stringify({ mustChangePassword: true })
+        });
+        U.pResetMsg.textContent = 'Flagged to change password on next login.';
+      }catch{
+        showErr('Reset password failed');
+      }
+    }
+    U.pReset.addEventListener('click', ()=> selected && doReset(selected));
+
+    // Create user
+    function openNew(){ 
+      U.nUser.value=''; 
+      U.nRole.value='AGENT'; 
+      U.nTemp.value=''; 
+      U.newModal.classList.add('open'); 
+      U.newModal.setAttribute('aria-hidden', 'false');
+    }
+    
+    function closeNew(){ 
+      U.newModal.classList.remove('open'); 
+      U.newModal.setAttribute('aria-hidden', 'true');
+    }
+    
+    U.nClose.addEventListener('click', closeNew);
+    
+    U.nCreate.addEventListener('click', async ()=>{
+      const username = U.nUser.value.trim().toLowerCase();
+      const roleUpper = U.nRole.value;
+      let pw = U.nTemp.value.trim();
+      
+      if (!username){ showErr('Username is required.'); return; }
+      if (!pw){
+        pw = Math.random().toString(36).slice(2,6) + Math.random().toString(36).slice(2,6);
+      }
+      
+      U.nCreate.disabled = true;
+      
+      const payloads = [
+        { username, role: roleUpper, password: pw },
+        { email: username, role: roleUpper, password: pw },
+      ];
+      const paths = [
+        USERS_BASE || '/api/users',
+        '/api/admin/users',
+      ];
+      
+      for (const p of paths){
+        for (const body of payloads){
+          try{
+            await apiJSON(p, { method:'POST', body: JSON.stringify(body) });
+            closeNew();
+            await refresh();
+            alert(`User created.\nTemp password: ${pw}\n(They'll be forced to change on first login.)`);
+            showErr('');
+            U.nCreate.disabled = false;
+            return;
+          }catch{}
+        }
+      }
+      showErr('Create failed');
+      U.nCreate.disabled = false;
+    });
+
+    let searchController = null;
+    async function refresh(){
+      if (searchController) searchController.abort();
+      searchController = new AbortController();
+      
+      try{
+        U.refresh.disabled = true;
+        const arr = await listUsers(U.q.value.trim());
+        users = arr;
+        renderUsers();
+        showErr('');
+        SCH.seedUserDropdowns();
+        if (window.HX && HX.seedUserFilter) HX.seedUserFilter();
+      }catch(e){
+        if (e.name !== 'AbortError') {
+          showErr('Failed to load users');
+        }
+      } finally {
+        U.refresh.disabled = false;
+      }
+    }
+    
+    U.refresh.addEventListener('click', refresh);
+    U.newBtn.addEventListener('click', openNew);
+    
+    const debouncedRefresh = debounce(refresh, DEBOUNCE_DELAY);
+    U.q.addEventListener('input', debouncedRefresh);
+
+    // ========== LIVE BOARD ==========
+    const LB = {
+      list: document.getElementById('lb-list'),
+      empty: document.getElementById('lb-empty'),
+      q: document.getElementById('lb-search'),
+      sort: document.getElementById('lb-sort'),
+      refresh: document.getElementById('lb-refresh'),
+    };
+    
+    let liveRows = [];
+    let liveTimer;
+
+    function fmtAgo(ms){
+      if (!ms) return '—';
+      const d = Date.now() - ms;
+      if (d < 60_000) return `${Math.floor(d/1000)}s ago`;
+      if (d < 3_600_000) return `${Math.floor(d/60_000)}m ago`;
+      return `${Math.floor(d/3_600_000)}h ago`;
+    }
+    
+    function fmtTime(ms){
+      return ms ? new Date(ms).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
+    }
+    
+    function statusTag(s){
+      const map = {
+        available: '#16a34a', bathroom: '#f59e0b', break: '#facc15',
+        lunch: '#fb923c', training: '#6366f1', meeting: '#3b82f6', offline: '#9ca3af',
+        null: '#9ca3af', undefined: '#9ca3af',
+      };
+      const c = map[(s||'').toLowerCase()] || '#9ca3af';
+      return `<span class="tag" style="display:inline-flex;align-items:center;gap:6px">
+                <span style="width:10px;height:10px;border-radius:999px;background:${c}"></span>
+                ${s ? s : '—'}
+              </span>`;
+    }
+    
+    function onlineDot(ok){
+      return `<span style="width:10px;height:10px;border-radius:999px;background:${ok?'#16a34a':'#9ca3af'};display:inline-block"></span>`;
+    }
+
+    function renderLive(){
+      const q = (LB.q.value||'').toLowerCase().trim();
+      let rows = liveRows.filter(r => !q || r.username.toLowerCase().includes(q) || String(r.status||'').toLowerCase().includes(q));
+
+      const sort = LB.sort.value;
+      rows.sort((a,b)=>{
+        if (sort==='username') return a.username.localeCompare(b.username);
+        if (sort==='status')   return String(a.status||'').localeCompare(String(b.status||'')); 
+        if (sort==='online')   return (b.online?1:0) - (a.online?1:0);
+        if (sort==='last_seen')return (b.last_seen||0) - (a.last_seen||0);
+        return 0;
+      });
+
+      LB.list.innerHTML = '';
+      if (!rows.length){ LB.empty.style.display='block'; return; }
+      LB.empty.style.display='none';
+
+      const fragment = document.createDocumentFragment();
+      const head = document.createElement('div');
+      head.className = 'tr th';
+      head.style.gridTemplateColumns = '1.3fr .8fr .8fr .8fr .6fr';
+      head.innerHTML = `<div>User</div><div>Status</div><div>Now/TS</div><div>Last seen</div><div>Online</div>`;
+      fragment.appendChild(head);
+
+      rows.forEach(r=>{
+        const row = document.createElement('div');
+        row.className = 'tr';
+        row.style.gridTemplateColumns = head.style.gridTemplateColumns;
+        row.innerHTML = `
+          <div><strong>${r.username}</strong></div>
+          <div>${statusTag(r.status)}</div>
+          <div>${fmtTime(r.ts)}</div>
+          <div>${fmtAgo(r.last_seen)}</div>
+          <div>${onlineDot(!!r.online)} ${r.online?'':'(idle)'}</div>
+        `;
+        fragment.appendChild(row);
+      });
+      
+      LB.list.appendChild(fragment);
+    }
+
+    async function fetchLive(){
+      try{
+        const r = await fetch('/api/presence', { credentials:'include', cache:'no-store', mode:'cors' });
+        const text = await r.text();
+        const data = text ? JSON.parse(text) : [];
+        if (!Array.isArray(data)) throw new Error('bad_presence_shape');
+        liveRows = data;
+        renderLive();
+        showErr('');
+      }catch{
+        showErr('Failed to load live presence.');
+      }
+    }
+    
+    LB.refresh.addEventListener('click', fetchLive);
+    
+    const debouncedRenderLive = debounce(renderLive, 200);
+    LB.q.addEventListener('input', debouncedRenderLive);
+    LB.sort.addEventListener('change', renderLive);
+
+    function onTabChange(){
+      const active = document.querySelector('.tab.active')?.dataset.tab;
+      clearInterval(liveTimer);
+      if (active==='live'){
+        fetchLive();
+        liveTimer = setInterval(fetchLive, POLL_INTERVAL);
+      }
+    }
+    
+    window.addEventListener('hashchange', onTabChange);
+    window.addEventListener('beforeunload', () => {
+      clearInterval(liveTimer);
+    });
+
+    // ========== SCHEDULES TAB ==========
+    const SCH = (function(){
+      const subBtns = Array.from(document.querySelectorAll('.subtab'));
+      const views = {
+        edit: document.getElementById('sch-edit'),
+        dup: document.getElementById('sch-dup'),
+        import: document.getElementById('sch-import'),
+      };
+      
+      function subActivate(k){ 
+        subBtns.forEach(b=>b.classList.toggle('active', b.dataset.sub===k)); 
+        Object.entries(views).forEach(([key,el])=> el.classList.toggle('hidden', key!==k)); 
+      }
+      subBtns.forEach(b=> b.addEventListener('click', ()=> subActivate(b.dataset.sub)));
+      subActivate('edit');
+
+      const isHHMM = (s)=> /^[0-2]\d:[0-5]\d$/.test(String(s||''));
+      const hhmmToMin = memoize((s)=>{ 
+        const [h,m]=String(s||'').split(':').map(Number); 
+        return (h*60+m)|0; 
+      });
+      const minToHHMM = memoize((n)=> {
+        if (typeof n !== 'number' || !isFinite(n)) return '';
+        const h = Math.floor(n/60), m = n%60;
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      });
+      
+      function overlap(blocks){
+        const arr = (blocks||[]).map(b=>({s:hhmmToMin(b.start), e:hhmmToMin(b.end)})).sort((a,b)=>a.s-b.s);
+        for (let i=1;i<arr.length;i++){ if (arr[i].s < arr[i-1].e) return true; }
+        return false;
+      }
+
+      function normalizeTimeLoose(v){
+        if (!v) return '';
+        const str = String(v).trim();
+        if (isHHMM(str)) return str;
+        if (str.includes(':')){
+          const [hRaw,mRaw] = str.split(':');
+          if (!/^\d{1,2}$/.test(hRaw) || !/^\d{1,2}$/.test(mRaw||'')) return str;
+          let h = +hRaw, m = +mRaw;
+          if (h>23 || m>59) return str;
+          return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        }
+        const digits = str.replace(/\D+/g,'');
+        if (!digits) return str;
+        if (digits.length<=2){
+          let h = +digits; if (h>23) return str;
+          return `${String(h).padStart(2,'0')}:00`;
+        } else {
+          const hStr = digits.slice(0, digits.length-2);
+          const mStr = digits.slice(-2);
+          if (!hStr || !mStr) return str;
+          let h = +hStr, m = +mStr;
+          if (h>23 || m>59) return str;
+          return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        }
+      }
+
+      async function getSchedule(user,date){
+        const r = await apiJSON(`/api/schedules?user=${encodeURIComponent(user)}&date=${encodeURIComponent(date)}`, {method:'GET'});
+        const raw = Array.isArray(r.data) ? r.data : (r.data?.blocks || []);
+        return raw.map(b=>{
+          const start = isHHMM(b.start) ? b.start : minToHHMM(b.start);
+          const end   = isHHMM(b.end)   ? b.end   : minToHHMM(b.end);
+          return { status: String(b.status||'').toLowerCase(), start, end };
+        });
+      }
+      
+      async function saveSchedule(user,date,blocks){
+        return apiJSON(`/api/schedules`, { method:'POST', body: JSON.stringify({ username:user, date, blocks }) });
+      }
+      
+      async function assignSchedules(users,from,to,weekdays,template,overwrite){
+        return apiJSON(`/api/schedules/assign`,{
+          method:'POST',
+          body: JSON.stringify({
+            users, dateRange:{ from, to }, weekdays, overwrite: !!overwrite,
+            templateId: null,
+            blocks: template
+          })
+        });
+      }
+
+      const seUser = document.getElementById('se-user');
+      const sdSrcUser = document.getElementById('sd-src-user');
+      const sdDstUsers = document.getElementById('sd-dst-users');
+      
+      function seedUserDropdowns(){
+        if (!Array.isArray(users) || !users.length) return;
+        const opts = users.map(u=> `<option value="${u.username}">${u.username}</option>`).join('');
+        seUser.innerHTML = `<option value="">Select user…</option>${opts}`;
+        sdSrcUser.innerHTML = `<option value="">Select source…</option>${opts}`;
+        sdDstUsers.innerHTML = opts;
+      }
+
+      // Edit single day
+      const seDate = document.getElementById('se-date');
+      const seLoad = document.getElementById('se-load');
+      const seSave = document.getElementById('se-save');
+      const seList = document.getElementById('se-list');
+      const seAdd = document.getElementById('se-add');
+      const seClear = document.getElementById('se-clear');
+      const sePrevT = document.querySelector('#se-preview tbody');
+      const seWarn = document.getElementById('se-warnings');
+
+      let seBlocks = [];
+      
+      function renderEdit(){
+        seList.innerHTML=''; sePrevT.innerHTML=''; seWarn.textContent='';
+        seBlocks.forEach((b,i)=>{
+          const row=document.createElement('div'); row.className='blk';
+          row.innerHTML=`
+            <select data-i="${i}" data-k="status">${STATUSES.map(s=>`<option ${s===b.status?'selected':''} value="${s}">${s}</option>`).join('')}</select>
+            <input class="time-input" inputmode="numeric" placeholder="HH:MM" data-i="${i}" data-k="start" value="${b.start||''}" />
+            <input class="time-input" inputmode="numeric" placeholder="HH:MM" data-i="${i}" data-k="end" value="${b.end||''}" />
+            <button class="btn btn-small btn-danger" data-i="${i}" data-k="del">Delete</button>`;
+          seList.appendChild(row);
+        });
+        if (!seBlocks.length){
+          sePrevT.innerHTML = `<tr><td colspan="3" class="muted">No blocks</td></tr>`;
+        }else{
+          const fragment = document.createDocumentFragment();
+          seBlocks.forEach((b)=>{ 
+            const tr=document.createElement('tr'); 
+            tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`; 
+            fragment.appendChild(tr);
+          });
+          sePrevT.appendChild(fragment);
+        }
+        if (overlap(seBlocks)) seWarn.textContent='⚠️ Overlapping blocks detected.';
+      }
+
+      seList.addEventListener('input', (e)=>{
+        const t=e.target, i=+t.dataset.i, k=t.dataset.k; 
+        if (Number.isNaN(i)||!k) return;
+        if (t.matches('.time-input') || t.tagName==='SELECT'){
+          seBlocks[i]={...seBlocks[i],[k]:t.value};
+          sePrevT.innerHTML='';
+          const fragment = document.createDocumentFragment();
+          seBlocks.forEach((b)=>{ 
+            const tr=document.createElement('tr'); 
+            tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`; 
+            fragment.appendChild(tr);
+          });
+          sePrevT.appendChild(fragment);
+          seWarn.textContent = overlap(seBlocks) ? '⚠️ Overlapping blocks detected.' : '';
+        }
+      });
+
+      seList.addEventListener('blur', (e)=>{
+        const t=e.target; if (!t.matches('.time-input')) return;
+        const i=+t.dataset.i, k=t.dataset.k; 
+        if (Number.isNaN(i)||!k) return;
+        const norm = normalizeTimeLoose(t.value);
+        if (norm !== t.value){
+          t.value = norm;
+          seBlocks[i] = {...seBlocks[i],[k]:norm};
+          sePrevT.innerHTML='';
+          const fragment = document.createDocumentFragment();
+          seBlocks.forEach((b)=>{ 
+            const tr=document.createElement('tr'); 
+            tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`; 
+            fragment.appendChild(tr);
+          });
+          sePrevT.appendChild(fragment);
+        }
+      }, true);
+      
+      seList.addEventListener('keydown', (e)=>{
+        if (e.key==='Enter' && e.target.matches('.time-input')){
+          e.target.blur();
+        }
+      });
+
+      seList.addEventListener('click', (e)=>{
+        if (e.target.matches('button[data-k="del"]')){ 
+          const i=+e.target.dataset.i; 
+          seBlocks.splice(i,1); 
+          renderEdit(); 
+        }
+      });
+      
+      seAdd.addEventListener('click', ()=>{
+        const lastEnd = seBlocks.length? seBlocks[seBlocks.length-1].end : '08:00';
+        seBlocks.push({status:'available',start:lastEnd,end:lastEnd});
+        renderEdit();
+      });
+      
+      seClear.addEventListener('click', ()=>{ 
+        if (confirm('Clear all blocks?')){ 
+          seBlocks=[]; 
+          renderEdit(); 
+        }
+      });
+      
+      seLoad.addEventListener('click', async ()=>{
+        const u=seUser.value, d=seDate.value; 
+        if (!u||!d){ showErr('Select a user and date.'); return; }
+        seLoad.disabled = true;
+        try{ 
+          seBlocks=await getSchedule(u,d); 
+          renderEdit(); 
+          showErr(''); 
+        }catch{ 
+          showErr('Failed to load schedule.'); 
+        } finally {
+          seLoad.disabled = false;
+        }
+      });
+      
+      seSave.addEventListener('click', async ()=>{
+        const u=seUser.value, d=seDate.value; 
+        if (!u||!d){ showErr('Select a user and date.'); return; }
+        if (!seBlocks.every(b=> isHHMM(b.start)&&isHHMM(b.end)&&STATUSES.includes(b.status))){ 
+          showErr('Fix invalid rows (status/time).'); 
+          return; 
+        }
+        if (overlap(seBlocks) && !confirm('Blocks overlap. Save anyway?')) return;
+        
+        seSave.disabled = true;
+        try{ 
+          await saveSchedule(u,d,seBlocks); 
+          alert('Saved.'); 
+          showErr(''); 
+        }catch{ 
+          showErr('Save failed.'); 
+        } finally {
+          seSave.disabled = false;
+        }
+      });
+
+      return { seedUserDropdowns, getSchedule };
+    })();
+
+    // ========== ADHERENCE HISTORY ==========
+    const HX = (function(){
+      const els = {
+        users: document.getElementById('hx-users'),
+        from: document.getElementById('hx-from'),
+        to: document.getElementById('hx-to'),
+        refresh: document.getElementById('hx-refresh'),
+        th: document.getElementById('hx-th'),
+        tb: document.getElementById('hx-tb'),
+        kTotal: document.getElementById('hx-kpi-total'),
+        kAvg: document.getElementById('hx-kpi-avg'),
+        kDays: document.getElementById('hx-kpi-days'),
+        sTotal: document.getElementById('hx-spark-total'),
+        sAvg: document.getElementById('hx-spark-avg'),
+        sDays: document.getElementById('hx-spark-days'),
+        expAdh: document.getElementById('hx-exp-adh'),
+        expSch: document.getElementById('hx-exp-sch'),
+        expEv:  document.getElementById('hx-exp-ev'),
+      };
+
+      function seedUserFilter(){
+        if (!Array.isArray(users) || !users.length) return;
+        els.users.innerHTML = users.map(u=> `<option value="${u.username}">${u.username}</option>`).join('');
+      }
+      
+      (function initDates(){
+        const today = new Date();
+        const to = today.toISOString().slice(0,10);
+        const fromD = new Date(today); fromD.setDate(today.getDate()-6);
+        const from = fromD.toISOString().slice(0,10);
+        els.from.value = from; els.to.value = to;
+      })();
+
+      function spark(canvas, values){
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width = canvas.clientWidth || 240;
+        const H = canvas.height = canvas.clientHeight || 36;
+        ctx.clearRect(0,0,W,H);
+        if (!values?.length) return;
+        const min = Math.min(...values), max = Math.max(...values);
+        const range = (max-min)||1;
+        const step = W / Math.max(1, values.length-1);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#0ea5e9';
+        ctx.beginPath();
+        values.forEach((v,i)=>{
+          const x = i*step;
+          const y = H - ((v-min)/range)*H;
+          if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+
+      async function fetchSummary(usernames, from, to){
+        const qs = new URLSearchParams();
+        if (usernames.length) qs.set('users', usernames.join(','));
+        if (from) qs.set('from', from);
+        if (to) qs.set('to', to);
+        try{
+          const {data} = await apiJSON(`/api/adherence/summary?${qs.toString()}`, {method:'GET'});
+          return data;
+        }catch{
+          const days = [];
+          const fromD=new Date(from||new Date()); const toD=new Date(to||new Date());
+          for (let d=new Date(fromD); d<=toD; d.setDate(d.getDate()+1)) days.push(d.toISOString().slice(0,10));
+          const us = usernames.length? usernames : (users.slice(0,5).map(u=>u.username));
+          const rnd=()=> Math.round(70+Math.random()*30);
+          const rows = us.map(u=>({ username:u, days: Object.fromEntries(days.map(dt=>[dt, rnd()])) }));
+          return { days, rows, totals:{ sum: rows.reduce((s,r)=> s+Object.values(r.days).reduce((a,b)=>a+b,0),0), avg: Math.round(rows.reduce((s,r)=> s+Object.values(r.days).reduce((a,b)=>a+b,0),0)/(rows.length*days.length)), days: days.length } };
+        }
+      }
+
+      async function fetchDetail(username, date){
+        const minToHHMM = (n)=> {
+          if (typeof n !== 'number' || !isFinite(n)) return String(n||'');
+          const h = Math.floor(n/60), m = n%60;
+          return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        };
+        try{
+          const {data} = await apiJSON(`/api/adherence/detail?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
+          const blocks = Array.isArray(data?.blocks)
+            ? data.blocks.map(b => ({
+                status: String(b.status||'').toLowerCase(),
+                start:  /^[0-2]\d:[0-5]\d$/.test(b.start) ? b.start : minToHHMM(b.start),
+                end:    /^[0-2]\d:[0-5]\d$/.test(b.end)   ? b.end   : minToHHMM(b.end),
+              }))
+            : [];
+          const events = Array.isArray(data?.events) ? data.events : [];
+          return { user:data.user, date:data.date, score:data.score, duration_minutes:data.duration_minutes, blocks, events };
+        }catch{
+          const blocks = [
+            { status:'available', start:'08:00', end:'10:00' },
+            { status:'break', start:'10:00', end:'10:15' },
+            { status:'available', start:'10:15', end:'12:00' },
+            { status:'lunch', start:'12:00', end:'12:30' },
+            { status:'training', start:'12:30', end:'13:30' },
+            { status:'available', start:'13:30', end:'17:00' },
+          ];
+          return { user:username, date, score: 92, duration_minutes: 540, blocks, events: [{ts:'09:05', type:'status', value:'available'},{ts:'12:02', type:'status', value:'lunch'}] };
+        }
+      }
+
+      async function fetchProjected(username, date){
+        try{
+          const {data} = await apiJSON(`/api/schedules?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
+          const raw = Array.isArray(data) ? data : (data?.blocks || []);
+          const isHHMM = (s)=> /^[0-2]\d:[0-5]\d$/.test(String(s||''));
+          const minToHHMM = (n)=>{ const h=Math.floor(n/60), m=n%60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`; };
+          return raw.map(b=>({
+            status: String(b.status||'').toLowerCase(),
+            start: isHHMM(b.start) ? b.start : minToHHMM(b.start),
+            end:   isHHMM(b.end)   ? b.end   : minToHHMM(b.end),
+          }));
+        }catch{
+          return [];
+        }
+      }
+
+      function renderKPIs(payload){
+        const { rows=[], days=[], totals } = payload || {};
+        const dailyTotals = days.map((dt)=> rows.reduce((s,r)=> s + (r.days?.[dt] ?? 0), 0));
+        els.kTotal.textContent = totals?.sum != null ? String(totals.sum) : '—';
+        els.kAvg.textContent = totals?.avg != null ? (totals.avg+'%') : '—';
+        els.kDays.textContent = totals?.days != null ? String(totals.days) : (days?.length||'—');
+        spark(els.sTotal, dailyTotals);
+        const avgs = rows.map(r => Math.round(Object.values(r.days||{}).reduce((a,b)=>a+b,0)/Math.max(1,Object.values(r.days||{}).length)));
+        spark(els.sAvg, avgs);
+        spark(els.sDays, days.map((_,i)=> i+1));
+      }
+
+      function renderTable(payload){
+        const { rows=[], days=[] } = payload || {};
+        
+        els.th.innerHTML='';
+        const trh = document.createElement('tr');
+        trh.innerHTML = `<th>User</th>` + days.map(d=> `<th>${d.slice(5)}</th>`).join('') + `<th>Avg</th>`;
+        els.th.appendChild(trh);
+
+        els.tb.innerHTML='';
+        const fragment = document.createDocumentFragment();
+        
+        rows.forEach(r=>{
+          const vals = days.map(d=> r.days?.[d] ?? null);
+          const avg = Math.round(vals.filter(v=>v!=null).reduce((a,b)=>a+b,0)/Math.max(1,vals.filter(v=>v!=null).length));
+          const tr = document.createElement('tr');
+          let tds = `<td><strong>${r.username}</strong></td>`;
+          vals.forEach((v,idx)=>{
+            const date = days[idx];
+            let cls = v==null ? '' : v>=90 ? 'pill-green' : v>=80 ? 'pill-amber' : 'pill-red';
+            const chip = v==null ? '—' : `<span class="chip ${cls}">${v}%</span>`;
+            tds += `<td class="clicky" data-user="${r.username}" data-date="${date}">${chip}</td>`;
+          });
+          tds += `<td>${isFinite(avg)? avg+'%':'—'}</td>`;
+          tr.innerHTML = tds;
+          fragment.appendChild(tr);
+        });
+        
+        els.tb.appendChild(fragment);
+      }
+
+      async function load(){
+        const sel = Array.from(els.users.selectedOptions).map(o=>o.value);
+        const from = els.from.value, to = els.to.value;
+        
+        els.refresh.disabled = true;
+        try{
+          const data = await fetchSummary(sel, from, to);
+          renderKPIs(data);
+          renderTable(data);
+          showErr('');
+        }catch{ 
+          showErr('Failed to load adherence.'); 
+        } finally {
+          els.refresh.disabled = false;
+        }
+      }
+
+      const dayPanel = document.getElementById('hx-day');
+      const dayTitle = document.getElementById('hx-day-title');
+      const dayMeta = document.getElementById('hx-day-meta');
+      const dayClose = document.getElementById('hx-day-close');
+      const dayOpenSchedule = document.getElementById('hx-day-open-schedule');
+
+      const projBar = document.getElementById('hx-proj-bar');
+      const projLegend = document.getElementById('hx-proj-legend');
+      const actualBar = document.getElementById('hx-actual-bar');
+      const actualLegend = document.getElementById('hx-actual-legend');
+
+      const eventsList = document.getElementById('hx-events-list');
+      const eventsEmpty = document.getElementById('hx-events-empty');
+
+      function openDay(){ 
+        dayPanel.classList.add('open'); 
+        dayPanel.setAttribute('aria-hidden', 'false');
+      }
+      
+      function closeDay(){ 
+        dayPanel.classList.remove('open'); 
+        dayPanel.setAttribute('aria-hidden', 'true');
+      }
+      
+      dayClose.addEventListener('click', closeDay);
+
+      function hhmmToMinLocal(s){ 
+        const [h,m]=String(s||'').split(':').map(Number); 
+        return (h*60+m)|0; 
+      }
+      
+      const COLOR = {
+        available:'#16a34a', break:'#facc15', lunch:'#fb923c', bathroom:'#f59e0b',
+        training:'#6366f1', meeting:'#3b82f6', offline:'#9ca3af'
+      };
+
+      function drawBlockBar(targetEl, legendEl, blocks, opts={}){
+        targetEl.innerHTML = '';
+        const startDay = (opts.start ?? 8)*60;
+        const endDay = (opts.end ?? 18)*60;
+        const span = endDay - startDay;
+
+        blocks.forEach(b=>{
+          const s = hhmmToMinLocal(b.start), e = hhmmToMinLocal(b.end);
+          const clampedS = Math.max(startDay, s), clampedE = Math.min(endDay, e);
+          const left = ((clampedS-startDay)/span)*100;
+          const width = Math.max(0, ((clampedE-clampedS)/span)*100);
+          if (width <= 0) return;
+          const el = document.createElement('div');
+          el.title = `${b.status} ${b.start}–${b.end}`;
+          el.style.cssText = `position:absolute;left:${left}%;width:${width}%;top:4px;bottom:4px;border-radius:6px;background:${COLOR[b.status]||'#94a3b8'};`;
+          targetEl.appendChild(el);
+        });
+        legendEl.innerHTML = Object.entries(COLOR).map(([k,v])=> `<span class="tag" style="border-color:${v};color:${v}">${k}</span>`).join(' ');
+      }
+
+      document.getElementById('hx-table').addEventListener('click', async (e)=>{
+        const td = e.target.closest('td.clicky');
+        if (!td) return;
+        const user = td.dataset.user, date = td.dataset.date;
+        if (!user || !date) return;
+        
+        try{
+          const [detail, projectedBlocks] = await Promise.all([
+            fetchDetail(user, date),
+            SCH.getSchedule ? SCH.getSchedule(user, date) : fetchProjected(user, date),
+          ]);
+
+          const actualBlocks = Array.isArray(detail?.blocks) ? detail.blocks : [];
+          const score = detail?.score ?? '—';
+          const dur = detail?.duration_minutes ?? '—';
+          dayTitle.textContent = `${user} · ${date}`;
+          dayMeta.textContent = `Score: ${score} · Duration: ${dur}m · Blocks — Projected: ${projectedBlocks.length || 0}, Actual: ${actualBlocks.length || 0}`;
+
+          drawBlockBar(projBar, projLegend, projectedBlocks);
+          drawBlockBar(actualBar, actualLegend, actualBlocks);
+
+          const ev = Array.isArray(detail?.events) ? detail.events : [];
+          eventsList.innerHTML = '';
+          if (!ev.length){
+            eventsEmpty.style.display = 'block';
+          } else {
+            eventsEmpty.style.display = 'none';
+            ev.forEach(ei => {
+              const li = document.createElement('li');
+              const hhmm = String(ei.ts || '').slice(0,5);
+              const label = (ei.type === 'status' ? ei.value : ei.type) || '';
+              li.textContent = `${hhmm} — ${label}`;
+              eventsList.appendChild(li);
+            });
+          }
+
+          dayOpenSchedule.onclick = ()=>{
+            activate('schedules');
+            document.getElementById('se-user').value = user;
+            document.getElementById('se-date').value = date;
+            document.getElementById('se-load').click();
+          };
+          
+          openDay();
+          showErr('');
+        }catch{
+          showErr('Failed to load day detail.');
+        }
+      });
+
+      function exportTo(path){
+        const sel = Array.from(els.users.selectedOptions).map(o=>o.value);
+        const from = els.from.value, to = els.to.value;
+        const qs = new URLSearchParams();
+        if (sel.length === 1) qs.set('user', sel[0]);
+        if (from) qs.set('from', from);
+        if (to) qs.set('to', to);
+        window.open(`${path}?${qs.toString()}`, '_blank');
+      }
+      
+      els.expAdh.addEventListener('click', ()=> exportTo('/api/export/adherence'));
+      els.expSch.addEventListener('click', ()=> exportTo('/api/export/schedules'));
+      els.expEv.addEventListener('click',  ()=> exportTo('/api/export/events'));
+
+      els.refresh.addEventListener('click', load);
+
+      return { load, seedUserFilter };
+    })();
+
+    // ========== DIAGNOSTICS ==========
+    const diag = document.getElementById('diag');
+    const diagBtn = document.getElementById('diag-btn');
+    const diagClose = document.getElementById('diag-close');
+    const diagBody = document.getElementById('diag-body');
+    
+    diagBtn.addEventListener('click', async ()=>{
+      diag.classList.add('open');
+      diag.setAttribute('aria-hidden', 'false');
+      diagBody.innerHTML = '<div class="muted">Probing endpoints…</div>';
+      
+      const report = [];
+      async function probe(label, fn){
+        try{
+          const t0=performance.now();
+          const res = await fn();
+          const t1=performance.now();
+          report.push(`✓ ${label} (${Math.round(t1-t0)}ms)\n` + JSON.stringify(res,null,2).slice(0,2000));
+        }catch(e){
+          const summary = e && (e.text || e.message || e.toString());
+          report.push(`✗ ${label}\n` + String(summary).slice(0,2000));
+        }
+      }
+      
+      await probe('whoami', async()=> (await apiJSON('/api/whoami',{method:'GET'})));
+      
+      try{
+        const arr = await listUsers(document.getElementById('u-search').value.trim());
+        report.push(`✓ users list\n` + JSON.stringify({ using: USERS_BASE || API_CACHE.users || '(not set)', count: arr.length }, null, 2));
+      }catch(e){
+        report.push('✗ users list\n' + (e.text || e.message || 'fail'));
+      }
+      
+      try{
+        const r = await fetch('/api/presence', { credentials:'include', cache:'no-store', mode:'cors' });
+        const t = await r.text();
+        report.push(`✓ presence (${r.status})\n` + t.slice(0,2000));
+      }catch(e){
+        report.push('✗ presence\n' + (e.message || 'fail'));
+      }
+      
+      diagBody.innerHTML = report.map(r=> `<pre>${r}</pre>`).join('');
+    });
+    
+    diagClose.addEventListener('click', ()=> {
+      diag.classList.remove('open');
+      diag.setAttribute('aria-hidden', 'true');
+    });
+    
+    diag.addEventListener('click', (e)=> { 
+      if (e.target===diag) {
+        diag.classList.remove('open');
+        diag.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    // ========== BOOT ==========
+    async function boot(){
+      await refresh();
+      if (window.HX && HX.load) HX.load();
+      onTabChange();
+    }
+    
+    boot();
+  </script>
+</body>
+</html>
