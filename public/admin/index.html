@@ -1,3 +1,4 @@
+
 <!doctype html>  
 <html lang="en">
 <head> 
@@ -96,6 +97,7 @@
     .pill-green{background:#dcfce7;color:#166534;border-color:#bbf7d0}
     .pill-amber{background:#fef3c7;color:#92400e;border-color:#fde68a}
     .pill-red{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+    .pill-na{background:#f1f5f9;color:#475569;border-color:#e2e8f0}
 
     /* --- Day Panel two-bars layout --- */
     .barwrap{margin-top:10px}
@@ -412,7 +414,7 @@
     </div>
   </div>
 
-  <!-- Slide-over: Day breakdown (UPDATED to dual bars + status changes) -->
+  <!-- Slide-over: Day breakdown (24h + status changes, no fallbacks) -->
   <div id="hx-day" class="panel" aria-hidden="true" style="width:520px">
     <div class="panel-hd">
       <div id="hx-day-title" style="font-weight:700">Day</div>
@@ -422,7 +424,7 @@
       <div class="hint" id="hx-day-meta"></div>
 
       <div class="barwrap" id="hx-block-preview">
-        <div class="pill-ui">Day timeline (08:00–18:00 window)</div>
+        <div class="pill-ui">Day timeline (00:00–24:00)</div>
 
         <div class="barrow">
           <div class="barlabel">Projected</div>
@@ -489,7 +491,7 @@
     (async ()=>{ try{ const m = normalizeMe(await who()); meEl.textContent = `${m.username} · ${m.role}`; if (!isAdminRole(m.role)) showErr('Access denied: admin role required.'); }catch{ showErr('Unable to verify session.'); } })();
 
     // ---------- Generic API (force JSON) ----------
-    function looksLikeHtml(t){ const s = String(t || ''); return /<\/?[a-z][\s\S]*>/i.test(s); }
+    function looksLikeHtml(t){ const s = String(t || ''); return /<\/?[a-z][\\s\\S]*>/i.test(s); }
     async function apiJSON(path, opts = {}){
       const init = { credentials:'include', mode:'cors', cache:'no-store', ...opts,
         headers:{ Accept:'application/json', ...(opts.body?{'content-type':'application/json'}:{}), ...(opts.headers||{}) } };
@@ -562,7 +564,7 @@
           const {data} = await apiJSON(p, { method:'GET' });
           const adapted = adaptUsers(data);
           if (Array.isArray(adapted)){
-            USERS_BASE = p.replace(/(\/users.*|\/list.*|\/user\/list.*)$/,'/users');
+            USERS_BASE = p.replace(/(\\/users.*|\\/list.*|\\/user\\/list.*)$/,'/users');
             U.endpoint.textContent = 'API Endpoint in use: ' + p;
             return adapted;
           }
@@ -654,7 +656,7 @@
 
     async function doDelete(u){
       if (!u?.id){ showErr('Cannot delete: user id missing. Refresh.'); return; }
-      if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+      if (!confirm(\`Delete user "\${u.username}"? This cannot be undone.\`)) return;
       try{
         await apiJSON(`${USERS_BASE || '/api/users'}/${encodeURIComponent(u.id)}`, { method:'DELETE' });
         closePanel(); await refresh();
@@ -673,7 +675,7 @@
         try{
           const {data} = await apiJSON(p, { method:'POST' });
           const temp = (data && (data.tempPassword || data.password)) || '';
-          U.pResetMsg.textContent = temp ? `Temp password: ${temp}` : 'Password reset triggered.';
+          U.pResetMsg.textContent = temp ? \`Temp password: \${temp}\` : 'Password reset triggered.';
           return;
         }catch{}
       }
@@ -715,7 +717,7 @@
             await apiJSON(p, { method:'POST', body: JSON.stringify(body) });
             closeNew();
             await refresh();
-            alert(`User created.\nTemp password: ${pw}\n(They'll be forced to change on first login.)`);
+            alert(\`User created.\nTemp password: \${pw}\n(They'll be forced to change on first login.)\`);
             showErr('');
             return;
           }catch{}
@@ -756,9 +758,9 @@
     function fmtAgo(ms){
       if (!ms) return '—';
       const d = Date.now() - ms;
-      if (d < 60_000) return `${Math.floor(d/1000)}s ago`;
-      if (d < 3_600_000) return `${Math.floor(d/60_000)}m ago`;
-      return `${Math.floor(d/3_600_000)}h ago`;
+      if (d < 60_000) return \`\${Math.floor(d/1000)}s ago\`;
+      if (d < 3_600_000) return \`\${Math.floor(d/60_000)}m ago\`;
+      return \`\${Math.floor(d/3_600_000)}h ago\`;
     }
     function fmtTime(ms){
       return ms ? new Date(ms).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
@@ -859,12 +861,12 @@
 
       // Shared helpers
       const STATUSES = ['available','break','lunch','bathroom','training','meeting','offline'];
-      const isHHMM = (s)=> /^[0-2]\d:[0-5]\d$/.test(String(s||''));
+      const isHHMM = (s)=> /^[0-2]\\d:[0-5]\\d$/.test(String(s||''));
       const hhmmToMin = (s)=>{ const [h,m]=String(s||'').split(':').map(Number); return (h*60+m)|0; };
       const minToHHMM = (n)=> {
         if (typeof n !== 'number' || !isFinite(n)) return '';
         const h = Math.floor(n/60), m = n%60;
-        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        return \`\${String(h).padStart(2,'0')}:\${String(m).padStart(2,'0')}\`;
       };
       function overlap(blocks){
         const arr = (blocks||[]).map(b=>({s:hhmmToMin(b.start), e:hhmmToMin(b.end)})).sort((a,b)=>a.s-b.s);
@@ -879,24 +881,24 @@
         if (isHHMM(str)) return str;
         if (str.includes(':')){
           const [hRaw,mRaw] = str.split(':');
-          if (!/^\d{1,2}$/.test(hRaw) || !/^\d{1,2}$/.test(mRaw||'')) return str; // leave as-typed
+          if (!/^\\d{1,2}$/.test(hRaw) || !/^\\d{1,2}$/.test(mRaw||'')) return str; // leave as-typed
           let h = +hRaw, m = +mRaw;
           if (h>23 || m>59) return str;
-          return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+          return \`\${String(h).padStart(2,'0')}:\${String(m).padStart(2,'0')}\`;
         }
         // digits only cases: 9 -> 09:00, 93 -> 09:30, 930 -> 09:30, 1234 -> 12:34
-        const digits = str.replace(/\D+/g,'');
+        const digits = str.replace(/\\D+/g,'');
         if (!digits) return str;
         if (digits.length<=2){
           let h = +digits; if (h>23) return str;
-          return `${String(h).padStart(2,'0')}:00`;
+          return \`\${String(h).padStart(2,'0')}:00\`;
         } else {
           const hStr = digits.slice(0, digits.length-2);
           const mStr = digits.slice(-2);
           if (!hStr || !mStr) return str;
           let h = +hStr, m = +mStr;
           if (h>23 || m>59) return str;
-          return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+          return \`\${String(h).padStart(2,'0')}:\${String(m).padStart(2,'0')}\`;
         }
       }
 
@@ -1078,78 +1080,60 @@
         if (usernames.length) qs.set('users', usernames.join(','));
         if (from) qs.set('from', from);
         if (to) qs.set('to', to);
-        try{
-          const {data} = await apiJSON(`/api/adherence/summary?${qs.toString()}`, {method:'GET'});
-          return data;
-        }catch{
-          // mock fallback
-          const days = [];
-          const fromD=new Date(from||new Date()); const toD=new Date(to||new Date());
-          for (let d=new Date(fromD); d<=toD; d.setDate(d.getDate()+1)) days.push(d.toISOString().slice(0,10));
-          const us = usernames.length? usernames : (users.slice(0,5).map(u=>u.username));
-          const rnd=()=> Math.round(70+Math.random()*30);
-          const rows = us.map(u=>({ username:u, days: Object.fromEntries(days.map(dt=>[dt, rnd()])) }));
-          return { days, rows, totals:{ sum: rows.reduce((s,r)=> s+Object.values(r.days).reduce((a,b)=>a+b,0),0), avg: Math.round(rows.reduce((s,r)=> s+Object.values(r.days).reduce((a,b)=>a+b,0),0)/(rows.length*days.length)), days: days.length } };
-        }
+        const {data} = await apiJSON(`/api/adherence/summary?${qs.toString()}`, {method:'GET'});
+        return data; // no fallbacks
       }
 
-      // UPDATED: normalize actual blocks to HH:MM and pass events through
+      // normalize actual blocks to HH:MM and pass events through; no fallbacks
       async function fetchDetail(username, date){
         const minToHHMM = (n)=> {
           if (typeof n !== 'number' || !isFinite(n)) return String(n||'');
           const h = Math.floor(n/60), m = n%60;
           return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
         };
+        const {data} = await apiJSON(`/api/adherence/detail?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
+        const blocks = Array.isArray(data?.blocks)
+          ? data.blocks.map(b => ({
+              status: String(b.status||'').toLowerCase(),
+              start:  /^[0-2]\\d:[0-5]\\d$/.test(b.start) ? b.start : minToHHMM(b.start),
+              end:    /^[0-2]\\d:[0-5]\\d$/.test(b.end)   ? b.end   : minToHHMM(b.end),
+            }))
+          : [];
+        const events = Array.isArray(data?.events) ? data.events : [];
+        return { user:data.user, date:data.date, score:data.score, duration_minutes:data.duration_minutes, blocks, events };
+      }
+
+      // Projected (schedule) getter (24h already normalized by SCH.getSchedule)
+      async function fetchProjected(username, date){
         try{
-          const {data} = await apiJSON(`/api/adherence/detail?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
-          const blocks = Array.isArray(data?.blocks)
-            ? data.blocks.map(b => ({
-                status: String(b.status||'').toLowerCase(),
-                start:  /^[0-2]\d:[0-5]\d$/.test(b.start) ? b.start : minToHHMM(b.start),
-                end:    /^[0-2]\d:[0-5]\d$/.test(b.end)   ? b.end   : minToHHMM(b.end),
-              }))
-            : [];
-          const events = Array.isArray(data?.events) ? data.events : [];
-          return { user:data.user, date:data.date, score:data.score, duration_minutes:data.duration_minutes, blocks, events };
+          return await SCH.getSchedule(username, date);
         }catch{
-          // mock
-          const blocks = [
-            { status:'available', start:'08:00', end:'10:00' },
-            { status:'break', start:'10:00', end:'10:15' },
-            { status:'available', start:'10:15', end:'12:00' },
-            { status:'lunch', start:'12:00', end:'12:30' },
-            { status:'training', start:'12:30', end:'13:30' },
-            { status:'available', start:'13:30', end:'17:00' },
-          ];
-          return { user:username, date, score: 92, duration_minutes: 540, blocks, events: [{ts:'09:05', type:'status', value:'available'},{ts:'12:02', type:'status', value:'lunch'}] };
+          return [];
         }
       }
 
-      // Also fetch projected schedule locally (mirrors SCH.getSchedule, but keeps HX independent)
-      async function fetchProjected(username, date){
+      // schedule existence probe for N/A vs 0%
+      async function scheduleExists(username, date){
         try{
           const {data} = await apiJSON(`/api/schedules?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
           const raw = Array.isArray(data) ? data : (data?.blocks || []);
-          const isHHMM = (s)=> /^[0-2]\d:[0-5]\d$/.test(String(s||''));
-          const minToHHMM = (n)=>{ const h=Math.floor(n/60), m=n%60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`; };
-          return raw.map(b=>({
-            status: String(b.status||'').toLowerCase(),
-            start: isHHMM(b.start) ? b.start : minToHHMM(b.start),
-            end:   isHHMM(b.end)   ? b.end   : minToHHMM(b.end),
-          }));
+          return Array.isArray(raw) && raw.length > 0;
         }catch{
-          return [];
+          return false;
         }
       }
 
       function renderKPIs(payload){
         const { rows=[], days=[], totals } = payload || {};
         const dailyTotals = days.map((dt)=> rows.reduce((s,r)=> s + (r.days?.[dt] ?? 0), 0));
-        els.kTotal.textContent = totals?.sum != null ? String(totals.sum) : '—';
-        els.kAvg.textContent = totals?.avg != null ? (totals.avg+'%') : '—';
-        els.kDays.textContent = totals?.days != null ? String(totals.days) : (days?.length||'—');
+        els.kTotal.textContent = (totals && totals.sum != null) ? String(totals.sum) : '—';
+        els.kAvg.textContent = (totals && totals.avg != null) ? (totals.avg+'%') : '—';
+        els.kDays.textContent = (totals && totals.days != null) ? String(totals.days) : (days?.length||'—');
         spark(els.sTotal, dailyTotals);
-        const avgs = rows.map(r => Math.round(Object.values(r.days||{}).reduce((a,b)=>a+b,0)/Math.max(1,Object.values(r.days||{}).length)));
+        const avgs = rows.map(r => {
+          const vals = Object.values(r.days||{}).filter(v=>v!=null);
+          return vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : 0;
+        });
         spark(els.sAvg, avgs);
         spark(els.sDays, days.map((_,i)=> i+1));
       }
@@ -1164,17 +1148,42 @@
         els.tb.innerHTML='';
         rows.forEach(r=>{
           const vals = days.map(d=> r.days?.[d] ?? null);
-          const avg = Math.round(vals.filter(v=>v!=null).reduce((a,b)=>a+b,0)/Math.max(1,vals.filter(v=>v!=null).length));
+          const avg = (()=>{
+            const have = vals.filter(v=>v!=null);
+            return have.length ? Math.round(have.reduce((a,b)=>a+b,0)/have.length) : NaN;
+          })();
           const tr = document.createElement('tr');
           let tds = `<td><strong>${r.username}</strong></td>`;
           vals.forEach((v,idx)=>{
             const date = days[idx];
-            let cls = v==null ? '' : v>=90 ? 'pill-green' : v>=80 ? 'pill-amber' : 'pill-red';
-            const chip = v==null ? '—' : `<span class="chip ${cls}">${v}%</span>`;
-            tds += `<td class="clicky" data-user="${r.username}" data-date="${date}">${chip}</td>`;
+            const base = document.createElement('td');
+            base.className = 'clicky';
+            base.dataset.user = r.username;
+            base.dataset.date = date;
+            if (v==null){
+              // unknown -> resolve N/A vs 0% by checking schedule existence
+              base.innerHTML = `<span class="chip">…</span>`;
+              // async resolve
+              scheduleExists(r.username, date).then(exists => {
+                if (!document.body.contains(base)) return;
+                if (exists){
+                  base.innerHTML = `<span class="chip pill-red">0%</span>`;
+                } else {
+                  base.innerHTML = `<span class="chip pill-na">N/A</span>`;
+                }
+              }).catch(()=>{
+                if (!document.body.contains(base)) return;
+                base.innerHTML = `<span class="chip pill-na">N/A</span>`;
+              });
+            } else {
+              let cls = v>=90 ? 'pill-green' : v>=80 ? 'pill-amber' : 'pill-red';
+              base.innerHTML = `<span class="chip ${cls}">${v}%</span>`;
+            }
+            tr.appendChild(base);
           });
-          tds += `<td>${isFinite(avg)? avg+'%':'—'}</td>`;
-          tr.innerHTML = tds;
+          const avgTd = document.createElement('td');
+          avgTd.textContent = isFinite(avg)? (avg+'%') : '—';
+          tr.innerHTML = `<td><strong>${r.username}</strong></td>` + tr.innerHTML + avgTd.outerHTML;
           els.tb.appendChild(tr);
         });
       }
@@ -1216,10 +1225,10 @@
         training:'#6366f1', meeting:'#3b82f6', offline:'#9ca3af'
       };
 
-      function drawBlockBar(targetEl, legendEl, blocks, opts={}){
+      function drawBlockBar(targetEl, legendEl, blocks){
         targetEl.innerHTML = '';
-        const startDay = (opts.start ?? 8)*60;
-        const endDay = (opts.end ?? 18)*60;
+        const startDay = 0;        // 00:00
+        const endDay = 24*60;      // 24:00
         const span = endDay - startDay;
 
         blocks.forEach(b=>{
@@ -1246,14 +1255,14 @@
           // Fetch both actual (adherence/detail) and projected (schedule)
           const [detail, projectedBlocks] = await Promise.all([
             fetchDetail(user, date),
-            SCH.getSchedule ? SCH.getSchedule(user, date) : fetchProjected(user, date),
+            fetchProjected(user, date),
           ]);
 
           const actualBlocks = Array.isArray(detail?.blocks) ? detail.blocks : [];
           const score = detail?.score ?? '—';
           const dur = detail?.duration_minutes ?? '—';
           dayTitle.textContent = `${user} · ${date}`;
-          dayMeta.textContent = `Score: ${score} · Duration: ${dur}m · Blocks — Projected: ${projectedBlocks.length || 0}, Actual: ${actualBlocks.length || 0}`;
+          dayMeta.textContent = `Score: ${score ?? '—'} · Duration: ${dur ?? '—'}m · Blocks — Projected: ${projectedBlocks.length || 0}, Actual: ${actualBlocks.length || 0}`;
 
           // Draw bars
           drawBlockBar(projBar, projLegend, projectedBlocks);
@@ -1268,7 +1277,15 @@
             eventsEmpty.style.display = 'none';
             ev.forEach(ei => {
               const li = document.createElement('li');
-              const hhmm = String(ei.ts || '').slice(0,5); // HH:MM from HH:MM:SS
+              // Support ts in "HH:MM" or "HH:MM:SS" or epoch ms
+              let hhmm = '';
+              if (typeof ei.ts === 'number') {
+                const d = new Date(ei.ts);
+                hhmm = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+              } else {
+                const str = String(ei.ts || '');
+                hhmm = str.length >= 5 ? str.slice(0,5) : str;
+              }
               const label = (ei.type === 'status' ? ei.value : ei.type) || '';
               li.textContent = `${hhmm} — ${label}`;
               eventsList.appendChild(li);
@@ -1288,7 +1305,7 @@
         }
       });
 
-      // UPDATED: single-user filter for CSV endpoints
+      // single-user filter for CSV endpoints
       function exportTo(path){
         const sel = Array.from(els.users.selectedOptions).map(o=>o.value);
         const from = els.from.value, to = els.to.value;
