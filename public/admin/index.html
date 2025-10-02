@@ -259,7 +259,7 @@
             <div>
               <div class="pill-ui">Plan</div>
               <div id="sd-plan" class="hint">Preview a source day to build a plan.</div>
-              <table class="tbl" id="sd-preview-table" style="margin-top:8px; display:none">
+              <table class="tbl" id="sd-preview-table" style="margin-top:8px, display:none">
                 <thead><tr><th>Status</th><th>Start</th><th>End</th></tr></thead>
                 <tbody></tbody>
               </table>
@@ -412,7 +412,7 @@
     </div>
   </div>
 
-  <!-- Slide-over: Day breakdown (UPDATED to dual bars) -->
+  <!-- Slide-over: Day breakdown (UPDATED to dual bars + status changes) -->
   <div id="hx-day" class="panel" aria-hidden="true" style="width:520px">
     <div class="panel-hd">
       <div id="hx-day-title" style="font-weight:700">Day</div>
@@ -436,6 +436,11 @@
         </div>
         <div id="hx-actual-legend" class="legend hint"></div>
       </div>
+
+      <div style="height:12px"></div>
+      <div class="pill-ui">Status changes</div>
+      <div id="hx-events-empty" class="hint" style="margin-top:6px; display:none">No status changes recorded for this day.</div>
+      <ul id="hx-events-list" style="margin:8px 0 0 0; padding:0 0 0 16px"></ul>
     </div>
     <div class="panel-ft">
       <button class="btn" id="hx-day-open-schedule">Open schedule for this day</button>
@@ -1088,10 +1093,24 @@
         }
       }
 
+      // UPDATED: normalize actual blocks to HH:MM and pass events through
       async function fetchDetail(username, date){
+        const minToHHMM = (n)=> {
+          if (typeof n !== 'number' || !isFinite(n)) return String(n||'');
+          const h = Math.floor(n/60), m = n%60;
+          return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        };
         try{
           const {data} = await apiJSON(`/api/adherence/detail?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
-          return data;
+          const blocks = Array.isArray(data?.blocks)
+            ? data.blocks.map(b => ({
+                status: String(b.status||'').toLowerCase(),
+                start:  /^[0-2]\d:[0-5]\d$/.test(b.start) ? b.start : minToHHMM(b.start),
+                end:    /^[0-2]\d:[0-5]\d$/.test(b.end)   ? b.end   : minToHHMM(b.end),
+              }))
+            : [];
+          const events = Array.isArray(data?.events) ? data.events : [];
+          return { user:data.user, date:data.date, score:data.score, duration_minutes:data.duration_minutes, blocks, events };
         }catch{
           // mock
           const blocks = [
@@ -1183,6 +1202,10 @@
       const actualBar = document.getElementById('hx-actual-bar');
       const actualLegend = document.getElementById('hx-actual-legend');
 
+      // NEW refs for status changes list
+      const eventsList = document.getElementById('hx-events-list');
+      const eventsEmpty = document.getElementById('hx-events-empty');
+
       function openDay(){ dayPanel.classList.add('open'); }
       function closeDay(){ dayPanel.classList.remove('open'); }
       dayClose.addEventListener('click', closeDay);
@@ -1236,6 +1259,22 @@
           drawBlockBar(projBar, projLegend, projectedBlocks);
           drawBlockBar(actualBar, actualLegend, actualBlocks);
 
+          // Render status changes list
+          const ev = Array.isArray(detail?.events) ? detail.events : [];
+          eventsList.innerHTML = '';
+          if (!ev.length){
+            eventsEmpty.style.display = 'block';
+          } else {
+            eventsEmpty.style.display = 'none';
+            ev.forEach(ei => {
+              const li = document.createElement('li');
+              const hhmm = String(ei.ts || '').slice(0,5); // HH:MM from HH:MM:SS
+              const label = (ei.type === 'status' ? ei.value : ei.type) || '';
+              li.textContent = `${hhmm} — ${label}`;
+              eventsList.appendChild(li);
+            });
+          }
+
           dayOpenSchedule.onclick = ()=>{
             activate('schedules');
             document.getElementById('se-user').value = user;
@@ -1249,11 +1288,12 @@
         }
       });
 
+      // UPDATED: single-user filter for CSV endpoints
       function exportTo(path){
         const sel = Array.from(els.users.selectedOptions).map(o=>o.value);
         const from = els.from.value, to = els.to.value;
         const qs = new URLSearchParams();
-        if (sel.length) qs.set('users', sel.join(','));
+        if (sel.length === 1) qs.set('user', sel[0]); // worker expects single "user"
         if (from) qs.set('from', from);
         if (to) qs.set('to', to);
         window.open(`${path}?${qs.toString()}`, '_blank');
