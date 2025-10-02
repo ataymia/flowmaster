@@ -1271,6 +1271,217 @@
         }
       });
 
+      // ========== DUPLICATE TAB ==========
+      const sdSrcDate = document.getElementById('sd-src-date');
+      const sdPreviewBtn = document.getElementById('sd-preview');
+      const sdSrcList = document.getElementById('sd-src-list');
+      const sdFrom = document.getElementById('sd-from');
+      const sdTo = document.getElementById('sd-to');
+      const sdWds = Array.from(document.querySelectorAll('.sd-wd'));
+      const sdOverwrite = document.getElementById('sd-overwrite');
+      const sdCommit = document.getElementById('sd-commit');
+      const sdPreviewTable = document.getElementById('sd-preview-table');
+      const sdPreviewTbody = document.querySelector('#sd-preview-table tbody');
+      const sdPlan = document.getElementById('sd-plan');
+
+      let sdTemplateBlocks = [];
+
+      sdPreviewBtn.addEventListener('click', async ()=>{
+        const user = sdSrcUser.value.trim();
+        const date = sdSrcDate.value;
+        if (!user || !date){ showErr('Pick a source user and date.'); return; }
+        
+        sdPreviewBtn.disabled = true;
+        try{
+          sdTemplateBlocks = await getSchedule(user, date);
+          if (!sdTemplateBlocks.length){
+            sdSrcList.textContent = 'No blocks found for source day.';
+            sdPreviewTable.style.display = 'none';
+            sdPlan.textContent = 'Preview a source day to build a plan.';
+            return;
+          }
+          sdSrcList.textContent = `${user} · ${date} — ${sdTemplateBlocks.length} block(s)`;
+          sdPreviewTbody.innerHTML = '';
+          const fragment = document.createDocumentFragment();
+          sdTemplateBlocks.forEach(b=>{
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`;
+            fragment.appendChild(tr);
+          });
+          sdPreviewTbody.appendChild(fragment);
+          sdPreviewTable.style.display = '';
+          sdPlan.textContent = 'Plan ready. Choose target users, date range, and weekdays, then click Duplicate.';
+          showErr('');
+        }catch{ 
+          showErr('Failed to load source schedule.'); 
+        } finally {
+          sdPreviewBtn.disabled = false;
+        }
+      });
+
+      sdCommit.addEventListener('click', async ()=>{
+        const targets = Array.from(sdDstUsers.selectedOptions).map(o=>o.value);
+        const from = sdFrom.value;
+        const to = sdTo.value;
+        const weekdays = sdWds.filter(c=>c.checked).map(c=> +c.value);
+        const overwrite = !!sdOverwrite.checked;
+
+        if (!targets.length){ showErr('Select at least one target user.'); return; }
+        if (!from || !to){ showErr('Choose From and To dates.'); return; }
+        if (!weekdays.length){ showErr('Pick at least one weekday.'); return; }
+
+        let template = sdTemplateBlocks;
+        const srcUser = sdSrcUser.value.trim();
+        const srcDate = sdSrcDate.value;
+        if (!template.length && srcUser && srcDate){
+          try{ template = await getSchedule(srcUser, srcDate); }catch{}
+        }
+        if (!template.length){ showErr('No template blocks available. Preview the source day first.'); return; }
+
+        const okTimes = template.every(b=> isHHMM(b.start)&&isHHMM(b.end)&&STATUSES.includes(b.status));
+        if (!okTimes){ showErr('Template has invalid status/time.'); return; }
+
+        sdCommit.disabled = true;
+        try{
+          await assignSchedules(targets, from, to, weekdays, template, overwrite);
+          alert(`Duplicated to ${targets.length} user(s).`);
+          showErr('');
+        }catch{
+          showErr('Duplicate failed.');
+        } finally {
+          sdCommit.disabled = false;
+        }
+      });
+
+      // ========== IMPORT CSV TAB ==========
+      const impDrop = document.getElementById('imp-drop');
+      const impFile = document.getElementById('imp-file');
+      const impSummary = document.getElementById('imp-summary');
+      const impTable = document.getElementById('imp-table');
+      const impTbody = document.querySelector('#imp-table tbody');
+      const impCommit = document.getElementById('imp-commit');
+
+      let impRows = [];
+
+      function parseBlocks(str){
+        const items = String(str||'').split(';').map(s=>s.trim()).filter(Boolean);
+        const out = [];
+        for (const it of items){
+          const [statusPart, timePart] = it.split('@').map(s=>s.trim());
+          if (!statusPart || !timePart) continue;
+          const status = statusPart.toLowerCase();
+          const [start, end] = timePart.split('-').map(s=> normalizeTimeLoose(s.trim()));
+          if (!STATUSES.includes(status) || !isHHMM(start) || !isHHMM(end)) return null;
+          out.push({ status, start, end });
+        }
+        return out;
+      }
+
+      function renderImportTable(){
+        impTbody.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        impRows.forEach(row=>{
+          const tr = document.createElement('tr');
+          const note = row._note || '';
+          const blocksStr = row.blocks.map(b=> `${b.status}@${b.start}-${b.end}`).join('; ');
+          tr.innerHTML = `<td>${row.username}</td><td>${row.date}</td><td>${blocksStr}</td><td>${note}</td>`;
+          fragment.appendChild(tr);
+        });
+        impTbody.appendChild(fragment);
+        impTable.style.display = impRows.length ? '' : 'none';
+        impCommit.disabled = !impRows.length;
+      }
+
+      function handleCsvText(text){
+        impRows = [];
+        let good=0, bad=0;
+        const lines = text.split(/\r?\n/).filter(l=>l.trim());
+        if (!lines.length){ impSummary.textContent='Empty file.'; renderImportTable(); return; }
+
+        const header = lines[0].split(',').map(s=>s.trim().toLowerCase());
+        const tall = header.includes('status') && header.includes('start') && header.includes('end');
+        const compact = header.includes('blocks');
+
+        for (let i=1;i<lines.length;i++){
+          const raw = lines[i];
+          const cols = raw.split(',').map(s=>s.trim());
+          if (!cols.length) continue;
+
+          let username='', date='', blocks=[], note='';
+          try{
+            if (tall){
+              const h = Object.fromEntries(header.map((k,idx)=>[k, idx]));
+              username = cols[h.username] || cols[h.email] || '';
+              date = cols[h.date] || '';
+              const status = (cols[h.status]||'').toLowerCase();
+              const start = normalizeTimeLoose(cols[h.start]||'');
+              const end   = normalizeTimeLoose(cols[h.end]||'');
+              if (!username || !date || !STATUSES.includes(status) || !isHHMM(start) || !isHHMM(end)){ bad++; continue; }
+              blocks = [{ status, start, end }];
+              const existing = impRows.find(r=> r.username===username && r.date===date);
+              if (existing) existing.blocks.push(blocks[0]); else impRows.push({ username, date, blocks: [...blocks] });
+              good++;
+              continue;
+            }
+            if (compact){
+              const h = Object.fromEntries(header.map((k,idx)=>[k, idx]));
+              username = cols[h.username] || cols[h.email] || '';
+              date = cols[h.date] || '';
+              const parsed = parseBlocks(cols[h.blocks]||'');
+              if (!username || !date || !parsed){ bad++; continue; }
+              blocks = parsed;
+              impRows.push({ username, date, blocks });
+              good++;
+              continue;
+            }
+            if (cols.length >= 3){
+              username = cols[0]; date = cols[1]; const parsed = parseBlocks(cols.slice(2).join(','));
+              if (username && date && parsed){ impRows.push({ username, date, blocks: parsed }); good++; continue; }
+            }
+            bad++;
+          }catch{ bad++; }
+        }
+
+        impRows.forEach(r=>{
+          if (overlap(r.blocks)) r._note = 'overlap';
+        });
+
+        impSummary.innerHTML = `Parsed <span class="ok">${good} row(s)</span>` + (bad? `, <span class="bad">${bad} skipped</span>`:'') + (impRows.some(r=>r._note)? ' — rows with notes need review in your source file.':'');
+        renderImportTable();
+      }
+
+      function onDropFiles(files){
+        if (!files?.length) return;
+        const f = files[0];
+        const reader = new FileReader();
+        reader.onload = ()=> handleCsvText(String(reader.result||''));
+        reader.readAsText(f);
+      }
+
+      impDrop.addEventListener('dragover', (e)=>{ e.preventDefault(); impDrop.classList.add('warn'); });
+      impDrop.addEventListener('dragleave', ()=> impDrop.classList.remove('warn'));
+      impDrop.addEventListener('drop', (e)=>{ e.preventDefault(); impDrop.classList.remove('warn'); onDropFiles(e.dataTransfer.files); });
+      impFile.addEventListener('change', (e)=> onDropFiles(e.target.files));
+
+      impCommit.addEventListener('click', async ()=>{
+        if (!impRows.length) return;
+        impCommit.disabled = true;
+        let ok=0, fail=0;
+        for (const row of impRows){
+          if (overlap(row.blocks)){
+            const cont = confirm(`Row ${row.username} ${row.date} has overlapping blocks. Save anyway?`);
+            if (!cont){ fail++; continue; }
+          }
+          try{
+            await saveSchedule(row.username, row.date, row.blocks);
+            ok++;
+          }catch{ fail++; }
+        }
+        alert(`Import complete.\nSaved: ${ok}\nFailed: ${fail}`);
+        impCommit.disabled = false;
+        if (!fail){ impRows=[]; renderImportTable(); impSummary.textContent=''; }
+      });
+
       return { seedUserDropdowns, getSchedule };
     })();
 
