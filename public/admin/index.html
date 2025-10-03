@@ -1201,7 +1201,7 @@
           const fragment = document.createDocumentFragment();
           seBlocks.forEach((b)=>{ 
             const tr=document.createElement('tr'); 
-            tr.innerHTML=`<td>${b.status}</td><td>${b.start}</td><td>${b.end}</td>`; 
+            tr.innerHTML=`<td>${b.start}</td><td>${b.end}</td>`; 
             fragment.appendChild(tr);
           });
           sePrevT.appendChild(fragment);
@@ -1485,7 +1485,7 @@
       return { seedUserDropdowns, getSchedule };
     })();
 
-    // ========== ADHERENCE HISTORY ==========
+    // ========== ADHERENCE HISTORY - UPDATED FOR REAL DATA ==========
     const HX = (function(){
       const els = {
         users: document.getElementById('hx-users'),
@@ -1718,10 +1718,11 @@
         training:'#6366f1', meeting:'#3b82f6', offline:'#9ca3af'
       };
 
+      // UPDATED: 24-hour schedule display
       function drawBlockBar(targetEl, legendEl, blocks, opts={}){
         targetEl.innerHTML = '';
-        const startDay = (opts.start ?? 8)*60;
-        const endDay = (opts.end ?? 18)*60;
+        const startDay = (opts.start ?? 0)*60; // Changed from 8 to 0 (midnight)
+        const endDay = (opts.end ?? 24)*60;   // Changed from 18 to 24 (midnight)
         const span = endDay - startDay;
 
         blocks.forEach(b=>{
@@ -1768,7 +1769,7 @@
           dayTitle.textContent = `${user} · ${date}`;
           dayMeta.textContent = `${statusText}Score: ${score} · Duration: ${dur}m · Blocks — Projected: ${projectedBlocks.length || 0}, Actual: ${actualBlocks.length || 0}`;
 
-          // Use 24-hour timeline (00:00 to 23:59)
+          // UPDATED: Use 24-hour timeline (00:00 to 23:59)
           drawBlockBar(projBar, projLegend, projectedBlocks, {start: 0, end: 24});
           drawBlockBar(actualBar, actualLegend, actualBlocks, {start: 0, end: 24});
 
