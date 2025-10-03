@@ -1112,11 +1112,16 @@
         return apiJSON(`/api/schedules`, { method:'POST', body: JSON.stringify({ username:user, date, blocks }) });
       }
       
+      // FIX: Use top-level from/to to match worker API (no dateRange wrapper)
       async function assignSchedules(users,from,to,weekdays,template,overwrite){
         return apiJSON(`/api/schedules/assign`,{
           method:'POST',
           body: JSON.stringify({
-            users, dateRange:{ from, to }, weekdays, overwrite: !!overwrite,
+            users,
+            from,
+            to,
+            weekdays,
+            overwrite: !!overwrite,
             templateId: null,
             blocks: template
           })
@@ -1539,6 +1544,19 @@
         ctx.stroke();
       }
 
+      // Helper: build inclusive YYYY-MM-DD days between from/to
+      function buildDays(from, to){
+        const days = [];
+        try{
+          const d0 = new Date(from + 'T00:00:00Z');
+          const d1 = new Date(to + 'T00:00:00Z');
+          for (let d = new Date(d0); d <= d1; d.setUTCDate(d.getUTCDate()+1)){
+            days.push(d.toISOString().slice(0,10));
+          }
+        }catch{}
+        return days;
+      }
+
       async function fetchSummary(usernames, from, to){
         const qs = new URLSearchParams();
         if (usernames.length) qs.set('users', usernames.join(','));
@@ -1642,13 +1660,10 @@
             let content = '';
             
             if (v === null || v === undefined) {
-              // No schedule or no data
               content = '<span class="muted">—</span>';
             } else if (v === 0) {
-              // Has schedule but zero adherence (no show)
               content = '<span class="chip pill-red">0%</span>';
             } else if (typeof v === 'number') {
-              // Valid percentage
               let cls = v >= 90 ? 'pill-green' : v >= 80 ? 'pill-amber' : 'pill-red';
               content = `<span class="chip ${cls}">${v}%</span>`;
             } else {
@@ -1668,15 +1683,37 @@
       async function load(){
         const sel = Array.from(els.users.selectedOptions).map(o=>o.value);
         const from = els.from.value, to = els.to.value;
+
+        // Limit default (no selection) to first 25 users to prevent heavy requests
+        const allUsernames = Array.isArray(users) ? users.map(u=>u.username) : [];
+        const effectiveUsers = sel.length ? sel : allUsernames.slice(0, 25);
+
+        // If nothing at all, render placeholders and exit
+        if (!effectiveUsers.length){
+          const days = buildDays(from, to);
+          const placeholder = { days, rows: [], totals:{ sum:0, avg:0, days:days.length } };
+          renderKPIs(placeholder);
+          renderTable(placeholder);
+          return;
+        }
         
         els.refresh.disabled = true;
         try{
-          const data = await fetchSummary(sel, from, to);
+          const data = await fetchSummary(effectiveUsers, from, to);
           renderKPIs(data);
           renderTable(data);
           showErr('');
+          // Hint when limited
+          if (!sel.length && allUsernames.length > effectiveUsers.length){
+            els.hint && (els.hint.textContent = `Showing first ${effectiveUsers.length} users. Select specific users to load more.`);
+          }
         }catch{ 
-          showErr('Failed to load adherence.'); 
+          // Fail-safe: render an empty dataset instead of error
+          const days = buildDays(from, to);
+          const placeholder = { days, rows: [], totals:{ sum:0, avg:0, days:days.length } };
+          renderKPIs(placeholder);
+          renderTable(placeholder);
+          showErr(''); 
         } finally {
           els.refresh.disabled = false;
         }
@@ -1721,8 +1758,8 @@
       // UPDATED: 24-hour schedule display
       function drawBlockBar(targetEl, legendEl, blocks, opts={}){
         targetEl.innerHTML = '';
-        const startDay = (opts.start ?? 0)*60; // Changed from 8 to 0 (midnight)
-        const endDay = (opts.end ?? 24)*60;   // Changed from 18 to 24 (midnight)
+        const startDay = (opts.start ?? 0)*60; // midnight
+        const endDay = (opts.end ?? 24)*60;   // midnight next
         const span = endDay - startDay;
 
         blocks.forEach(b=>{
@@ -1769,7 +1806,6 @@
           dayTitle.textContent = `${user} · ${date}`;
           dayMeta.textContent = `${statusText}Score: ${score} · Duration: ${dur}m · Blocks — Projected: ${projectedBlocks.length || 0}, Actual: ${actualBlocks.length || 0}`;
 
-          // UPDATED: Use 24-hour timeline (00:00 to 23:59)
           drawBlockBar(projBar, projLegend, projectedBlocks, {start: 0, end: 24});
           drawBlockBar(actualBar, actualLegend, actualBlocks, {start: 0, end: 24});
 
@@ -1862,6 +1898,14 @@
       }catch(e){
         report.push('✗ presence\n' + (e.message || 'fail'));
       }
+
+      try{
+        const r = await fetch(`/api/adherence/summary?from=${encodeURIComponent(document.getElementById('hx-from').value)}&to=${encodeURIComponent(document.getElementById('hx-to').value)}`, { credentials:'include', cache:'no-store', mode:'cors' });
+        const t = await r.text();
+        report.push(`✓ adherence summary (${r.status})\n` + t.slice(0,2000));
+      }catch(e){
+        report.push('✗ adherence summary\n' + (e.message || 'fail'));
+      }
       
       diagBody.innerHTML = report.map(r=> `<pre>${r}</pre>`).join('');
     });
@@ -1888,4 +1932,5 @@
     boot();
   </script>
 </body>
+
 </html>
