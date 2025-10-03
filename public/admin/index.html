@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowmaster Admin</title>
+</head>
+<body>
+    <div id="historyTab">
+        <h2>History</h2>
+        <label>Day timeline (00:00–24:00 full day)</label>
+        <script>
+            function drawBlockBar(projBar, projLegend, projectedBlocks, opts) {
+                let startDay = (opts.start ?? 0) * 60;
+                let endDay = (opts.end ?? 24) * 60;
+                // Drawing logic here...
+            }
+
+            // Example calls to drawBlockBar
+            drawBlockBar(projBar, projLegend, projectedBlocks, {start: 0, end: 24});
+            drawBlockBar(actualBar, actualLegend, actualBlocks, {start: 0, end: 24});
+
+            async function fetchSummary() {
+                // Original fetch logic here...
+                // Removed mock data fallbacks
+            }
+
+            async function fetchDetail() {
+                // Original fetch logic here...
+                // Removed mock data fallbacks
+            }
+
+            function renderTable(scheduleData) {
+                if (!scheduleData) {
+                    return "N/A";
+                } else if (scheduleData.isOffline) {
+                    return "0%";
+                } else {
+                    return scheduleData.adherenceScore + "%";
+                }
+            }
+        </script>
+        <!-- The rest of your HTML structure goes here -->
+    </div>
+</body>
+</html>
