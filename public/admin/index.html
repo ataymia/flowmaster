@@ -399,7 +399,7 @@
       <div class="hint" id="hx-day-meta"></div>
 
       <div class="barwrap" id="hx-block-preview">
-        <div class="pill-ui">Day timeline (08:00–18:00 window)</div>
+        <div class="pill-ui">Day timeline (00:00–23:59 full day)</div>
 
         <div class="barrow">
           <div class="barlabel">Projected</div>
@@ -1544,48 +1544,34 @@
         if (usernames.length) qs.set('users', usernames.join(','));
         if (from) qs.set('from', from);
         if (to) qs.set('to', to);
-        try{
-          const {data} = await apiJSON(`/api/adherence/summary?${qs.toString()}`, {method:'GET'});
-          return data;
-        }catch{
-          const days = [];
-          const fromD=new Date(from||new Date()); const toD=new Date(to||new Date());
-          for (let d=new Date(fromD); d<=toD; d.setDate(d.getDate()+1)) days.push(d.toISOString().slice(0,10));
-          const us = usernames.length? usernames : (users.slice(0,5).map(u=>u.username));
-          const rnd=()=> Math.round(70+Math.random()*30);
-          const rows = us.map(u=>({ username:u, days: Object.fromEntries(days.map(dt=>[dt, rnd()])) }));
-          return { days, rows, totals:{ sum: rows.reduce((s,r)=> s+Object.values(r.days).reduce((a,b)=>a+b,0),0), avg: Math.round(rows.reduce((s,r)=> s+Object.values(r.days).reduce((a,b)=>a+b,0),0)/(rows.length*days.length)), days: days.length } };
-        }
+        
+        const {data} = await apiJSON(`/api/adherence/summary?${qs.toString()}`, {method:'GET'});
+        return data;
       }
 
       async function fetchDetail(username, date){
+        const {data} = await apiJSON(`/api/adherence/detail?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
         const minToHHMM = (n)=> {
           if (typeof n !== 'number' || !isFinite(n)) return String(n||'');
           const h = Math.floor(n/60), m = n%60;
           return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
         };
-        try{
-          const {data} = await apiJSON(`/api/adherence/detail?user=${encodeURIComponent(username)}&date=${encodeURIComponent(date)}`, {method:'GET'});
-          const blocks = Array.isArray(data?.blocks)
-            ? data.blocks.map(b => ({
-                status: String(b.status||'').toLowerCase(),
-                start:  /^[0-2]\d:[0-5]\d$/.test(b.start) ? b.start : minToHHMM(b.start),
-                end:    /^[0-2]\d:[0-5]\d$/.test(b.end)   ? b.end   : minToHHMM(b.end),
-              }))
-            : [];
-          const events = Array.isArray(data?.events) ? data.events : [];
-          return { user:data.user, date:data.date, score:data.score, duration_minutes:data.duration_minutes, blocks, events };
-        }catch{
-          const blocks = [
-            { status:'available', start:'08:00', end:'10:00' },
-            { status:'break', start:'10:00', end:'10:15' },
-            { status:'available', start:'10:15', end:'12:00' },
-            { status:'lunch', start:'12:00', end:'12:30' },
-            { status:'training', start:'12:30', end:'13:30' },
-            { status:'available', start:'13:30', end:'17:00' },
-          ];
-          return { user:username, date, score: 92, duration_minutes: 540, blocks, events: [{ts:'09:05', type:'status', value:'available'},{ts:'12:02', type:'status', value:'lunch'}] };
-        }
+        const blocks = Array.isArray(data?.blocks)
+          ? data.blocks.map(b => ({
+              status: String(b.status||'').toLowerCase(),
+              start:  /^[0-2]\d:[0-5]\d$/.test(b.start) ? b.start : minToHHMM(b.start),
+              end:    /^[0-2]\d:[0-5]\d$/.test(b.end)   ? b.end   : minToHHMM(b.end),
+            }))
+          : [];
+        const events = Array.isArray(data?.events) ? data.events : [];
+        return { 
+          user: data.user, 
+          date: data.date, 
+          score: data.score, 
+          duration_minutes: data.duration_minutes, 
+          blocks, 
+          events 
+        };
       }
 
       async function fetchProjected(username, date){
@@ -1606,12 +1592,29 @@
 
       function renderKPIs(payload){
         const { rows=[], days=[], totals } = payload || {};
-        const dailyTotals = days.map((dt)=> rows.reduce((s,r)=> s + (r.days?.[dt] ?? 0), 0));
+        
+        // Calculate daily totals only from valid scores (exclude null/N/A)
+        const dailyTotals = days.map((dt)=> {
+          let sum = 0, count = 0;
+          rows.forEach(r => {
+            const val = r.days?.[dt];
+            if (val != null && typeof val === 'number') {
+              sum += val;
+              count++;
+            }
+          });
+          return count > 0 ? Math.round(sum / count) : 0;
+        });
+        
         els.kTotal.textContent = totals?.sum != null ? String(totals.sum) : '—';
         els.kAvg.textContent = totals?.avg != null ? (totals.avg+'%') : '—';
         els.kDays.textContent = totals?.days != null ? String(totals.days) : (days?.length||'—');
         spark(els.sTotal, dailyTotals);
-        const avgs = rows.map(r => Math.round(Object.values(r.days||{}).reduce((a,b)=>a+b,0)/Math.max(1,Object.values(r.days||{}).length)));
+        
+        const avgs = rows.map(r => {
+          const vals = Object.values(r.days||{}).filter(v => v != null && typeof v === 'number');
+          return vals.length > 0 ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : 0;
+        });
         spark(els.sAvg, avgs);
         spark(els.sDays, days.map((_,i)=> i+1));
       }
@@ -1629,16 +1632,32 @@
         
         rows.forEach(r=>{
           const vals = days.map(d=> r.days?.[d] ?? null);
-          const avg = Math.round(vals.filter(v=>v!=null).reduce((a,b)=>a+b,0)/Math.max(1,vals.filter(v=>v!=null).length));
+          const numericVals = vals.filter(v=>v!=null && typeof v === 'number');
+          const avg = numericVals.length > 0 ? Math.round(numericVals.reduce((a,b)=>a+b,0)/numericVals.length) : null;
+          
           const tr = document.createElement('tr');
           let tds = `<td><strong>${r.username}</strong></td>`;
           vals.forEach((v,idx)=>{
             const date = days[idx];
-            let cls = v==null ? '' : v>=90 ? 'pill-green' : v>=80 ? 'pill-amber' : 'pill-red';
-            const chip = v==null ? '—' : `<span class="chip ${cls}">${v}%</span>`;
-            tds += `<td class="clicky" data-user="${r.username}" data-date="${date}">${chip}</td>`;
+            let content = '';
+            
+            if (v === null || v === undefined) {
+              // No schedule or no data
+              content = '<span class="muted">—</span>';
+            } else if (v === 0) {
+              // Has schedule but zero adherence (no show)
+              content = '<span class="chip pill-red">0%</span>';
+            } else if (typeof v === 'number') {
+              // Valid percentage
+              let cls = v >= 90 ? 'pill-green' : v >= 80 ? 'pill-amber' : 'pill-red';
+              content = `<span class="chip ${cls}">${v}%</span>`;
+            } else {
+              content = '<span class="muted">—</span>';
+            }
+            
+            tds += `<td class="clicky" data-user="${r.username}" data-date="${date}">${content}</td>`;
           });
-          tds += `<td>${isFinite(avg)? avg+'%':'—'}</td>`;
+          tds += `<td>${avg !== null && isFinite(avg) ? avg+'%' : '—'}</td>`;
           tr.innerHTML = tds;
           fragment.appendChild(tr);
         });
@@ -1734,11 +1753,24 @@
           const actualBlocks = Array.isArray(detail?.blocks) ? detail.blocks : [];
           const score = detail?.score ?? '—';
           const dur = detail?.duration_minutes ?? '—';
+          
+          // Determine if there was a schedule
+          const hasSchedule = projectedBlocks && projectedBlocks.length > 0;
+          const hasActivity = actualBlocks && actualBlocks.length > 0;
+          
+          let statusText = '';
+          if (!hasSchedule) {
+            statusText = 'No schedule · ';
+          } else if (!hasActivity && score === 0) {
+            statusText = 'No show · ';
+          }
+          
           dayTitle.textContent = `${user} · ${date}`;
-          dayMeta.textContent = `Score: ${score} · Duration: ${dur}m · Blocks — Projected: ${projectedBlocks.length || 0}, Actual: ${actualBlocks.length || 0}`;
+          dayMeta.textContent = `${statusText}Score: ${score} · Duration: ${dur}m · Blocks — Projected: ${projectedBlocks.length || 0}, Actual: ${actualBlocks.length || 0}`;
 
-          drawBlockBar(projBar, projLegend, projectedBlocks);
-          drawBlockBar(actualBar, actualLegend, actualBlocks);
+          // Use 24-hour timeline (00:00 to 23:59)
+          drawBlockBar(projBar, projLegend, projectedBlocks, {start: 0, end: 24});
+          drawBlockBar(actualBar, actualLegend, actualBlocks, {start: 0, end: 24});
 
           const ev = Array.isArray(detail?.events) ? detail.events : [];
           eventsList.innerHTML = '';
@@ -1760,11 +1792,12 @@
             document.getElementById('se-user').value = user;
             document.getElementById('se-date').value = date;
             document.getElementById('se-load').click();
+            closeDay();
           };
           
           openDay();
           showErr('');
-        }catch{
+        }catch(e){
           showErr('Failed to load day detail.');
         }
       });
