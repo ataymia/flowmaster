@@ -1208,11 +1208,15 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
   document.addEventListener('DOMContentLoaded', bindBotFab, { once:true });
 
 
+  const close = document.getElementById('botClose');
+  const BOT_SRC = 'allstarbot.html'; // <-- set your embed file/url
   const statusEl = document.getElementById('botStatus');
+  
   function setStatus(t){ if(statusEl) statusEl.textContent = t; }
   if(frame){
     frame.addEventListener('load', ()=> setStatus('loaded'));
   }
+  
   function openDock(){
     if(!dock) return;
     setStatus('loading…');
@@ -1227,17 +1231,7 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
       }
     }, 2500);
   }
-
-  const close = document.getElementById('botClose');// Replace this with your live bot URL or relative file path once provided:
-  const BOT_SRC = 'allstarbot.html'; // <-- set your embed file/url
-
-  function openDock(){
-    if(!dock) return;
-    if(frame) frame.src = BOT_SRC;
-    dock.classList.add('open');
-    dock.setAttribute('aria-hidden','false');
-    fab?.setAttribute('aria-expanded','true');
-  }
+  
   function closeDock(){
     if(!dock) return;
     dock.classList.remove('open');
@@ -1302,7 +1296,7 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
 
 
 <script>
-// === Address Image Search wiring (images-only CSE) ===
+// === Home Search wiring (images-only CSE) ===
 (function(){ 
   const fab   = document.getElementById('homeFab');
   const dock  = document.getElementById('homeDock');
@@ -1332,13 +1326,27 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
     dock.setAttribute('aria-hidden','false');
     fab?.setAttribute('aria-expanded','true');
     ensureCSE();
+    
+    // If Google CSE is present but didn't auto-render (hidden element timing), force render.
+    setTimeout(()=>{
+      try{ 
+        const hasGoogle = window.google && window.google.search && window.google.search.cse && window.google.search.cse.element;
+        const target = document.getElementById('addrSearchWidget');
+        const empty = target && target.children && target.children.length === 0;
+        if(hasGoogle && empty){
+          window.google.search.cse.element.render({ div: 'addrSearchWidget', tag: 'search' });
+        }
+      }catch(e){ /* no-op */ }
+    }, 100);
   }
+  
   function closeDock(){
     if(!dock) return;
     dock.classList.remove('open');
     dock.setAttribute('aria-hidden','true');
     fab?.setAttribute('aria-expanded','false');
   }
+  
   function toggleDock(){ dock?.classList.contains('open') ? closeDock() : openDock(); }
 
   // Bind now and on DOMContentLoaded to be safe
@@ -1350,47 +1358,6 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
   document.addEventListener('keydown', (e)=>{
     if(e.key === 'Escape' && dock?.classList.contains('open')) closeDock();
   });
-})();
-</script>
-
-
-<script>
-(function(){ 
-  // Enhanced rendering for Address Image Search: force-render if needed
-  const dock = document.getElementById('homeDock');
-  const fab  = document.getElementById('homeFab');
-  const close= document.getElementById('homeClose');
-
-  function openHomeDock(){ 
-    if(!dock) return;
-    dock.classList.add('open');
-    dock.setAttribute('aria-hidden','false');
-    if(fab) fab.setAttribute('aria-expanded','true');
-
-    // If Google CSE is present but didn't auto-render (hidden element timing), force render.
-    try{ 
-      const hasGoogle = window.google && window.google.search && window.google.search.cse && window.google.search.cse.element;
-      const target = document.getElementById('addrSearchWidget');
-      const empty = target && target.children && target.children.length === 0;
-      if(hasGoogle && empty){
-        window.google.search.cse.element.render({ div: 'addrSearchWidget', tag: 'search' });
-      }
-    }catch(e){ /* no-op */ }
-  }
-  function closeHomeDock(){
-    if(!dock) return;
-    dock.classList.remove('open');
-    dock.setAttribute('aria-hidden','true');
-    if(fab) fab.setAttribute('aria-expanded','false');
-  }
-  function toggleHomeDock(){ (dock && dock.classList.contains('open')) ? closeHomeDock() : openHomeDock(); }
-
-  // Rebind safely (replace node to drop previous listeners in iterative builds)
-  try{ if(fab) fab.replaceWith(fab.cloneNode(true)); }catch(e){}
-  const fab2 = document.getElementById('homeFab');
-  if(fab2) fab2.addEventListener('click', toggleHomeDock);
-  if(close) close.addEventListener('click', closeHomeDock);
-  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && dock && dock.classList.contains('open')) closeHomeDock(); });
 })();
 </script>
 
