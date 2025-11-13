@@ -17,6 +17,7 @@
   header{position:sticky; top:0; z-index:10; background:var(--panel); border-bottom:2px solid var(--primary);}
   .container{max-width:1100px; margin:0 auto; padding:18px 20px}
   .brandbar{display:flex; align-items:center; gap:14px}
+  .brandbar img{background:transparent; border:none; box-shadow:none;}
   h1{margin:0; font-size:24px}
   .brandAccent{color:var(--primary); font-weight:700}
   .sub{color:var(--muted); margin-top:6px; font-size:14px}
@@ -91,14 +92,22 @@
   .reb-search{
     flex:1 1 280px; background:var(--card); color:var(--text);
     border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:14px;
-    box-shadow:var(--shadow);
+    box-shadow:var(--shadow); min-width:200px;
+  }
+  @media (max-width:640px){
+    .reb-search{ flex:1 1 100%; min-width:100%; font-size:16px; padding:12px 14px; }
+    .reb-controls{ gap:12px; }
   }
   .reb-chips{ display:flex; gap:8px; flex-wrap:wrap; }
   .reb-chip{
     border:1px solid var(--border); background:var(--card); color:var(--text);
-    padding:6px 10px; border-radius:999px; font-size:12px; cursor:pointer; user-select:none;
+    padding:8px 12px; border-radius:999px; font-size:13px; cursor:pointer; user-select:none;
+    white-space:nowrap; line-height:1.4;
   }
   .reb-chip.active{ outline:2px solid var(--primary); }
+  @media (max-width:640px){
+    .reb-chip{ padding:10px 14px; font-size:14px; }
+  }
   .reb-count{ margin-left:auto; font-size:12px; color:var(--muted); }
 
   /* ===== Rebuttal cards & color badges ===== */
@@ -1199,11 +1208,15 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
   document.addEventListener('DOMContentLoaded', bindBotFab, { once:true });
 
 
+  const close = document.getElementById('botClose');
+  const BOT_SRC = 'allstarbot.html'; // <-- set your embed file/url
   const statusEl = document.getElementById('botStatus');
+  
   function setStatus(t){ if(statusEl) statusEl.textContent = t; }
   if(frame){
     frame.addEventListener('load', ()=> setStatus('loaded'));
   }
+  
   function openDock(){
     if(!dock) return;
     setStatus('loading…');
@@ -1218,17 +1231,7 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
       }
     }, 2500);
   }
-
-  const close = document.getElementById('botClose');// Replace this with your live bot URL or relative file path once provided:
-  const BOT_SRC = 'allstarbot.html'; // <-- set your embed file/url
-
-  function openDock(){
-    if(!dock) return;
-    if(frame) frame.src = BOT_SRC;
-    dock.classList.add('open');
-    dock.setAttribute('aria-hidden','false');
-    fab?.setAttribute('aria-expanded','true');
-  }
+  
   function closeDock(){
     if(!dock) return;
     dock.classList.remove('open');
@@ -1270,15 +1273,15 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
 </script>
 
 
-<!-- === Floating House launcher (Address Image Search) === -->
-<button id="homeFab" class="home-fab" type="button" aria-label="Open Address Image Search" aria-expanded="false" aria-controls="homeDock" title="Open Address Image Search">
+<!-- === Floating House launcher (Home Search) === -->
+<button id="homeFab" class="home-fab" type="button" aria-label="Open Home Search" aria-expanded="false" aria-controls="homeDock" title="Home Search">
   <span>🏠</span>
 </button>
 
-<!-- === Address Image Search Dock (Google Programmable Search - Images only) === -->
+<!-- === Home Search Dock (Google Programmable Search - Images only) === -->
 <aside id="homeDock" class="home-dock" aria-hidden="true">
   <header>
-    <strong>Address Image Search <span style="font-size:11px;opacity:.75;">(images only)</span></strong>
+    <strong>Home Search <span style="font-size:11px;opacity:.75;">(images only)</span></strong>
     <div class="actions">
       <button id="homeClose" class="primary" type="button" title="Close">Close</button>
     </div>
@@ -1293,7 +1296,7 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
 
 
 <script>
-// === Address Image Search wiring (images-only CSE) ===
+// === Home Search wiring (images-only CSE) ===
 (function(){ 
   const fab   = document.getElementById('homeFab');
   const dock  = document.getElementById('homeDock');
@@ -1323,13 +1326,27 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
     dock.setAttribute('aria-hidden','false');
     fab?.setAttribute('aria-expanded','true');
     ensureCSE();
+    
+    // If Google CSE is present but didn't auto-render (hidden element timing), force render.
+    setTimeout(()=>{
+      try{ 
+        const hasGoogle = window.google && window.google.search && window.google.search.cse && window.google.search.cse.element;
+        const target = document.getElementById('addrSearchWidget');
+        const empty = target && target.children && target.children.length === 0;
+        if(hasGoogle && empty){
+          window.google.search.cse.element.render({ div: 'addrSearchWidget', tag: 'search' });
+        }
+      }catch(e){ /* no-op */ }
+    }, 100);
   }
+  
   function closeDock(){
     if(!dock) return;
     dock.classList.remove('open');
     dock.setAttribute('aria-hidden','true');
     fab?.setAttribute('aria-expanded','false');
   }
+  
   function toggleDock(){ dock?.classList.contains('open') ? closeDock() : openDock(); }
 
   // Bind now and on DOMContentLoaded to be safe
@@ -1341,47 +1358,6 @@ copySuggested.addEventListener('click', ()=> copyText(suggestedText.textContent|
   document.addEventListener('keydown', (e)=>{
     if(e.key === 'Escape' && dock?.classList.contains('open')) closeDock();
   });
-})();
-</script>
-
-
-<script>
-(function(){ 
-  // Enhanced rendering for Address Image Search: force-render if needed
-  const dock = document.getElementById('homeDock');
-  const fab  = document.getElementById('homeFab');
-  const close= document.getElementById('homeClose');
-
-  function openHomeDock(){ 
-    if(!dock) return;
-    dock.classList.add('open');
-    dock.setAttribute('aria-hidden','false');
-    if(fab) fab.setAttribute('aria-expanded','true');
-
-    // If Google CSE is present but didn't auto-render (hidden element timing), force render.
-    try{ 
-      const hasGoogle = window.google && window.google.search && window.google.search.cse && window.google.search.cse.element;
-      const target = document.getElementById('addrSearchWidget');
-      const empty = target && target.children && target.children.length === 0;
-      if(hasGoogle && empty){
-        window.google.search.cse.element.render({ div: 'addrSearchWidget', tag: 'search' });
-      }
-    }catch(e){ /* no-op */ }
-  }
-  function closeHomeDock(){
-    if(!dock) return;
-    dock.classList.remove('open');
-    dock.setAttribute('aria-hidden','true');
-    if(fab) fab.setAttribute('aria-expanded','false');
-  }
-  function toggleHomeDock(){ (dock && dock.classList.contains('open')) ? closeHomeDock() : openHomeDock(); }
-
-  // Rebind safely (replace node to drop previous listeners in iterative builds)
-  try{ if(fab) fab.replaceWith(fab.cloneNode(true)); }catch(e){}
-  const fab2 = document.getElementById('homeFab');
-  if(fab2) fab2.addEventListener('click', toggleHomeDock);
-  if(close) close.addEventListener('click', closeHomeDock);
-  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && dock && dock.classList.contains('open')) closeHomeDock(); });
 })();
 </script>
 
